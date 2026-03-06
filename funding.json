@@ -1,25 +1,27 @@
 {
+  "$schema": "https://fundingjson.org/schema/v1.1.0.json",
   "version": "v1.1.0",
   "entity": {
     "type": "individual",
-    "role": "maintainer",
+    "role": "owner",
     "name": "Rohan",
-    "github": "rohansx",
+    "email": "hello@rohan.sh",
+    "description": "Developer building open-source voice AI infrastructure for Indian languages. Focused on making multilingual speech technology accessible to developers across India through pluggable, standards-based tooling.",
     "webpageUrl": {
       "url": "https://convox.ai"
     }
   },
   "projects": [
     {
-      "guid": "github.com/rohansx/convox",
+      "guid": "convox",
       "name": "Convox",
-      "description": "Open-source voice AI orchestration platform for Indian languages. Pluggable STT, TTS, LLM, and telephony providers with built-in cost tracking and DPDP compliance.",
+      "description": "Open-source voice AI orchestration platform for Indian languages. Provides pluggable STT, TTS, LLM, and telephony providers with built-in cost tracking, per-call analytics, and DPDP compliance. Supports 12+ Indian languages including Hindi, Tamil, Telugu, Bengali, Kannada, and Malayalam through providers like Sarvam AI. Built with FastAPI and asyncpg for high-throughput real-time voice pipelines.",
       "webpageUrl": {
         "url": "https://convox.ai"
       },
       "repositoryUrl": {
         "url": "https://github.com/rohansx/convox",
-        "type": "git"
+        "wellKnown": "https://github.com/rohansx/convox/blob/main/.well-known/funding-manifest-urls"
       },
       "licenses": ["spdx:MIT"],
       "tags": [
@@ -29,8 +31,43 @@
         "indian-languages",
         "fastapi",
         "orchestration",
-        "developer-tools"
+        "developer-tools",
+        "multilingual",
+        "api",
+        "python"
       ]
     }
-  ]
+  ],
+  "funding": {
+    "channels": [
+      {
+        "guid": "github-sponsors",
+        "type": "payment-provider",
+        "address": "https://github.com/sponsors/rohansx",
+        "description": "Sponsor via GitHub Sponsors. Supports one-time and recurring contributions."
+      }
+    ],
+    "plans": [
+      {
+        "guid": "infra-monthly",
+        "status": "active",
+        "name": "Infrastructure costs",
+        "description": "Covers monthly cloud hosting, database, and API provider costs for development and testing.",
+        "amount": 100,
+        "currency": "USD",
+        "frequency": "monthly",
+        "channels": ["github-sponsors"]
+      },
+      {
+        "guid": "goodwill",
+        "status": "active",
+        "name": "Support the project",
+        "description": "Any amount to support continued development of Convox.",
+        "amount": 0,
+        "currency": "USD",
+        "frequency": "one-time",
+        "channels": ["github-sponsors"]
+      }
+    ]
+  }
 }
