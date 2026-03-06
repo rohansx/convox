@@ -1,0 +1,33 @@
+{
+  "version": "v1.1.0",
+  "entity": {
+    "type": "individual",
+    "role": "maintainer",
+    "name": "Rohan",
+    "github": "rohansx"
+  },
+  "projects": [
+    {
+      "guid": "github.com/rohansx/convox",
+      "name": "Convox",
+      "description": "Open-source voice AI orchestration platform for Indian languages. Pluggable STT, TTS, LLM, and telephony providers with built-in cost tracking and DPDP compliance.",
+      "webpageUrl": {
+        "url": "https://convox.ai"
+      },
+      "repositoryUrl": {
+        "url": "https://github.com/rohansx/convox",
+        "type": "git"
+      },
+      "licenses": ["spdx:MIT"],
+      "tags": [
+        "voice-ai",
+        "speech-to-text",
+        "text-to-speech",
+        "indian-languages",
+        "fastapi",
+        "orchestration",
+        "developer-tools"
+      ]
+    }
+  ]
+}
