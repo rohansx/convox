@@ -5,7 +5,9 @@
     "role": "maintainer",
     "name": "Rohan",
     "github": "rohansx",
-    "webpageUrl": "https://convox.ai"
+    "webpageUrl": {
+      "url": "https://convox.ai"
+    }
   },
   "projects": [
     {
