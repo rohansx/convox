@@ -42,3 +42,6 @@ Thumbs.db
 
 # Docker
 .docker/
+
+# Internal planning docs (local only)
+convox-final-strategy.md
