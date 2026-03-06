@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git remote add origin git@github.com:rohansx/convox.git)"
+    ]
+  }
+}

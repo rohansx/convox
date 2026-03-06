@@ -1,0 +1,48 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: convox
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-convox}
+      POSTGRES_DB: convox
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: pg_isready -U convox
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    ports:
+      - "5432:5432"
+
+  redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: redis-cli ping
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    ports:
+      - "6379:6379"
+
+  app:
+    build: .
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://convox:${POSTGRES_PASSWORD:-convox}@postgres:5432/convox?sslmode=disable
+      CONVOX_DATABASE_URL: postgres://convox:${POSTGRES_PASSWORD:-convox}@postgres:5432/convox?sslmode=disable
+      CONVOX_REDIS_URL: redis://redis:6379
+      CONVOX_JWT_SECRET: ${CONVOX_JWT_SECRET:-0000000000000000000000000000000000000000000000000000000000000000}
+      CONVOX_ENCRYPT_KEY: ${CONVOX_ENCRYPT_KEY:-0000000000000000000000000000000000000000000000000000000000000000}
+      CONVOX_ENV: production
+      CONVOX_PORT: "8000"
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
+
+volumes:
+  pgdata:

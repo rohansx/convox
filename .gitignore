@@ -1,0 +1,44 @@
+# Environment
+.env
+.env.local
+.env.production
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+.venv/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+
+# Frontend
+web/node_modules/
+web/dist/
+
+# Build
+api/bin/
+*.so
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# PID files (dev servers)
+.pid.api
+.pid.web
+
+# Logs
+/tmp/convox-*.log
+
+# Docker
+.docker/
