@@ -10,9 +10,10 @@ from starlette.responses import FileResponse
 from convox.config import settings
 from convox.database.postgres import close_pool, create_pool
 from convox.database.redis import close_redis, create_redis
-from convox.handler import agents, analytics, auth, health, providers, sessions
+from convox.handler import agents, analytics, auth, compliance, health, providers, sessions
 from convox.middleware.cors import setup_cors
 from convox.middleware.logger import LoggerMiddleware
+from convox.ws import router as ws_router
 
 logger = structlog.get_logger()
 
@@ -54,6 +55,8 @@ def create_app() -> FastAPI:
     app.include_router(sessions.router)
     app.include_router(analytics.router)
     app.include_router(providers.router)
+    app.include_router(compliance.router)
+    app.include_router(ws_router)
 
     # Serve frontend static files in production
     if WEB_DIST.exists() and not settings.is_development:

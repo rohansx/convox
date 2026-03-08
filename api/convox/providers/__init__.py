@@ -3,7 +3,7 @@ from __future__ import annotations
 import structlog
 
 from convox.config import settings
-from convox.providers.base import STTProvider, TTSProvider
+from convox.providers.base import LLMProvider, STTProvider, TTSProvider
 
 logger = structlog.get_logger()
 
@@ -20,6 +20,13 @@ def get_tts_provider(provider_id: str = "sarvam", **kwargs: object) -> TTSProvid
         from convox.providers.tts.sarvam import SarvamTTS
         return SarvamTTS(**kwargs)
     raise ValueError(f"Unknown TTS provider: {provider_id}")
+
+
+def get_llm_provider(provider_id: str = "openai", **kwargs: object) -> LLMProvider:
+    if provider_id == "openai":
+        from convox.providers.llm.openai import OpenAILLM
+        return OpenAILLM(**kwargs)
+    raise ValueError(f"Unknown LLM provider: {provider_id}")
 
 
 def list_available_providers() -> dict:

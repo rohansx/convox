@@ -4,9 +4,10 @@ import base64
 import uuid
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from pydantic import BaseModel
 
 from convox.middleware.auth import get_current_user_id
-from convox.providers import get_stt_provider, get_tts_provider, list_available_providers
+from convox.providers import get_llm_provider, get_stt_provider, get_tts_provider, list_available_providers
 
 router = APIRouter(prefix="/v1/providers", tags=["providers"])
 
@@ -69,3 +70,29 @@ async def test_tts(
         "audio_base64": base64.b64encode(audio_bytes).decode(),
         "audio_size_bytes": len(audio_bytes),
     }
+
+
+class LLMTestRequest(BaseModel):
+    message: str = "Hello, how are you?"
+    system_prompt: str = "You are a helpful voice assistant for an Indian bank. Reply concisely in 1-2 sentences."
+    provider: str = "openai"
+
+
+@router.post("/test/llm")
+async def test_llm(
+    body: LLMTestRequest,
+    user_id: uuid.UUID = Depends(get_current_user_id),
+) -> dict:
+    """Test LLM provider with a chat message."""
+    try:
+        llm = get_llm_provider(body.provider)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    messages = [{"role": "user", "content": body.message}]
+    try:
+        result = await llm.chat(messages, body.system_prompt)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=str(e))
+
+    return {"provider": body.provider, "result": result}

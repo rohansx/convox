@@ -38,5 +38,13 @@ async def get_current_user_id(request: Request) -> uuid.UUID:
     raise HTTPException(status_code=401, detail="Authentication required. Provide X-API-Key header or Bearer token.")
 
 
+async def _resolve_user_id(api_key: str) -> uuid.UUID | None:
+    """Resolve an API key to a user ID. Returns None if invalid. Used by WebSocket auth."""
+    pool = get_pool()
+    repo = UserRepo(pool)
+    user = await repo.get_by_api_key(api_key)
+    return user.id if user else None
+
+
 # FastAPI dependency
 CurrentUser = Depends(get_current_user_id)
