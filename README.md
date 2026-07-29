@@ -19,7 +19,7 @@
 
 ---
 
-> **Status: pre-alpha, under active development.** The [documentation](docs/README.md) defines the full target product; the engine, scenario format, and CLI are being built first. See the [roadmap](docs/roadmap.md).
+> **Status: pre-alpha, under active development.** The [documentation](docs/README.md) describes the full product; see [what works today](#what-works-today) for the current state and the [roadmap](docs/roadmap.md) for what lands next.
 
 ## What is Convox?
 
@@ -107,6 +107,49 @@ Run 7f3a1c · target retell:agent_abc123 · 20 scenarios × 3 repeats = 60 trial
   Report: http://localhost:8000/runs/7f3a1c
 ```
 
+## What works today
+
+You can run a real suite against a real agent right now:
+
+```bash
+cd api && uv sync --all-extras
+
+# a demo agent to test against (deliberately buggy variants available)
+uv run python -m convox.testing.reference_agent --bug mangle_digits &
+
+uv run convox init my-tests && cd my-tests
+uv run convox run scenarios/ --target websocket:ws://127.0.0.1:8765
+```
+
+```
+  ✗ refill_happy_path                  0/3  pass^3=0.00       p95 1806ms
+      ✗ slot.captured  agent never captured 'phone' (expected '+919876543210')
+        → suspected layer: llm
+
+  0/3 trials passed · 0/1 scenarios green
+
+  1 assertion(s) could not be measured:
+    judge: no judge backend configured (set `judge.llm` in convox.yaml)
+```
+
+Shipping now: the scripted simulation engine, the WebSocket adapter, ground-truth
+capture, ~25 deterministic assertions, latency and conversation metrics, layer
+attribution, `pass^k` reliability scoring, JUnit/JSON reports, exit codes CI can
+branch on, and `init` / `lint` / `run` / `target test`.
+
+Not yet: the audio path (TTS/STT, codecs, noise, barge-in timing), agentic
+callers, judge backends, platform adapters beyond WebSocket, load testing,
+production monitoring, and the dashboard. Assertions that need those report
+`unsupported` — never a silent pass.
+
+**Convox tests itself.** The bundled reference agent has injectable faults, and
+the self-check suite asserts that Convox reports *exactly* those faults and no
+others. A testing tool whose own reliability is unproven is worthless:
+
+```bash
+cd api && uv run pytest      # 57 tests
+```
+
 ## Features
 
 | Area | Highlights |
@@ -188,22 +231,20 @@ Full plan: [docs/roadmap.md](docs/roadmap.md)
 
 ```bash
 git clone https://github.com/rohansx/convox.git
-cd convox
-cp .env.example .env          # add your provider keys
+cd convox/api
+uv sync --all-extras
 
-make db-up && make db-migrate
+uv run pytest                 # tests
+uv run ruff check             # lint
+uv run convox --help          # the CLI
 
-cd api && uv sync --all-extras
+# the control plane (health endpoint today; full REST surface with the API phase)
 uv run uvicorn convox.app:create_app --factory --reload --port 8000
-
-cd web && bun install && bun run dev
 ```
 
-```bash
-cd api && uv run pytest        # tests
-cd api && uv run ruff check    # lint
-cd web && npx tsc --noEmit     # frontend types
-```
+The engine has no database dependency — `convox run` works with nothing but
+Python. Postgres, Redis, and object storage come in when you want run history,
+the dashboard, and production monitoring.
 
 ## Contributing
 

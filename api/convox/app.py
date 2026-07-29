@@ -10,10 +10,9 @@ from starlette.responses import FileResponse
 from convox.config import settings
 from convox.database.postgres import close_pool, create_pool
 from convox.database.redis import close_redis, create_redis
-from convox.handler import agents, analytics, auth, compliance, health, providers, sessions
+from convox.handler import health
 from convox.middleware.cors import setup_cors
 from convox.middleware.logger import LoggerMiddleware
-from convox.ws import router as ws_router
 
 logger = structlog.get_logger()
 
@@ -37,7 +36,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 def create_app() -> FastAPI:
     app = FastAPI(
         title="Convox",
-        description="Open-source voice AI orchestration platform",
+        description="Testing and observability for voice AI agents",
         version="0.1.0",
         lifespan=lifespan,
         docs_url="/docs" if settings.is_development else None,
@@ -48,15 +47,9 @@ def create_app() -> FastAPI:
     setup_cors(app)
     app.add_middleware(LoggerMiddleware)
 
-    # API routes
+    # API routes. The full surface (targets, runs, trials, monitors) lands with
+    # the API phase; the CLI drives the engine directly today.
     app.include_router(health.router)
-    app.include_router(auth.router)
-    app.include_router(agents.router)
-    app.include_router(sessions.router)
-    app.include_router(analytics.router)
-    app.include_router(providers.router)
-    app.include_router(compliance.router)
-    app.include_router(ws_router)
 
     # Serve frontend static files in production
     if WEB_DIST.exists() and not settings.is_development:
