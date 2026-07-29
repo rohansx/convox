@@ -6,244 +6,216 @@
 </p>
 
 <h1 align="center">convox</h1>
-<p align="center"><strong>Open-source voice AI orchestration for India</strong></p>
-<p align="center">Build production voice agents in 22+ Indian languages. Plug in any STT, LLM, or TTS provider. Ship compliant, cost-tracked conversations — no vendor lock-in.</p>
+<p align="center"><strong>Open-source testing &amp; observability for voice AI agents</strong></p>
+<p align="center">Simulate thousands of real callers against your agent. Score every call on transcript <em>and</em> audio. Run all of it in your own infrastructure.</p>
 
 <p align="center">
-  <a href="https://convox.ai">Website</a> · <a href="https://convox.ai/demo">Live Demo</a> · <a href="docs/architecture.md">Architecture</a> · <a href="docs/tech-specs.md">Tech Specs</a>
+  <a href="docs/v2/README.md">Documentation</a> ·
+  <a href="docs/v2/product-overview.md">Product Overview</a> ·
+  <a href="docs/v2/scenario-spec.md">Scenario Spec</a> ·
+  <a href="docs/v2/architecture.md">Architecture</a> ·
+  <a href="docs/v2/roadmap.md">Roadmap</a>
 </p>
 
 ---
 
+> **Status: pre-alpha.** Convox is being repositioned from voice-agent orchestration (v1) to voice-agent testing and observability (v2). The [v2 documentation](docs/v2/README.md) defines the target state; implementation is in progress. See [Migration from v1](docs/v2/migration-from-v1.md).
+
 ## What is Convox?
 
-Convox is a **self-hosted voice AI orchestration platform** built on [Pipecat](https://github.com/pipecat-ai/pipecat). It sits between your application and voice AI providers, adding:
+Convox answers one question, continuously and automatically:
 
-- **Provider orchestration** — swap STT, TTS, LLM, and telephony providers without changing pipeline code
-- **Indian language support** — first-class support for Hindi, Tamil, Telugu, Bengali, Marathi, Kannada, and all 22 scheduled languages
-- **Cost tracking** — per-session, per-provider cost attribution for every conversation
-- **Compliance engine** — DPDP Act compliant with consent tracking, audit logging, and data retention policies
-- **Dashboard** — monitor active calls, review transcripts, analyze costs, and configure agents
+> **Does my voice agent actually work — for every kind of caller, on every channel, on every deploy, and right now in production?**
+
+It's **pytest for voice agents**. Convox places real calls to your agent using synthetic callers with real voices, accents, interruptions, and background noise — then measures what happened at the audio layer, not just the transcript.
 
 ```
-┌──────────────────────────────────────────────────────────┐
-│                     CONVOX PLATFORM                       │
-│                                                          │
-│  ┌───────────┐  ┌───────────┐  ┌──────────────────────┐ │
-│  │ Dashboard │  │ Core API  │  │ Compliance Engine    │ │
-│  │  (React)  │  │ (FastAPI) │  │ (DPDP / HIPAA)       │ │
-│  └───────────┘  └───────────┘  └──────────────────────┘ │
-│                                                          │
-│  ┌──────────────────────────────────────────────────────┐│
-│  │           ORCHESTRATION LAYER (Pipecat)              ││
-│  │   Agent Runtime · Pipeline Execution · Turn Taking   ││
-│  └──────────────────────────────────────────────────────┘│
-│                                                          │
-│  ┌──────────────────────────────────────────────────────┐│
-│  │              PROVIDER PLUGIN LAYER                   ││
-│  │   STT · LLM · TTS · Telephony (all swappable)       ││
-│  └──────────────────────────────────────────────────────┘│
-└──────────────────────────────────────────────────────────┘
+    SIMULATE                EVALUATE                 OBSERVE
+  ─────────────           ─────────────            ─────────────
+  Synthetic callers  ──▶  Deterministic       ──▶  Production calls
+  over real audio         assertions +             scored on the
+  channels                calibrated judges        same metrics
+                          + audio metrics          + replay as tests
+         ▲                                                │
+         └───────────────  replay closes the loop  ◀──────┘
 ```
 
-## Supported Providers
+Works with **Retell · Vapi · LiveKit · Pipecat · Bland · ElevenLabs · raw SIP/WebSocket** — one adapter interface, any platform.
 
-| Category | Providers |
-|----------|-----------|
-| **STT** | Sarvam AI, Deepgram, NVIDIA Riva, Azure Speech, OpenAI Whisper |
-| **LLM** | OpenAI, Anthropic Claude, Sarvam Saarika, Groq |
-| **TTS** | Sarvam AI, Gnani Vachana, ElevenLabs, Azure Neural |
-| **Telephony** | Exotel, Twilio |
+## Why another testing tool?
 
-Every provider is a pluggable module implementing a standard interface — add your own with a single Python class.
+Every credible voice-agent testing product — Cekura, Coval, Hamming, Bluejay, Roark — is **closed SaaS**. You ship them your call recordings and pay per test minute.
 
-## Tech Stack
+Convox is Apache 2.0, self-hosted by default, and uses your own model keys. For healthcare, financial services, and anyone under DPDP/HIPAA/GDPR, that's the difference between adoptable and not.
+
+## What makes it different
+
+**We know exactly what the caller said.** Convox generates the caller's speech from text, so the ground-truth transcript exists *before* the audio does. That makes measurements possible that transcript-scoring tools literally cannot compute:
+
+- **Exact WER** of the agent's speech recognition — a diff against known truth, not an estimate
+- **Slot accuracy** — we spoke `98765 43210`; did the agent capture it? A string comparison, not a judgment call
+- **Failure attribution by layer** — if we said X, the agent heard Y, and replied about Y, the fault is STT, not the LLM
+
+**Deterministic first, judges second.** LLM-judge flakiness is the loudest complaint about every tool in this category. Convox's assertions are deterministic by default. Judges run only for genuinely semantic claims, with temperature 0, self-consistency voting, and a requirement to cite the turn IDs that justify the verdict — and **judge calibration is a first-class feature**: label some calls once and Convox reports your judge's precision, recall, F1, and κ against those labels.
+
+**`pass^k`, not pass/fail.** A voice test that passes once is noise. Convox runs each scenario *k* times and reports the fraction that passed. A scenario at 3/5 isn't a pass; it's a 60% agent.
+
+**Honest about what it can't measure.** If a platform doesn't expose tool calls, those assertions report `unsupported` — never a silent pass.
+
+## Quick look
+
+```yaml
+# scenarios/refill_happy_path.yaml
+name: refill_prescription_happy_path
+persona: hinglish_impatient        # interrupts, code-switches, street noise, 8kHz
+mode: hybrid
+
+caller:
+  goal: Refill your Metformin prescription and confirm the pickup time.
+  facts:
+    phone: "+91 98765 43210"
+    medication: "Metformin 500mg"
+  opening: "Haan hello, mujhe apni dawai refill karwani hai."
+
+assert:
+  - tool.called: create_refill_order
+  - slot.captured: { field: phone, value: "+919876543210", normalize: e164 }
+  - latency.response_ms: { p95: { lt: 1200 } }
+  - barge_in.stop_ms: { max: { lt: 300 } }
+  - call.ended_by: agent
+  - judge: "The agent confirmed the pickup date AND time before ending the call."
+
+repeat: 5
+```
+
+```bash
+convox run scenarios/ --target retell:agent_abc123
+```
+
+```
+Run 7f3a1c · target retell:agent_abc123 · 20 scenarios × 3 repeats = 60 trials
+
+  ✓ refill_happy_path              3/3  pass^3   p95 840ms
+  ✗ refill_interrupted             1/3  pass^3=0.33
+      ✗ barge_in.stop_ms  max=880ms (budget 300ms)
+      → agent kept speaking 880ms after caller barge-in at turn 4
+  ✗ hinglish_code_switch           0/3
+      ✗ slot.captured phone: expected +919876543210, agent read back +919876543219
+      → attributed to STT (caller ground truth correct, agent transcript wrong)
+
+  48/60 trials passed · 16/20 scenarios pass^3
+  Report: http://localhost:8000/runs/7f3a1c
+```
+
+## Features
+
+| Area | Highlights |
+|---|---|
+| **Simulation** | Scripted, agentic, and hybrid callers · 40+ shipped personas · barge-in scheduling · backchannels · disfluencies · hang-ups |
+| **Channel realism** | G.711/G.722/GSM/Opus codecs · 25+ background noise profiles · packet loss, jitter, network presets · device EQ |
+| **Assertions** | Transcript, slot capture, tool calls, latency, barge-in, lifecycle, audio quality, ASR, PII, compliance — all deterministic |
+| **Judges** | Rubric, goal, instruction-following, hallucination · evidence citation · vote quorum · calibration reporting |
+| **Metrics** | Per-turn latency percentiles · barge-in stop time · false interrupts · exact WER/CER · entity error rate · truncation, clipping, artifacts · talk ratio · repetition · cost |
+| **CI/CD** | Baselines, regression diffing, `--fail-on regression`, GitHub Action with PR comments, JUnit output |
+| **Load testing** | Ramp profiles, distributed workers, degradation curves, concurrency-ceiling discovery |
+| **Red teaming** | Prompt injection over voice, jailbreaks, PII extraction, hostile callers, disclosure/consent checks |
+| **Observability** | Webhook/OTLP/SDK ingest · same evaluators on production calls · cohorts, drift detection, outliers, Slack alerts |
+| **Replay** | Turn a bad production call into a permanent regression test in one click |
+| **Multilingual** | 12 Indic languages + globals · **intra-sentential code-switching** · Indic-correct WER normalization · Indian telephony profiles |
+
+Full inventory with phase tags: [docs/v2/features.md](docs/v2/features.md)
+
+## Tech stack
 
 | Layer | Technology |
-|-------|-----------|
-| Voice Pipeline | [Pipecat](https://github.com/pipecat-ai/pipecat) |
-| API Backend | Python 3.12+ / FastAPI / asyncpg (no ORM) |
-| Database | PostgreSQL 17 / Redis 7 |
-| Migrations | dbmate (plain SQL) |
-| Frontend | Vite / React 19 / TypeScript / Tailwind v4 |
-| Infrastructure | Docker Compose / single-container monolith |
+|---|---|
+| Caller pipeline | [Pipecat](https://github.com/pipecat-ai/pipecat) |
+| API / workers | Python 3.12+ · FastAPI · asyncio (no ORM) |
+| Database | PostgreSQL 17 · Redis 7 (Streams) · MinIO/S3 |
+| DSP | numpy · scipy · soxr · PyAV |
+| Frontend | Vite · React 19 · TypeScript · Tailwind v4 · wavesurfer.js |
+| CLI | Typer · Rich |
+| Infra | Docker Compose · Helm · OpenTelemetry |
 
-## Project Structure
+## Project structure
 
 ```
 convox/
-├── api/
-│   ├── convox/              # Python package
-│   │   ├── app.py           # FastAPI app factory
-│   │   ├── config.py        # Pydantic settings (env vars)
-│   │   ├── database/        # asyncpg + Redis connections
-│   │   ├── handler/         # HTTP route handlers
-│   │   ├── middleware/       # CORS, logging
-│   │   ├── model/           # Pydantic schemas
-│   │   ├── providers/       # STT/LLM/TTS/telephony plugins
-│   │   ├── repository/      # Data access (raw SQL)
-│   │   ├── service/         # Business logic
-│   │   ├── compliance/      # DPDP compliance module
-│   │   └── ws/              # WebSocket handlers
-│   ├── migrations/          # dbmate SQL migrations (8 tables)
-│   ├── tests/               # pytest suite
-│   └── pyproject.toml       # Python deps (uv)
-│
-├── web/
-│   ├── src/
-│   │   ├── routes/          # Page components
-│   │   ├── components/      # Reusable UI components
-│   │   ├── lib/             # API client, utilities
-│   │   └── types/           # TypeScript types
-│   └── vite.config.ts
-│
-├── docs/                    # Architecture & tech specs
-├── docker-compose.yml       # Full stack: postgres + redis + app
-├── Dockerfile               # Multi-stage build
-└── Makefile                 # Dev commands
+├── api/convox/
+│   ├── adapters/       # target adapters: Retell, Vapi, LiveKit, Pipecat, WS, SIP…
+│   ├── sim/            # simulation engine: caller policies, turn control, channel sim
+│   ├── eval/           # assertions, judges, metrics, ASR scoring, attribution
+│   ├── observe/        # production ingest, monitors, drift, alerts
+│   ├── generate/       # scenario generation
+│   ├── load/           # load testing coordinator
+│   ├── replay/         # production call → scenario
+│   ├── providers/      # STT/LLM/TTS plugins (caller voice + judges)
+│   └── ...             # handlers, models, repository, service, compliance
+├── cli/                # `convox` CLI
+├── web/                # React dashboard
+├── personas/           # shipped persona library
+├── scenarios/examples/ # example suites
+├── benchmark/          # reference agent + standard suite
+└── docs/v2/            # documentation
 ```
 
-## Quick Start
+Detailed layout: [docs/v2/tech-spec.md](docs/v2/tech-spec.md)
 
-### Prerequisites
+## Deployment
 
-- Docker & Docker Compose
-- Python 3.12+ and [uv](https://github.com/astral-sh/uv)
-- Node.js 20+ (for frontend dev)
+| Shape | For |
+|---|---|
+| **Local** | `pip install convox` — file-based artifacts, no infra |
+| **Self-hosted** | `docker compose up` — API + workers + Postgres + Redis + MinIO |
+| **Scaled** | Helm chart, horizontally scaled workers for load testing |
+| **Air-gapped** | Local Whisper/Piper/vLLM — zero egress, a supported and CI-tested configuration |
 
-### 1. Clone and configure
+Convox never phones home. Telemetry is off by default and always opt-in.
 
-```bash
-git clone https://github.com/rohansx/convox.git
-cd convox
-cp .env.example .env
-# Edit .env with your provider API keys
-```
+## Roadmap
 
-### 2. Start infrastructure
+- **Phase 0–1** — Simulation engine, deterministic assertions, metrics, Retell/Vapi/Pipecat/WebSocket adapters, CLI
+- **Phase 2** — Baselines, regression diffing, GitHub Action, dashboard
+- **Phase 3** — Public launch, docs, self-test suite
+- **Phase 4** — Production observability, replay, alerts
+- **Phase 5** — Load testing, Indic depth, PSTN/SIP, red teaming, judge calibration
+- **Phase 6** — Open public benchmark across agent platforms
+- **Phase 7** — Enterprise: air-gapped, RBAC/SSO, compliance packs
 
-```bash
-make db-up      # Start PostgreSQL
-make db-migrate # Run all migrations
-```
-
-### 3. Run the API
-
-```bash
-cd api
-uv sync --all-extras
-uv run uvicorn convox.app:app --reload --port 8000
-```
-
-### 4. Run the frontend
-
-```bash
-cd web
-bun install
-bun run dev
-```
-
-### 5. Or use Docker Compose (everything at once)
-
-```bash
-docker compose up --build
-```
-
-The dashboard will be available at `http://localhost:5173` and the API at `http://localhost:8000`.
-
-## API Overview
-
-```
-/health                           → Health check
-/v1/agents                        → CRUD for agent definitions
-/v1/sessions                      → Call session lifecycle
-/v1/sessions/{id}/transcript      → Stored transcripts
-/v1/analytics/overview            → Cost & latency metrics
-/v1/providers                     → Provider configuration
-/v1/compliance/dpdp/consents      → DPDP consent records
-/ws/call                          → Real-time audio WebSocket
-```
-
-See [docs/tech-specs.md](docs/tech-specs.md) for the complete API reference.
-
-## How a Call Flows
-
-```
-Inbound Call (Exotel/Twilio)
-    │
-    ▼
-Session Created → Compliance check (DPDP consent)
-    │
-    ▼
-Audio Stream → STT (Sarvam/Deepgram) → Transcript
-    │
-    ▼
-Transcript → LLM (Claude/GPT-4o) → Response
-    │
-    ▼
-Response → TTS (ElevenLabs/Gnani) → Audio
-    │
-    ▼
-Audio → Back to caller
-    │
-    ▼
-Log: transcript, latency, cost per provider
-```
-
-Every step is observable, swappable, and cost-tracked.
-
-## Indian Language Support
-
-Convox is built India-first, not India-as-afterthought:
-
-| Language | Code | STT | TTS |
-|----------|------|-----|-----|
-| Hindi | hi | Sarvam, Deepgram | Sarvam, Gnani |
-| Tamil | ta | Sarvam | Sarvam, Gnani |
-| Telugu | te | Sarvam | Sarvam, Gnani |
-| Bengali | bn | Sarvam | Sarvam, Gnani |
-| Marathi | mr | Sarvam | Sarvam, Gnani |
-| Kannada | kn | Sarvam | Sarvam, Gnani |
-| Gujarati | gu | Sarvam | Sarvam |
-| Malayalam | ml | Sarvam | Sarvam |
-| Punjabi | pa | Sarvam | Sarvam |
-| Odia | or | Sarvam | Sarvam |
-| Assamese | as | Sarvam | Sarvam |
-| English | en | All providers | All providers |
-
-## Compliance
-
-The compliance engine is modular — enable only what you need:
-
-- **DPDP Act (India)** — voice consent capture, consent storage, configurable retention TTLs, right-to-erasure, 72-hour breach notification, audit export
-- **HIPAA** — planned
-- **GDPR** — planned
+Full plan: [docs/v2/roadmap.md](docs/v2/roadmap.md)
 
 ## Development
 
 ```bash
-# Run tests
-cd api && uv run pytest
+git clone https://github.com/rohansx/convox.git
+cd convox
+cp .env.example .env          # add your provider keys
 
-# Lint
-cd api && uv run ruff check .
+make db-up && make db-migrate
 
-# Type check frontend
-cd web && npx tsc --noEmit
+cd api && uv sync --all-extras
+uv run uvicorn convox.app:create_app --factory --reload --port 8000
 
-# Build frontend for production
-cd web && bun run build
+cd web && bun install && bun run dev
+```
+
+```bash
+cd api && uv run pytest        # tests
+cd api && uv run ruff check    # lint
+cd web && npx tsc --noEmit     # frontend types
 ```
 
 ## Contributing
 
-Convox is Apache 2.0 licensed. We welcome contributions:
+Apache 2.0. The highest-leverage contributions are **target adapters** (one interface, any platform), **personas and noise profiles**, and **assertions** — all three are designed as plugin points precisely so they don't have to go through us.
 
-1. Fork the repo
-2. Create a feature branch (`git checkout -b feature/amazing-thing`)
-3. Commit your changes
-4. Push to your branch
-5. Open a Pull Request
+1. Fork, branch (`git checkout -b feature/amazing-thing`)
+2. Make your change; adapters must pass the shared contract tests
+3. Open a Pull Request
+
+## History
+
+Convox v1 was a self-hosted voice AI *orchestration* platform for India. That layer turned out to be commoditized — twelve-plus funded platforms with converging features and deflating prices — while the testing and observability layer above it was funded, growing, and completely unclaimed by open source. The [market research](docs/pivot-research.md) behind the pivot and the [migration plan](docs/v2/migration-from-v1.md) are both in the repo. v1 docs are archived under [docs/v1/](docs/v1/).
 
 ## License
 
@@ -251,4 +223,4 @@ Convox is Apache 2.0 licensed. We welcome contributions:
 
 ---
 
-<p align="center"><strong>Built for India. Open to the world.</strong></p>
+<p align="center"><strong>Test your voice agents like you test your code.</strong></p>
