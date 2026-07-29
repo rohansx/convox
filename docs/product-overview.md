@@ -1,7 +1,7 @@
-# Convox v2 — Product Overview
+# Convox — Product Overview
 
 > Last updated: July 2026
-> Status: Pivot definition
+> Status: Pre-implementation design
 > Related: [Positioning](positioning.md) · [Features](features.md) · [Architecture](architecture.md) · [Scenario Spec](scenario-spec.md)
 
 ---

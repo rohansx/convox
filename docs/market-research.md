@@ -1,14 +1,14 @@
-# Pivot Research: Voice-AI Testing & Observability (Cekura-space)
+# Market Research: Voice-AI Testing & Observability
 
-*Research date: July 2026. Question: should convox pivot from voice-agent orchestration (Bolna-like) to the voice-agent testing/evals/observability space (Cekura-like), possibly mixed with the Retell idea?*
+*Research date: July 2026. Question: where is the durable, unclaimed opportunity in the voice-AI stack?*
 
 ---
 
 ## TL;DR
 
-**Yes — pivot, and the specific move is to build the open-source, self-hosted Cekura alternative.** The orchestration/builder layer (Retell, Vapi, Bland, Bolna) is confirmed commoditized. The testing/observability layer is the fastest-emerging adjacent market with strong funding validation (Coval $31M, Cekura $2.4M, Hamming ~$4.5M, Bluejay $4M) — and **not a single maintained open-source player exists in it**. The one OSS attempt (fixa, YC F24) died at 117 GitHub stars, while dograh — a self-hosted Vapi/Retell alternative — hit ~5,000 stars in under a year, proving demand for self-hosted voice-AI infra. The testing layer next to it is an empty flank.
+**The opportunity is the open-source, self-hosted voice-agent testing platform.** The orchestration/builder layer (Retell, Vapi, Bland, Bolna) is commoditized. The testing/observability layer is the fastest-emerging adjacent market with strong funding validation (Coval $31M, Cekura $2.4M, Hamming ~$4.5M, Bluejay $4M) — and **not a single maintained open-source player exists in it**. The one OSS attempt (fixa, YC F24) died at 117 GitHub stars, while dograh — a self-hosted Vapi/Retell alternative — hit ~5,000 stars in under a year, proving strong appetite for self-hosted voice-AI infra. Nobody has built the testing/observability layer next to it.
 
-Do **not** pivot to a Retell clone. The right "mix" of the two ideas: build the testing layer that sits *above* Retell/Vapi/LiveKit/Pipecat as a neutral QA layer — you integrate with all of them instead of competing with any of them.
+Building another Retell would be a mistake. The right move is the testing layer that sits *above* Retell/Vapi/LiveKit/Pipecat as a neutral QA layer — integrating with all of them instead of competing with any of them.
 
 ---
 
@@ -44,7 +44,7 @@ Cekura (ex-Vocera, YC F24, $2.4M seed led by YC, ~75 customers, Cisco Webex part
 
 Retell (YC W24): agent **builder** platform — prompt/flow-builder agents, multi-LLM, multi-TTS with fallback, telephony/SIP, batch calling, knowledge base, post-call analytics. ~$50M ARR with ~30 people on only ~$5M raised; 50M+ calls/month. Usage-priced (~$0.07/min platform + LLM + telephony ≈ $0.13–0.31/min all-in).
 
-Why cloning it is the wrong pivot:
+Why cloning it is the wrong move:
 - **12+ credible head-to-head competitors**: Vapi ($50M Series B, $500M valuation, won Amazon Ring over 40 rivals), Bland ($100M+ raised, owns its speech models), ElevenLabs Agents (bundling from TTS dominance), Synthflow, Bolna (India niche, $6.3M), LiveKit ($1B valuation) and Pipecat underneath, OpenAI Realtime compressing the whole pipeline into one model.
 - Feature parity everywhere: flow builder, multi-LLM, KB/RAG, batch calls, analytics — converging prices, bake-off-driven sales.
 - a16z's read: value moving "from infrastructure to applications" — pipes margin is compressing.
@@ -87,18 +87,18 @@ Developer pain confirming demand: manual call-and-listen QA is the universally c
 **Product**: *Open-source, self-hosted voice-agent testing & observability platform* — "the open-source Cekura." Working frame: test any agent (Retell, Vapi, LiveKit, Pipecat, Bland, ElevenLabs, or raw SIP/WebSocket) from one self-hosted stack.
 
 **Why this beats the alternatives considered**:
-- vs staying on orchestration (Bolna clone): commoditized, capital-intensive, price-compressed — user's instinct is correct.
+- vs orchestration (a Bolna/Retell clone): commoditized, capital-intensive, price-compressed.
 - vs Retell clone: 12+ funded competitors, value migrating out of that layer.
 - vs closed-SaaS Cekura clone: you'd be 18 months behind four funded YC startups with no distribution. Open source *is* the distribution strategy — and the only unclaimed position.
 
 **Build order (wedge → platform):**
-1. **Simulation engine (the core)** — a test agent that calls your agent via WebSocket/WebRTC first (cheap, no telephony bills), then Twilio/SIP. Persona-driven simulated callers (language, accent, emotion, interruptions, background noise via audio mixing). Scenario spec in YAML/code (pytest-like DX). Reuse convox's provider layer: Sarvam/OpenAI STT-TTS adapters become the simulated caller's voice stack.
+1. **Simulation engine (the core)** — a test agent that calls your agent via WebSocket/WebRTC first (cheap, no telephony bills), then Twilio/SIP. Persona-driven simulated callers (language, accent, emotion, interruptions, background noise via audio mixing). Scenario spec in YAML/code (pytest-like DX). A pluggable provider layer (Sarvam/OpenAI STT-TTS) supplies the simulated caller's voice stack.
 2. **Evaluation** — hybrid scoring: deterministic assertions (tool called, call ended, DTMF path, latency budget, regex on transcript) + LLM-judge metrics (instruction-following, relevancy, sentiment), with audio-layer metrics (per-turn latency P50/P90, interruption latency, silence timeouts, WER via re-transcription). Deterministic-first is a stated differentiator — LLM-judge flakiness is a known complaint.
 3. **CI/CD** — GitHub Action + CLI: run suite on PR, fail build on regression, post report. This is what makes it feel like "pytest for voice agents" and drives OSS adoption.
 4. **Platform connectors** — one-command import of agent configs from Retell/Vapi/ElevenLabs APIs; dynamic variables passed through triggers; auto-sync of prompts.
 5. **Production observability** — OTel ingest + webhook ingestion of production calls from Retell/Vapi; every call scored on the same metrics; dashboard (reuse convox React app), Slack alerts, replay-call-as-test.
 6. **Load testing** — concurrent call generation with the same personas; surface concurrency limits and latency degradation. No OSS tool does this at all.
-7. **Differentiators to own**: (a) **Indic/multilingual testing** — Hinglish code-switching personas, dialect-level WER benchmarks, Sarvam/Indic model support — convox's original DNA, and a gap every vendor has; (b) **open benchmark** — publish a public leaderboard testing Retell vs Vapi vs Pipecat etc. with the OSS tool (Cekura's benchmarks.cekura.ai but reproducible) — this is a marketing engine.
+7. **Differentiators to own**: (a) **Indic/multilingual testing** — Hinglish code-switching personas, dialect-level WER benchmarks, Sarvam/Indic model support — a gap every vendor claims to cover and none does; (b) **open benchmark** — publish a public leaderboard testing Retell vs Vapi vs Pipecat etc. with the OSS tool (Cekura's benchmarks.cekura.ai but reproducible) — this is a marketing engine.
 
 **Monetization path (later)**: standard open-core — OSS self-hosted core free; paid cloud (managed telephony numbers, hosted dashboards, team features); enterprise (SSO/RBAC, compliance reports, SLAs). Cekura charging $30/mo self-serve proves land-and-expand works at the low end; Coval's $4.5K/mo enterprise tier shows the ceiling.
 
@@ -108,7 +108,7 @@ Developer pain confirming demand: manual call-and-listen QA is the universally c
 - *LLM-judge cost of running evals* → deterministic-first design + local/cheap judge model support (self-hosted = bring your own keys, a feature closed SaaS can't match).
 - *Telephony cost of test calls* → WebSocket/WebRTC-first testing (free) with telephony as the "full-fidelity" tier, same as Cekura's channel coverage.
 
-**What carries over from convox**: FastAPI backend skeleton, auth/sessions, provider abstraction layer (STT/TTS/LLM — becomes the simulated-caller stack), per-session cost tracking (becomes per-test-run cost attribution), React dashboard, compliance module (audit logging useful for enterprise later), Pipecat familiarity (first-class Pipecat integration + reference target).
+**Where the product design landed**: see [product-overview.md](product-overview.md), [features.md](features.md), and [architecture.md](architecture.md).
 
 ---
 

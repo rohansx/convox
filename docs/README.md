@@ -1,9 +1,9 @@
-# Convox v2 — Documentation
+# Convox — Documentation
 
 > Last updated: July 2026
-> Status: Pivot definition — pre-implementation
+> Status: Pre-implementation design
 
-Convox v2 repositions the project from **voice-agent orchestration** to **voice-agent testing and observability**: the open-source, self-hosted alternative to Cekura, Coval, and Hamming.
+Convox repositions the project from **voice-agent orchestration** to **voice-agent testing and observability**: the open-source, self-hosted alternative to Cekura, Coval, and Hamming.
 
 ## Start here
 
@@ -17,8 +17,7 @@ Convox v2 repositions the project from **voice-agent orchestration** to **voice-
 | **[Scenario Spec](scenario-spec.md)** | The scenario/persona YAML contract — the product's real interface |
 | **[Metrics Catalog](metrics.md)** | Normative definitions and formulas for every metric Convox reports |
 | **[Roadmap](roadmap.md)** | Phased build plan, sequencing principles, non-goals, risks |
-| **[Migration from v1](migration-from-v1.md)** | What survives, what's rebuilt, what's deleted, and in what order |
-| **[Market Research](../pivot-research.md)** | The Cekura / Retell / competitor / open-source research behind the pivot |
+| **[Market Research](market-research.md)** | The Cekura / Retell / competitor / open-source research behind the pivot |
 
 ## The thesis in five bullets
 
@@ -30,9 +29,9 @@ Convox v2 repositions the project from **voice-agent orchestration** to **voice-
 
 ## Reading paths
 
-**Evaluating the pivot decision** → [Market Research](../pivot-research.md) → [Positioning](positioning.md) → [Roadmap](roadmap.md)
+**Evaluating the pivot decision** → [Market Research](market-research.md) → [Positioning](positioning.md) → [Roadmap](roadmap.md)
 
-**Building it** → [Product Overview](product-overview.md) → [Architecture](architecture.md) → [Tech Spec](tech-spec.md) → [Migration from v1](migration-from-v1.md)
+**Building it** → [Product Overview](product-overview.md) → [Architecture](architecture.md) → [Tech Spec](tech-spec.md)
 
 **Designing the user experience** → [Product Overview](product-overview.md) → [Scenario Spec](scenario-spec.md) → [Metrics](metrics.md)
 
@@ -40,6 +39,6 @@ Convox v2 repositions the project from **voice-agent orchestration** to **voice-
 
 ## Status
 
-These documents define the target state. Nothing here is implemented yet — v1 code in `api/` is the pre-alpha orchestration platform being migrated. See [Migration from v1](migration-from-v1.md) for the execution order; step 6 ("first green test") is the milestone at which v2 exists.
+These documents define the target state; implementation is underway against the [roadmap](roadmap.md). The engine, scenario format, and CLI land first — the dashboard follows once there is something worth showing.
 
-v1 documentation is archived under [`docs/v1/`](../v1/).
+An earlier iteration of this repo explored voice-agent orchestration. That work is preserved on the `archive/orchestration-platform` branch; [market-research.md](market-research.md) records why the direction changed.

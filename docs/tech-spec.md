@@ -1,7 +1,7 @@
-# Convox v2 — Technical Specification
+# Convox — Technical Specification
 
 > Last updated: July 2026
-> Status: Pivot definition
+> Status: Pre-implementation design
 > Related: [Architecture](architecture.md) · [Scenario Spec](scenario-spec.md) · [Metrics](metrics.md) · [Features](features.md)
 
 ---
@@ -101,7 +101,7 @@ convox/
 ├── assets/noise/                   # background noise profiles
 ├── benchmark/                      # reference agent + standard suite
 ├── action/                         # GitHub Action
-└── docs/v2/
+└── docs/
 ```
 
 ---
@@ -796,8 +796,9 @@ The credibility problem is unavoidable: a testing tool that is itself unreliable
 
 ---
 
-## 15. Migration and compatibility
+## 15. Compatibility commitments
 
-- v1's agent-serving runtime is removed; see [migration-from-v1.md](migration-from-v1.md) for the table of what's kept, refactored, and deleted.
-- The provider plugin interface stays source-compatible so existing STT/TTS/LLM plugins keep working as caller-side components.
-- Database: v2 introduces a new schema. There is no v1→v2 data migration — v1 is pre-alpha with no production users, so v2 starts from a clean migration series.
+- **Scenario format** (`version: convox/v1`) is the public contract. Additive fields are minor changes; removals or semantic changes require a format version bump plus `convox migrate-scenarios`.
+- **Assertion and metric names** are public API. Renaming one is a breaking change; metric *definitions* are versioned, and every run records the definition version it was scored against.
+- **Adapter interface** is stable within a major version, so third-party adapters keep working.
+- **Artifact bundle layout** is documented and versioned — external tooling can read trial output without going through our API.

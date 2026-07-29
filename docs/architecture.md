@@ -1,14 +1,14 @@
-# Convox v2 — System Architecture
+# Convox — System Architecture
 
 > Last updated: July 2026
-> Status: Pivot definition
-> Related: [Tech Spec](tech-spec.md) · [Features](features.md) · [Migration from v1](migration-from-v1.md)
+> Status: Pre-implementation design
+> Related: [Tech Spec](tech-spec.md) · [Features](features.md) · [Roadmap](roadmap.md)
 
 ---
 
 ## 1. Overview
 
-Convox v2 is a **self-hosted testing and observability platform for voice AI agents**. Architecturally it is a control plane plus two worker fleets, connected by a queue and a shared artifact store.
+Convox is a **self-hosted testing and observability platform for voice AI agents**. Architecturally it is a control plane plus two worker fleets, connected by a queue and a shared artifact store.
 
 ```
 ┌───────────────────────────────────────────────────────────────────────────────┐
@@ -59,7 +59,7 @@ Convox v2 is a **self-hosted testing and observability platform for voice AI age
                    └──────────────────────────────────────┘
 ```
 
-**The inversion from v1.** In v1, Convox *was* the voice pipeline serving end users. In v2, Convox *drives* a voice pipeline that plays the role of the caller, against someone else's agent. The Pipecat expertise and the provider abstraction transfer directly; the direction of the audio and the definition of success are what change.
+**The central inversion.** Most voice-AI infrastructure runs a pipeline that *serves* a human caller. Convox runs a pipeline that *plays* one — the same STT/LLM/TTS machinery, pointed at someone else's agent, with deliberate control over timing and turn-taking so that every interaction is measurable rather than merely plausible.
 
 ---
 
@@ -269,22 +269,18 @@ Same as scaled, with local providers only: Whisper (STT), Piper/Kokoro (TTS), vL
 
 ---
 
-## 7. What carries over from v1
+## 7. Component reuse
 
-| v1 component | v2 role |
+Several subsystems are shared rather than purpose-built, which keeps the surface area small:
+
+| Subsystem | Used by |
 |---|---|
-| Pipecat integration | Now drives the *caller* pipeline instead of the agent pipeline |
-| Provider plugin layer (STT/TTS/LLM) | The synthetic caller's voice stack + judge backends. Interface survives nearly unchanged. |
-| Sarvam / Indic provider work | Directly powers the Indic testing differentiator |
-| FastAPI skeleton, config, middleware, auth | Control plane foundation |
-| Cost tracking service | Per-trial and per-run cost attribution, budget guards |
-| Compliance module (DPDP) | Retention policies, PII redaction, audit logging — plus becomes a *testable* surface (compliance assertions) |
-| React dashboard shell | Run/trial views |
-| Telephony provider adapters (Exotel/Twilio) | PSTN target adapter and inbound number handling |
-
-Roughly the whole substrate survives; what gets deleted is the agent-serving runtime and its conversation-management surface. Details in [migration-from-v1.md](migration-from-v1.md).
-
----
+| Provider plugins (STT / TTS / LLM) | Synthetic caller voice stack, independent transcription, judge backends |
+| Pipecat pipeline | The caller runtime |
+| Cost accounting | Per-trial and per-run attribution, budget guards |
+| Retention / redaction / audit | Recording lifecycle, and simultaneously a *testable* surface via compliance assertions |
+| Telephony provider clients | PSTN target adapter and inbound-number handling for outbound-agent tests |
+| Evaluation engine | Simulated trials **and** ingested production calls — identical scoring, which is what makes test-vs-production comparison valid |
 
 ## 8. Key architectural risks
 

@@ -10,16 +10,16 @@
 <p align="center">Simulate thousands of real callers against your agent. Score every call on transcript <em>and</em> audio. Run all of it in your own infrastructure.</p>
 
 <p align="center">
-  <a href="docs/v2/README.md">Documentation</a> ·
-  <a href="docs/v2/product-overview.md">Product Overview</a> ·
-  <a href="docs/v2/scenario-spec.md">Scenario Spec</a> ·
-  <a href="docs/v2/architecture.md">Architecture</a> ·
-  <a href="docs/v2/roadmap.md">Roadmap</a>
+  <a href="docs/README.md">Documentation</a> ·
+  <a href="docs/product-overview.md">Product Overview</a> ·
+  <a href="docs/scenario-spec.md">Scenario Spec</a> ·
+  <a href="docs/architecture.md">Architecture</a> ·
+  <a href="docs/roadmap.md">Roadmap</a>
 </p>
 
 ---
 
-> **Status: pre-alpha.** Convox is being repositioned from voice-agent orchestration (v1) to voice-agent testing and observability (v2). The [v2 documentation](docs/v2/README.md) defines the target state; implementation is in progress. See [Migration from v1](docs/v2/migration-from-v1.md).
+> **Status: pre-alpha, under active development.** The [documentation](docs/README.md) defines the full target product; the engine, scenario format, and CLI are being built first. See the [roadmap](docs/roadmap.md).
 
 ## What is Convox?
 
@@ -123,7 +123,7 @@ Run 7f3a1c · target retell:agent_abc123 · 20 scenarios × 3 repeats = 60 trial
 | **Replay** | Turn a bad production call into a permanent regression test in one click |
 | **Multilingual** | 12 Indic languages + globals · **intra-sentential code-switching** · Indic-correct WER normalization · Indian telephony profiles |
 
-Full inventory with phase tags: [docs/v2/features.md](docs/v2/features.md)
+Full inventory with phase tags: [docs/features.md](docs/features.md)
 
 ## Tech stack
 
@@ -156,10 +156,10 @@ convox/
 ├── personas/           # shipped persona library
 ├── scenarios/examples/ # example suites
 ├── benchmark/          # reference agent + standard suite
-└── docs/v2/            # documentation
+└── docs/            # documentation
 ```
 
-Detailed layout: [docs/v2/tech-spec.md](docs/v2/tech-spec.md)
+Detailed layout: [docs/tech-spec.md](docs/tech-spec.md)
 
 ## Deployment
 
@@ -182,7 +182,7 @@ Convox never phones home. Telemetry is off by default and always opt-in.
 - **Phase 6** — Open public benchmark across agent platforms
 - **Phase 7** — Enterprise: air-gapped, RBAC/SSO, compliance packs
 
-Full plan: [docs/v2/roadmap.md](docs/v2/roadmap.md)
+Full plan: [docs/roadmap.md](docs/roadmap.md)
 
 ## Development
 
@@ -213,9 +213,9 @@ Apache 2.0. The highest-leverage contributions are **target adapters** (one inte
 2. Make your change; adapters must pass the shared contract tests
 3. Open a Pull Request
 
-## History
+## Background
 
-Convox v1 was a self-hosted voice AI *orchestration* platform for India. That layer turned out to be commoditized — twelve-plus funded platforms with converging features and deflating prices — while the testing and observability layer above it was funded, growing, and completely unclaimed by open source. The [market research](docs/pivot-research.md) behind the pivot and the [migration plan](docs/v2/migration-from-v1.md) are both in the repo. v1 docs are archived under [docs/v1/](docs/v1/).
+An earlier iteration of this repo explored voice-agent *orchestration* — building and serving the agents themselves. That layer turned out to be commoditized: twelve-plus funded platforms with converging features and deflating prices. The testing and observability layer above it was funded, growing fast, and completely unclaimed by open source. The [market research](docs/market-research.md) behind that conclusion is in the repo, and the orchestration work is preserved on the `archive/orchestration-platform` branch.
 
 ## License
 

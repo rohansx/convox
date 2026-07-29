@@ -1,7 +1,7 @@
-# Convox v2 — Feature Specification
+# Convox — Feature Specification
 
 > Last updated: July 2026
-> Status: Pivot definition
+> Status: Pre-implementation design
 > Related: [Product Overview](product-overview.md) · [Scenario Spec](scenario-spec.md) · [Metrics Catalog](metrics.md) · [Tech Spec](tech-spec.md) · [Roadmap](roadmap.md)
 
 This is the complete feature inventory, grouped by capability area. Each feature carries a phase tag: **P0** (MVP / first public release), **P1** (fast follow), **P2** (platform maturity), **P3** (enterprise / later).

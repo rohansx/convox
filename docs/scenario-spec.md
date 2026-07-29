@@ -1,7 +1,7 @@
-# Convox v2 — Scenario & Persona Specification
+# Convox — Scenario & Persona Specification
 
 > Last updated: July 2026
-> Status: Pivot definition · Schema version `convox/v1`
+> Status: Pre-implementation design · Schema version `convox/v1`
 > Related: [Features](features.md) · [Metrics](metrics.md) · [Tech Spec](tech-spec.md)
 
 The scenario format is the product's real interface. It lives in your repo, next to the agent prompt it tests, and drives the CLI, the API, CI, and the dashboard identically.

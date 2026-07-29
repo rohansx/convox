@@ -1,8 +1,8 @@
-# Convox v2 — Roadmap
+# Convox — Roadmap
 
 > Last updated: July 2026
-> Status: Pivot definition
-> Related: [Features](features.md) · [Positioning](positioning.md) · [Migration from v1](migration-from-v1.md)
+> Status: Pre-implementation design
+> Related: [Features](features.md) · [Positioning](positioning.md) · [Architecture](architecture.md)
 
 Phases are ordered by **what earns the next user**, not by what's architecturally tidy. The wedge is a developer running one command and finding a real bug.
 
@@ -10,10 +10,10 @@ Phases are ordered by **what earns the next user**, not by what's architecturall
 
 ## Phase 0 — Foundation (weeks 1–3)
 
-Strip v1 down to the substrate and stand up the new spine.
+Stand up the spine.
 
-- Remove the agent-serving runtime; keep providers, config, auth, database, cost, compliance ([details](migration-from-v1.md))
-- New migration series: teams, targets, personas, scenarios, runs, trials, turns, metrics, assertion_results
+- Project skeleton: config, models, spec loader, artifact layer
+- Migration series: teams, targets, personas, scenarios, runs, trials, turns, metrics, assertion_results
 - Redis Streams job queue with consumer groups and lease/watchdog semantics
 - Object store (MinIO) artifact layer
 - `TargetAdapter` protocol + capabilities model + contract test harness

@@ -1,7 +1,7 @@
-# Convox v2 — Metrics Catalog
+# Convox — Metrics Catalog
 
 > Last updated: July 2026
-> Status: Pivot definition
+> Status: Pre-implementation design
 > Related: [Features](features.md) · [Scenario Spec](scenario-spec.md) · [Tech Spec](tech-spec.md)
 
 Every metric here is computed on every trial (and on every ingested production call where the data supports it). This document is the normative definition — if a number appears in the dashboard, its formula is here.

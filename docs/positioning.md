@@ -1,8 +1,8 @@
-# Convox v2 — Positioning
+# Convox — Positioning
 
 > Last updated: July 2026
-> Status: Pivot definition
-> Related: [Product Overview](product-overview.md) · [Features](features.md) · [Research](../pivot-research.md)
+> Status: Pre-implementation design
+> Related: [Product Overview](product-overview.md) · [Features](features.md) · [Research](market-research.md)
 
 ---
 
