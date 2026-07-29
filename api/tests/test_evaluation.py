@@ -124,12 +124,17 @@ async def test_latency_budget_catches_a_slow_agent(fast_options):
 
 
 async def test_soft_assertions_record_without_failing(fast_options):
+    """A soft assertion is recorded as failed but does not fail the trial."""
     scenario = refill_scenario(
-        **{"assert": [{"soft": {"latency.response_ms": {"max": {"lt": 1}}}}]}
+        **{"assert": [{"soft": {"tool.called": "a_tool_that_does_not_exist"}}]}
     )
     result = await run_once(scenario, fast_options)
+
+    recorded = result.assertions[0]
+    assert recorded.status == AssertionStatus.FAIL
+    assert recorded.soft is True
+    assert result.failures == []
     assert result.verdict == Verdict.PASS
-    assert any(a.status == AssertionStatus.FAIL and a.soft for a in result.assertions)
 
 
 # ─── the honesty rules ───────────────────────────────────────────────────────

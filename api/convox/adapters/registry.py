@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from convox.adapters.base import TargetAdapter
 from convox.adapters.websocket import WebSocketAdapter
+from convox.adapters.websocket_audio import AudioWebSocketAdapter
 from convox.model.target import AdapterCapabilities, Target
 
 _ADAPTERS: dict[str, type[TargetAdapter]] = {}
@@ -33,3 +34,4 @@ def kinds() -> list[str]:
 
 
 register(WebSocketAdapter)
+register(AudioWebSocketAdapter)

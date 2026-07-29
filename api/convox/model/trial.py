@@ -75,6 +75,53 @@ class Turn(BaseModel):
         return self.ground_truth_text or self.heard_text or self.convox_transcript or ""
 
 
+class AudioAnalysis(BaseModel):
+    """Measured properties of one leg's audio."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    duration_ms: int = 0
+    rms: float = 0.0
+    peak: float = 0.0
+    snr_db: float | None = None
+    clipping_ratio: float = 0.0
+    silence_ratio: float = 1.0
+    artifact_score: float = 0.0
+    truncated: bool = False
+    speech_ms: int = 0
+
+
+class BargeInEvent(BaseModel):
+    """A measured interruption: when the caller cut in, and how the agent reacted."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    caller_start_ms: int
+    agent_stopped_ms: int | None = None
+    stop_ms: int | None = None
+    overrun_ms: int = 0
+    overrun_bytes: int = 0
+    addressed: bool = False
+
+
+class AudioTrack(BaseModel):
+    """Audio-side record of the call.
+
+    Analysis is computed once, at the end of the call, and carried in the bundle
+    so every downstream consumer reads the same numbers. Raw WAVs are written
+    alongside when an artifact directory is configured.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    sample_rate: int
+    agent: AudioAnalysis | None = None
+    caller: AudioAnalysis | None = None
+    agent_wav: str | None = None
+    caller_wav: str | None = None
+    barge_ins: list[BargeInEvent] = Field(default_factory=list)
+
+
 class MetricValue(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -141,6 +188,7 @@ class TrialArtifacts(BaseModel):
     events: list[Event] = Field(default_factory=list)
     facts: dict[str, Any] = Field(default_factory=dict)
     costs: list[CostEntry] = Field(default_factory=list)
+    audio: AudioTrack | None = None
 
     # ── convenience accessors used throughout evaluation ──
 

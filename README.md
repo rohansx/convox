@@ -132,22 +132,55 @@ uv run convox run scenarios/ --target websocket:ws://127.0.0.1:8765
     judge: no judge backend configured (set `judge.llm` in convox.yaml)
 ```
 
-Shipping now: the scripted simulation engine, the WebSocket adapter, ground-truth
-capture, ~25 deterministic assertions, latency and conversation metrics, layer
+### The audio path
+
+Convox holds real spoken conversations, not just text exchanges — which is what
+makes the interesting failures visible:
+
+```bash
+uv run python -m convox.testing.audio_agent --bug truncate_audio &
+```
+
+```yaml
+persona: noisy_street          # café babble at 10 dB SNR, G.711 narrowband, 4G loss
+assert:
+  - asr.wer: { lt: 0.05 }             # exact, against what the caller actually said
+  - asr.entity_error_rate: { lt: 0.0 }  # did it get the phone number right?
+  - barge_in.handled: true            # does it stop when interrupted?
+  - barge_in.stop_ms: { max: { lt: 300 } }
+  - audio.no_truncation: true         # was the last word cut off?
+  - audio.no_artifacts: true          # did the TTS glitch?
+```
+
+Because Convox synthesises the caller's speech, the reference transcript exists
+before the audio does — so word error rate is a diff against known truth, and a
+mis-heard digit is provable rather than inferred.
+
+**It runs with no API keys.** The audio path ships with a deterministic reference
+voice codec: text in, tones inside the telephony band out, and a matched decoder.
+Add noise, drop packets, or squeeze it through G.711 and recognition degrades the
+way real ASR degrades — so the whole pipeline is exercisable in CI, offline, with
+identical results every run. Real providers (Sarvam, ElevenLabs, Deepgram, local
+Whisper/Piper) implement the same two protocols and drop straight in.
+
+Shipping now: the scripted simulation engine, text and audio WebSocket adapters,
+ground-truth capture, the channel simulator (G.711/G.722/GSM codecs, 14 noise
+profiles, packet loss and jitter), independent transcription, ~35 deterministic
+assertions, latency / turn-taking / recognition / audio-quality metrics, layer
 attribution, `pass^k` reliability scoring, JUnit/JSON reports, exit codes CI can
 branch on, and `init` / `lint` / `run` / `target test`.
 
-Not yet: the audio path (TTS/STT, codecs, noise, barge-in timing), agentic
-callers, judge backends, platform adapters beyond WebSocket, load testing,
-production monitoring, and the dashboard. Assertions that need those report
-`unsupported` — never a silent pass.
+Not yet: agentic callers, judge backends, platform adapters beyond WebSocket,
+load testing, production monitoring, and the dashboard. Assertions that need
+those report `unsupported` — never a silent pass.
 
 **Convox tests itself.** The bundled reference agent has injectable faults, and
 the self-check suite asserts that Convox reports *exactly* those faults and no
 others. A testing tool whose own reliability is unproven is worthless:
 
 ```bash
-cd api && uv run pytest      # 57 tests
+cd api && uv run pytest                          # everything
+cd api && uv run pytest --ignore=tests/test_audio_call.py   # fast suite only
 ```
 
 ## Features
@@ -175,7 +208,7 @@ Full inventory with phase tags: [docs/features.md](docs/features.md)
 | Caller pipeline | [Pipecat](https://github.com/pipecat-ai/pipecat) |
 | API / workers | Python 3.12+ · FastAPI · asyncio (no ORM) |
 | Database | PostgreSQL 17 · Redis 7 (Streams) · MinIO/S3 |
-| DSP | numpy · scipy · soxr · PyAV |
+| DSP | numpy (codecs, noise, and analysis are implemented in-repo) |
 | Frontend | Vite · React 19 · TypeScript · Tailwind v4 · wavesurfer.js |
 | CLI | Typer · Rich |
 | Infra | Docker Compose · Helm · OpenTelemetry |

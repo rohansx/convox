@@ -13,7 +13,6 @@ from __future__ import annotations
 
 import asyncio
 
-from convox.adapters.base import TargetSession
 from convox.model.enums import EndedBy
 from convox.model.persona import Persona
 from convox.model.scenario import (
@@ -29,13 +28,17 @@ from convox.model.scenario import (
     WaitSilence,
 )
 from convox.sim.conversation import AgentStream
-from convox.sim.recorder import Recorder, estimate_speech_ms
+from convox.sim.mouth import CallerMouth
+from convox.sim.recorder import Recorder
 
 DEFAULT_AGENT_TIMEOUT_MS = 15_000
 
 #: How long to wait for an agent that greets on connect before the caller speaks.
 #: Short, because an agent that never greets should not cost the whole suite.
 GREETING_TIMEOUT_MS = 5_000
+
+#: Absolute ceiling on waiting for a turn, however long the agent keeps talking.
+MAX_AGENT_TURN_MS = 120_000
 
 
 def speakable(value: object) -> str:
@@ -58,6 +61,7 @@ class ScriptedPolicy:
         persona: Persona,
         recorder: Recorder,
         stream: AgentStream,
+        mouth: CallerMouth,
         *,
         realtime: bool = True,
     ) -> None:
@@ -65,6 +69,7 @@ class ScriptedPolicy:
         self.persona = persona
         self.recorder = recorder
         self.stream = stream
+        self.mouth = mouth
         self.realtime = realtime
         self.ended_by: EndedBy | None = None
         #: On an inbound call the agent speaks first, so the caller starts by
@@ -96,28 +101,38 @@ class ScriptedPolicy:
         else:
             self.recorder.clock.advance(ms)
 
-    async def _speak(self, session: TargetSession, text: str, *, interrupting: bool = False) -> None:
-        """Utter one caller turn, holding the floor for its estimated duration."""
-        start_ms = self.recorder.clock.now_ms()
-        duration = estimate_speech_ms(text, self.persona.speech_rate)
-        await self._sleep_ms(duration)
-        end_ms = self.recorder.clock.now_ms()
-        self.recorder.caller_turn(text, start_ms=start_ms, end_ms=end_ms, interrupting=interrupting)
-        await session.say(text, interrupting=interrupting)
+    async def _speak(self, text: str, *, interrupting: bool = False) -> None:
+        """Utter one caller turn through whatever channel the mouth speaks over."""
+        if interrupting:
+            # Tell the stream we are cutting in *before* the first sample lands,
+            # so barge-in stop time is measured from the true onset.
+            self.stream.note_caller_started(self.recorder.clock.now_ms())
+        _, end_ms = await self.mouth.speak(text, interrupting=interrupting)
         self._last_caller_end_ms = end_ms
         self._awaiting_agent = True
         self._agent_timeout_ms = DEFAULT_AGENT_TIMEOUT_MS
         self._turns_spoken += 1
 
     async def _yield_to_agent(self, timeout_ms: int | None = None) -> None:
-        """Let the agent finish before the caller speaks again."""
+        """Let the agent finish before the caller speaks again.
+
+        A polite caller waits for the agent to stop talking, not for a stopwatch.
+        Cutting in because a fixed timeout expired mid-utterance would manufacture
+        an interruption the scenario never asked for — and then measure it.
+        """
         if not self._awaiting_agent:
             return
         self._awaiting_agent = False
-        await self.stream.wait_for_turn(
-            timeout_ms or self._agent_timeout_ms,
-            after_ms=self._last_caller_end_ms,
-        )
+
+        budget = timeout_ms or self._agent_timeout_ms
+        waited = 0
+        while waited < MAX_AGENT_TURN_MS:
+            turn = await self.stream.wait_for_turn(budget, after_ms=self._last_caller_end_ms)
+            if turn is not None:
+                return
+            if not self.stream.agent_speaking:
+                return
+            waited += budget
 
     def _fact(self, field: str) -> str:
         facts = self.scenario.caller.facts
@@ -127,7 +142,7 @@ class ScriptedPolicy:
 
     # ── execution ──
 
-    async def run(self, session: TargetSession) -> EndedBy:
+    async def run(self) -> EndedBy:
         """Execute the script. Returns who ended the call."""
         for step in self._steps():
             if self.stream.agent_hung_up:
@@ -140,11 +155,11 @@ class ScriptedPolicy:
             match step:
                 case Say():
                     await self._yield_to_agent()
-                    await self._speak(session, step.text)
+                    await self._speak(step.text)
 
                 case SayFact():
                     await self._yield_to_agent()
-                    await self._speak(session, self._fact(step.field))
+                    await self._speak(self._fact(step.field))
 
                 case WaitForAgent():
                     self._awaiting_agent = True
@@ -159,23 +174,23 @@ class ScriptedPolicy:
                     await self._sleep_ms(step.after_ms)
                     self._awaiting_agent = False
                     self.recorder.event("caller.barge_in", after_ms=step.after_ms)
-                    await self._speak(session, step.say, interrupting=True)
+                    await self._speak(step.say, interrupting=True)
 
                 case Backchannel():
                     await self._sleep_ms(step.after_ms)
                     self.recorder.event("caller.backchannel", text=step.text)
-                    await session.say(step.text, interrupting=True)
+                    await self.mouth.speak(step.text, interrupting=True)
 
                 case Dtmf():
                     await self._yield_to_agent()
-                    await session.send_dtmf(step.digits, tone_ms=step.tone_ms, gap_ms=step.gap_ms)
+                    await self.mouth.dtmf(step.digits, tone_ms=step.tone_ms, gap_ms=step.gap_ms)
                     self.recorder.event("caller.dtmf", digits=step.digits)
                     self._last_caller_end_ms = self.recorder.clock.now_ms()
                     self._awaiting_agent = True
                     self._agent_timeout_ms = DEFAULT_AGENT_TIMEOUT_MS
 
                 case Hangup():
-                    await session.hangup()
+                    await self.mouth.hangup()
                     self.ended_by = EndedBy.CALLER
                     return self.ended_by
 
@@ -185,5 +200,5 @@ class ScriptedPolicy:
         if self.ended_by is None:
             self.ended_by = EndedBy.AGENT if self.stream.agent_hung_up else EndedBy.CALLER
         if self.ended_by == EndedBy.CALLER:
-            await session.hangup()
+            await self.mouth.hangup()
         return self.ended_by

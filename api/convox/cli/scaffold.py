@@ -8,11 +8,19 @@ PROJECT_YAML = """version: convox/v1
 project: my-voice-agent
 
 targets:
-  # The bundled reference agent — start it with:
-  #   python -m convox.testing.reference_agent
+  # The bundled reference agents. Start one with:
+  #   python -m convox.testing.reference_agent          (text channel)
+  #   python -m convox.testing.audio_agent              (audio channel)
   demo:
     kind: websocket
     url: ws://127.0.0.1:8765
+
+  # Audio targets unlock the checks that only exist once there is sound:
+  # recognition accuracy, barge-in timing, and TTS truncation.
+  demo-audio:
+    kind: websocket_audio
+    url: ws://127.0.0.1:8770
+    sample_rate: 16000
 
 defaults:
   repeat: 3
@@ -87,10 +95,42 @@ repeat: 3
 GITIGNORE = """convox-out/
 """
 
+AUDIO_SCENARIO_YAML = """version: convox/v1
+name: refill_over_audio
+description: The same refill, spoken aloud over a noisy narrowband line.
+
+persona: impatient_mobile
+mode: scripted
+
+caller:
+  goal: Refill your Metformin prescription.
+  facts:
+    phone: "+91 98765 43210"
+  opening: "hi i need a refill"
+  script:
+    - say: "nine eight seven six five four three two one zero"
+    - say: "metformin"
+    - barge_in: { after_ms: 400, say: "wait actually make it next week" }
+
+assert:
+  # Recognition, scored against what the caller actually said.
+  - asr.wer: { lt: 0.15 }
+  - slot.captured: { field: phone, value: "+919876543210", normalize: e164 }
+
+  # Failures a transcript can never show you.
+  - barge_in.handled: true
+  - barge_in.stop_ms: { max: { lt: 500 } }
+  - audio.no_truncation: true
+  - audio.no_artifacts: true
+
+repeat: 2
+"""
+
 FILES = {
     "convox.yaml": PROJECT_YAML,
     "personas/impatient_mobile.yaml": PERSONA_YAML,
     "scenarios/refill_happy_path.yaml": SCENARIO_YAML,
+    "scenarios/audio/refill_over_audio.yaml": AUDIO_SCENARIO_YAML,
     ".gitignore": GITIGNORE,
 }
 

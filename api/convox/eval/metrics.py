@@ -11,6 +11,7 @@ and a reason, never defaulted to a passing value.
 
 from __future__ import annotations
 
+from convox.eval import wer as wer_mod
 from convox.eval.compare import percentile
 from convox.model.enums import Speaker
 from convox.model.trial import MetricValue, TrialArtifacts, Turn
@@ -111,6 +112,40 @@ def repetition_score(artifacts: TrialArtifacts) -> tuple[int, str | None]:
     return counts[phrase], phrase
 
 
+def recognition_pairs(artifacts: TrialArtifacts) -> list[tuple[str, str]]:
+    """(what the caller said, what the agent heard) for every scorable turn.
+
+    The first element is ground truth — the exact text handed to synthesis — so
+    these comparisons are diffs against what was really said, not estimates.
+    """
+    return [
+        (turn.ground_truth_text, turn.heard_text)
+        for turn in artifacts.caller_turns
+        if turn.ground_truth_text and turn.heard_text
+    ]
+
+
+def barge_in_stops(artifacts: TrialArtifacts) -> list[int]:
+    if artifacts.audio is None:
+        return []
+    return [b.stop_ms for b in artifacts.audio.barge_ins if b.stop_ms is not None]
+
+
+#: An agent that finishes its sentence and *then* goes quiet did not yield.
+BARGE_IN_GRACE_MS = 1000
+
+
+def unhandled_barge_ins(artifacts: TrialArtifacts) -> int:
+    """Interruptions the agent talked through instead of yielding to."""
+    if artifacts.audio is None:
+        return 0
+    return sum(
+        1
+        for b in artifacts.audio.barge_ins
+        if b.stop_ms is None or b.stop_ms > BARGE_IN_GRACE_MS
+    )
+
+
 def talk_ratio(artifacts: TrialArtifacts) -> float | None:
     agent = sum(t.speech_end_ms - t.speech_start_ms for t in artifacts.agent_turns)
     caller = sum(t.speech_end_ms - t.speech_start_ms for t in artifacts.caller_turns)
@@ -187,7 +222,67 @@ def compute(artifacts: TrialArtifacts) -> list[MetricValue]:
     # ── cost ──
     metrics.append(MetricValue(name="cost.test_usd", value=artifacts.cost_usd, unit="usd"))
 
-    # ── deliberately unavailable on a text channel ──
+    # ── recognition, measured against known ground truth ──
+    pairs = recognition_pairs(artifacts)
+    if pairs:
+        reference = " ".join(p[0] for p in pairs)
+        heard = " ".join(p[1] for p in pairs)
+        word = wer_mod.wer(reference, heard, artifacts.language)
+        char = wer_mod.cer(reference, heard, artifacts.language)
+        entity = wer_mod.entity_error_rate(
+            reference, heard, [str(v) for v in artifacts.facts.values()] or None
+        )
+        metrics += [
+            MetricValue(
+                name="asr.wer",
+                value=round(word.error_rate, 4),
+                detail={
+                    "reference_words": word.reference_length,
+                    "substitutions": word.substitutions,
+                    "deletions": word.deletions,
+                    "insertions": word.insertions,
+                    "errors": [list(e) for e in word.errors][:20],
+                },
+            ),
+            MetricValue(name="asr.cer", value=round(char.error_rate, 4)),
+            MetricValue(
+                name="asr.entity_error_rate",
+                value=round(entity.error_rate, 4),
+                detail={"errors": [list(e) for e in entity.errors][:20]},
+            ),
+        ]
+    elif has_audio:
+        metrics += [
+            _unavailable("asr.wer", "target did not expose its transcript of the caller"),
+            _unavailable("asr.cer", "target did not expose its transcript of the caller"),
+            _unavailable("asr.entity_error_rate", "target did not expose its transcript of the caller"),
+        ]
+
+    # ── audio quality ──
+    if artifacts.audio and artifacts.audio.agent:
+        agent_audio = artifacts.audio.agent
+        metrics += [
+            MetricValue(name="audio.truncation_detected", value=float(agent_audio.truncated)),
+            MetricValue(name="audio.snr_db", value=agent_audio.snr_db, unit="db",
+                        available=agent_audio.snr_db is not None),
+            MetricValue(name="audio.clipping_ratio", value=agent_audio.clipping_ratio),
+            MetricValue(name="audio.artifact_score", value=agent_audio.artifact_score),
+            MetricValue(name="audio.silence_ratio", value=agent_audio.silence_ratio),
+        ]
+
+    # ── interruption handling ──
+    stops = barge_in_stops(artifacts)
+    if stops:
+        metrics += _distribution("barge_in.stop_ms", stops)
+        metrics.append(
+            MetricValue(
+                name="barge_in.unhandled_count",
+                value=float(unhandled_barge_ins(artifacts)),
+                unit="count",
+            )
+        )
+
+    # ── deliberately unavailable where the channel cannot supply them ──
     if not has_audio:
         reason = "target channel carries text, not audio"
         metrics += [

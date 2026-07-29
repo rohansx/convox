@@ -7,12 +7,26 @@ downstream ASR and slot measurements exact comparisons rather than estimates.
 
 from __future__ import annotations
 
+import wave
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any
 
+import numpy as np
+
 from convox.adapters.base import Clock
+from convox.audio import analysis, pcm
 from convox.model.enums import EndedBy, Speaker, TrialStatus
-from convox.model.trial import CostEntry, Event, ToolCall, TrialArtifacts, Turn
+from convox.model.trial import (
+    AudioAnalysis,
+    AudioTrack,
+    BargeInEvent,
+    CostEntry,
+    Event,
+    ToolCall,
+    TrialArtifacts,
+    Turn,
+)
 
 #: Baseline speaking pace used to estimate utterance duration on text-only
 #: channels, where no audio exists to measure. Metrics derived from an estimate
@@ -42,6 +56,8 @@ class Recorder:
         target_kind: str | None = None,
         capabilities: dict[str, bool] | None = None,
         facts: dict[str, Any] | None = None,
+        sample_rate: int | None = None,
+        artifact_dir: Path | None = None,
     ) -> None:
         self.clock = clock
         self.started_at = datetime.now(UTC).isoformat()
@@ -64,6 +80,12 @@ class Recorder:
         self.turns: list[Turn] = []
         self.costs: list[CostEntry] = []
         self._open_agent_turn: Turn | None = None
+
+        self.sample_rate = sample_rate
+        self.artifact_dir = artifact_dir
+        self._caller_audio: list[np.ndarray] = []
+        self._agent_audio: list[np.ndarray] = []
+        self._barge_ins: list[BargeInEvent] = []
 
     # ── timeline ──
 
@@ -103,6 +125,88 @@ class Recorder:
             turn=turn.index,
         )
         return turn
+
+    def attach_agent_hearing(self, text: str) -> None:
+        """Record the agent's own transcript of the caller's last utterance."""
+        if not text.strip():
+            return
+        for turn in reversed(self.turns):
+            if turn.speaker == Speaker.CALLER and turn.heard_text is None:
+                turn.heard_text = text
+                self._meta["capabilities"] = {**self._meta["capabilities"], "agent_transcript": True}
+                return
+
+    def set_turn_end(self, turn: Turn, end_ms: int) -> None:
+        """Correct a turn's end once its true duration is known."""
+        turn.speech_end_ms = max(end_ms, turn.speech_start_ms)
+        for event in self.events:
+            if event.kind == "caller.speech" and event.payload.get("turn") == turn.index:
+                event.payload["end_ms"] = turn.speech_end_ms
+
+    # ── audio ──
+
+    def append_caller_audio(self, samples: np.ndarray) -> None:
+        if len(samples):
+            self._caller_audio.append(samples)
+
+    def append_agent_audio(self, samples: np.ndarray) -> None:
+        if len(samples):
+            self._agent_audio.append(samples)
+
+    def record_barge_in(self, event: BargeInEvent) -> None:
+        self._barge_ins.append(event)
+        self.event(
+            "barge_in.stop",
+            at_ms=event.agent_stopped_ms or event.caller_start_ms,
+            stop_ms=event.stop_ms,
+            overrun_ms=event.overrun_ms,
+            overrun_bytes=event.overrun_bytes,
+            addressed=event.addressed,
+        )
+
+    def _write_wav(self, samples: np.ndarray, name: str) -> str | None:
+        if self.artifact_dir is None or not len(samples) or self.sample_rate is None:
+            return None
+        self.artifact_dir.mkdir(parents=True, exist_ok=True)
+        path = self.artifact_dir / f"{self.trial_id}-{name}.wav"
+        with wave.open(str(path), "wb") as handle:
+            handle.setnchannels(1)
+            handle.setsampwidth(2)
+            handle.setframerate(self.sample_rate)
+            handle.writeframes(pcm.to_pcm16(samples))
+        return str(path)
+
+    def _analyse(self, samples: np.ndarray) -> AudioAnalysis | None:
+        if not len(samples) or self.sample_rate is None:
+            return None
+        report = analysis.analyse(samples, self.sample_rate)
+        return AudioAnalysis(
+            duration_ms=report.duration_ms,
+            rms=report.rms,
+            peak=report.peak,
+            snr_db=report.snr_db,
+            clipping_ratio=report.clipping_ratio,
+            silence_ratio=report.silence_ratio,
+            artifact_score=report.artifact_score,
+            truncated=report.truncated,
+            speech_ms=report.speech_ms,
+        )
+
+    def _audio_track(self) -> AudioTrack | None:
+        if self.sample_rate is None:
+            return None
+        caller = pcm.concat(*self._caller_audio)
+        agent = pcm.concat(*self._agent_audio)
+        if not len(caller) and not len(agent):
+            return None
+        return AudioTrack(
+            sample_rate=self.sample_rate,
+            caller=self._analyse(caller),
+            agent=self._analyse(agent),
+            caller_wav=self._write_wav(caller, "caller"),
+            agent_wav=self._write_wav(agent, "agent"),
+            barge_ins=self._barge_ins,
+        )
 
     # ── agent ──
 
@@ -175,4 +279,5 @@ class Recorder:
             turns=self.turns,
             events=sorted(self.events, key=lambda e: e.at_ms),
             costs=self.costs,
+            audio=self._audio_track(),
         )
