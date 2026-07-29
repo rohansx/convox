@@ -92,6 +92,11 @@ def init(
         "\nNext:\n"
         "  1. [cyan]python -m convox.testing.reference_agent[/]   (a demo agent to test against)\n"
         "  2. [cyan]convox run scenarios/[/]\n"
+        "\nThen try the audio channel, where recognition accuracy, barge-in timing,\n"
+        "and TTS truncation become measurable:\n"
+        "  1. [cyan]python -m convox.testing.audio_agent[/]\n"
+        "  2. remove [cyan]skip: true[/] from scenarios/audio/refill_over_audio.yaml\n"
+        "  3. [cyan]convox run scenarios/audio/ --target demo-audio[/]\n"
     )
 
 

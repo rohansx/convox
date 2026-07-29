@@ -73,9 +73,24 @@ def test_init_scaffolds_a_runnable_project(tmp_path, monkeypatch):
     assert (tmp_path / "convox.yaml").is_file()
     assert (tmp_path / "personas/impatient_mobile.yaml").is_file()
     assert (tmp_path / "scenarios/refill_happy_path.yaml").is_file()
+    assert (tmp_path / "scenarios/audio/refill_over_audio.yaml").is_file()
 
     # The scaffolded project must lint clean out of the box.
     assert runner.invoke(app, ["lint", "scenarios/"]).exit_code == EXIT_OK
+
+
+def test_scaffolded_audio_scenario_is_skipped_until_a_target_exists(tmp_path, monkeypatch, agent_server):
+    """A fresh project must be green against the demo agent it ships with.
+
+    The audio example needs an audio target, so it stays skipped rather than
+    failing on the first command a new user runs.
+    """
+    scaffold(tmp_path, monkeypatch)
+    url = agent_server()
+    result = runner.invoke(app, ["run", "scenarios/", "--target", f"websocket:{url}", "--fast"])
+
+    assert result.exit_code == EXIT_OK, result.output
+    assert "refill_over_audio" not in result.output
 
 
 def test_init_is_idempotent_without_force(tmp_path, monkeypatch):

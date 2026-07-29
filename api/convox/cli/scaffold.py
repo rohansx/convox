@@ -99,6 +99,12 @@ AUDIO_SCENARIO_YAML = """version: convox/v1
 name: refill_over_audio
 description: The same refill, spoken aloud over a noisy narrowband line.
 
+# Skipped by default because it needs an audio target. To run it:
+#   python -m convox.testing.audio_agent
+#   convox run scenarios/audio/ --target demo-audio
+# (delete this line once your own audio target is configured)
+skip: true
+
 persona: impatient_mobile
 mode: scripted
 
