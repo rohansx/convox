@@ -19,7 +19,7 @@
 
 ---
 
-> **Status: pre-alpha, under active development.** The [documentation](docs/README.md) describes the full product; see [what works today](#what-works-today) for the current state and the [roadmap](docs/roadmap.md) for what lands next.
+> **Status: pre-alpha, under active development.** The [documentation](docs/README.md) describes the full product; [what works today](#what-works-today) covers the current state, and [docs/status.md](docs/status.md) has the detailed engineering status, known gaps, and the phased plan.
 
 ## What is Convox?
 

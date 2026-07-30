@@ -9,6 +9,7 @@ Convox repositions the project from **voice-agent orchestration** to **voice-age
 
 | Document | What it answers |
 |---|---|
+| **[Status & Plan](status.md)** | What is built today, what it is proven to do, known gaps, and the phased plan forward |
 | **[Positioning](positioning.md)** | Why this pivot, who it's for, what we say that competitors can't, and how we go to market |
 | **[Product Overview](product-overview.md)** | What the product is, core concepts, user journeys, deployment shapes, and explicit non-goals |
 | **[Features](features.md)** | The complete feature inventory across 25 capability areas, each phase-tagged P0–P3 |
@@ -29,7 +30,9 @@ Convox repositions the project from **voice-agent orchestration** to **voice-age
 
 ## Reading paths
 
-**Evaluating the pivot decision** → [Market Research](market-research.md) → [Positioning](positioning.md) → [Roadmap](roadmap.md)
+**Catching up on where things stand** → [Status & Plan](status.md)
+
+**Evaluating the direction** → [Market Research](market-research.md) → [Positioning](positioning.md) → [Roadmap](roadmap.md)
 
 **Building it** → [Product Overview](product-overview.md) → [Architecture](architecture.md) → [Tech Spec](tech-spec.md)
 
@@ -39,6 +42,6 @@ Convox repositions the project from **voice-agent orchestration** to **voice-age
 
 ## Status
 
-These documents define the target state; implementation is underway against the [roadmap](roadmap.md). The engine, scenario format, and CLI land first — the dashboard follows once there is something worth showing.
+These documents define the target state. For what actually exists today — and what does not — see [status.md](status.md), which is kept honest about gaps and limitations.
 
 An earlier iteration of this repo explored voice-agent orchestration. That work is preserved on the `archive/orchestration-platform` branch; [market-research.md](market-research.md) records why the direction changed.
