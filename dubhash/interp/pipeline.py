@@ -210,7 +210,8 @@ class Interpreter:
                     raise _Discarded
 
                 stage, provider = "mt", self.mt.name
-                tgt_text = await self.mt.translate(final, self.src_lang, self.tgt.lang)
+                mt_src = self.pair.side(self.side).mt_lang  # mt_src or lang
+                tgt_text = await self.mt.translate(final, mt_src, self.tgt.lang)
                 t_mt = self.clock.now_ms()
 
                 stage, provider = "tts", self.tts.name

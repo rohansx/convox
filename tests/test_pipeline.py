@@ -442,3 +442,44 @@ async def test_end_to_end_with_silero_vad():
     await interp.run(feed(pcm, clock))
     assert [t.seq for t in sink.translations] == [0, 1]
     assert sink.kinds().count("speech_start") == 2
+
+
+class _SpyMT(FakeMT):
+    def __init__(self) -> None:
+        super().__init__()
+        self.langs: list[tuple[str, str]] = []
+
+    async def translate(self, text: str, src: str, tgt: str) -> str:
+        self.langs.append((src, tgt))
+        return await super().translate(text, src, tgt)
+
+
+async def test_mt_source_language_comes_from_mt_src_when_set():
+    clock = FakeClock()
+    mt = _SpyMT()
+    pivot = PAIRS["hi-kn-pivot"]
+    interp = Interpreter(
+        call_id="c_test",
+        side="a",
+        pair=pivot,
+        stt=FakeSTT(script=["sir I am standing outside gate two"]),
+        mt=mt,
+        tts=FakeTTS(),
+        vad=EnergyVAD(),
+        clock=clock,
+        sink=RecordingSink(clock),
+    )
+    pcm = conversation([("silence", 300), ("speech", 1500), ("silence", 800)])
+    await interp.run(feed(pcm, clock))
+    await interp.aclose()
+    assert mt.langs == [("en-IN", "kn-IN")]
+
+
+async def test_mt_source_language_defaults_to_side_lang():
+    clock = FakeClock()
+    mt = _SpyMT()
+    interp, _ = make(clock, stt=FakeSTT(script=["bhaiya main gate ke bahar hoon"]), mt=mt)
+    pcm = conversation([("silence", 300), ("speech", 1500), ("silence", 800)])
+    await interp.run(feed(pcm, clock))
+    await interp.aclose()
+    assert mt.langs == [("hi-IN", "kn-IN")]
