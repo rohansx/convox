@@ -83,6 +83,21 @@ mr-en:
   early_final_ms: 200
 ```
 
+## `config/phrases/<vertical>.yaml` (phrase packs, L10)
+
+One file per vertical (`delivery`, `clinic`): about 40 short lines a call of that kind repeats, each with a text per language (`hi`, `mr`, `gu`, `en`; the three acks also `kn` and `ta`). A call picks its pack with the optional `vertical` field of `POST /v1/calls`, `POST /loopback/calls` and the `/join` form (default `delivery`, an unknown name is `400 invalid_body`). At call creation the pack's **canonical** (first) text per line, in the language each side's STT outputs (English on a `sarvam-translate` side), is translated with real MT and voiced in both of the listener's voices, in the background (`session/prefill.py`). A final that equals a line after normalisation (`interp/phrases.py`) is then served from the MT and TTS caches. Every non-English text is ours: `native_review_todo` lists the languages awaiting a native speaker's review.
+
+| Field | Type | Meaning |
+|---|---|---|
+| `vertical` | string | the pack's name (the file stem) |
+| `numbers_readback` | bool, default `true` | run the number read-back (`interp/numbers.py`) on every translation of the call: a source number missing from the MT output replaces the wrong one (or is appended), spoken digit by digit in the target language; a `number_fix` event is published |
+| `native_review_todo` | list of codes | languages whose texts still need a native speaker's check (all but `en`) |
+| `lines[].id` | string | stable id |
+| `lines[].ack` | bool | a short acknowledgement ("haan", "ok", "theek hai", "ho", "hā", "sari", "yes"). An ack, or any pack line, that would be dropped as a backchannel (< `backchannel_max_ms`, ≤ 2 words) is a **turn** when the floor was free at its speech start (nothing playing or queued, no other utterance in flight); during the other person's playback it stays a backchannel |
+| `lines[].<lang>` | list of strings | the first is the canonical text (what is translated and voiced); the others are other spellings of the **same words** (romanised, contractions, "Two" for "2"), never synonyms |
+
+Matching is exact after normalisation: NFC, lowercase, zero-width joiners dropped, any script's digits to ASCII, punctuation to spaces **except `?`** (a question is another meaning), and a word table of spelling variants (`thik`→`theek`, `ok`/`okk`→`okay`, `mins`→`minute`, `हां`→`हाँ`, …). No semantic matching, no partial matches; no two lines of a language may normalise alike (tested).
+
 ### Loading and validation (proposed)
 
 - Load once at startup into frozen pydantic models. Reject unknown keys and unknown engines, and fail fast.
@@ -166,6 +181,16 @@ Every component is behind an interface with a fake, and the pipeline must run en
 | `LOOPBACK_OPENING_LINE` | `short` (default) \| `full` \| `off` | the opening line of `/loopback` and `/join` calls; a loopback request may pass `opening_line` itself (L7) |
 | `PSTN_OPENING_LINE` | `full` (default) \| `short` \| `off` | the opening line of `POST /v1/calls` calls (`full` = the disclosure sentence, plus the record sentence with `record: true`) |
 
+### Phrase / audio cache and next-turn prewarm (L10)
+
+| Var | Default | Effect |
+|---|---|---|
+| `TTS_CACHE_MB` | `64` | every call's TTS goes through `CachedTTS` (`providers/tts_cache.py`): an LRU of PCM by (text, voice, lang), bounded by bytes, **shared by every call in the process** for real vendors (a fake TTS gets a store per call). A hit streams in 100 ms chunks with ~0 ms first byte. A cut-off or failed stream is never stored |
+| `TTS_CACHE_DIR` | `out/tts_cache` | raw PCM files of the **phrase-pack prefill only** (an ordinary turn's audio is user content and stays in memory), so pack audio survives a restart. Gitignored. Empty = memory only |
+| `PHRASE_PREFILL` | `true` | prefill the call's phrase pack at call creation (background task, cancelled at teardown) |
+| `PHRASE_PREFILL_RPS` | `4` | at most this many vendor MT/TTS requests per second for the prefill, one at a time; it also pauses while a turn is in flight. A pack is about 80 MT + 160 TTS requests per pair the first time (about 100 s at 4/s, live); the next call in the process needs none (MT from the shared phrase store, audio from the cache) |
+| `NEXT_TURN_PREWARM` | `true` | when a translation starts playing to a leg, prewarm that leg's STT socket and the TTS socket that will voice its reply |
+
 ### Global constants (defaults from the spec)
 
 These rarely change. They live in `settings.py` with env overrides (proposed names) and must not be scattered as literals.
@@ -184,7 +209,7 @@ These rarely change. They live in `settings.py` with env overrides (proposed nam
 | `ARE_YOU_THERE_SILENCE_S` | 10 | "aap line par hain?" in both languages |
 | `GENDER_DETECT_WINDOW_S` | 2 | pitch heuristic on first 2 s |
 | `DTMF_REPLAY` / default `escape_dtmf` | `1` / `0` | replay last translation / bypass |
-| `MT_CACHE` | on | exact-text cache per pair (saves about 200 ms of MT) |
+| `MT_CACHE` | on | `CachedMT`: an exact-text LRU per call (user text, memory only; key = NFC, lowercase, whitespace and a final `.`/`।`/`!` normalised, `?` kept) plus the process-wide phrase-pack store written only by the prefill (L10) |
 
 ## Example `.env`
 

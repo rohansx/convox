@@ -139,6 +139,7 @@ A backchannel is "haan", "hmm", "sari", "ok": a short acknowledgement that must 
 | Condition | Result |
 |---|---|
 | utterance duration < `backchannel_max_ms` (600) **and** STT word count ≤ 2 | tag `backchannel=true`. Do not call MT or TTS. Write a Turn row with the flag. |
+| the same, but the final matches the call's phrase pack **and** the floor was free at the utterance's speech start (nothing playing or queued, no other utterance in flight) | an **instant acknowledgement** (L10): a real turn, translated as the pack line's canonical text, normally served from the prefilled MT and TTS caches (no vendor call) |
 | otherwise | normal utterance: translate. |
 
 - Duration comes from VAD speech-segment timing (RMS/speech prob). Word count comes from the STT final. So the tag is applied after the STT final arrives. The controller-side rule (speech shorter than `backchannel_max_ms` never changes state or clears audio) uses duration only, because it must act before any transcript exists. See [floor-controller.md](floor-controller.md#rule-3-backchannels-never-interrupt).
@@ -182,10 +183,12 @@ Greetings, confirmations and numbers repeat. An exact-match cache per pair skips
 | Key | `(src_lang, tgt_lang, src_text)`. Exact match. |
 | Value | target text. |
 | Scope | Per pair, in process memory. Nothing in the hot path touches Redis or Postgres. |
-| Normalisation | Exact text per the spec. Any normalisation (whitespace, trailing punctuation) is a tuning decision. Measure the hit rate before adding it. |
-| Privacy | The cache holds user text in memory only. It must never be persisted, and it must follow the retention rules in [security-privacy.md](security-privacy.md). Size bound and eviction policy are **TBD — see [open questions](../plan/open-questions.md)**. |
+| Normalisation | NFC, zero-width joiners, case, repeated whitespace and a final `.`/`।`/`!`; a `?` is kept (L10) |
+| Privacy | The per-call cache holds user text in memory only and is never persisted. A second, process-wide store holds only phrase-pack translations, written only by the prefill (L10). Bound: 512 entries per call, LRU |
 
-A cache hit should still write `t_mt` (≈0) and the `mt_provider` on the Turn row, so p50/p95 per stage stays honest. How to mark a hit in the row is TBD: the spec's schema has no cache flag.
+A cache hit still writes `t_mt` (≈0) and the `mt_provider` on the Turn row, so p50/p95 per stage stays honest. Hits are flagged beside the row (`mt_cache_hit`, `tts_cache_hit`, `phrase_hit`, `ack`, `number_fix`, `stt_open_ms`: `TurnLog.flags`, the turn event's `flags` and `GET /v1/calls/{id}/turns`), not in the `turns` schema.
+
+The TTS stage has the same kind of cache (`providers/tts_cache.py`, L10): PCM by (text, voice, lang), 64 MB LRU shared by the process, phrase-pack audio also on disk. Together with the MT cache and the phrase-pack prefill, a repeated phrase costs only STT. The number read-back (`interp/numbers.py`) runs after MT when the call's pack asks for it.
 
 ### 3.6 tts
 
