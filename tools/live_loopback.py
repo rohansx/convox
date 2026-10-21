@@ -33,6 +33,7 @@ import base64
 import contextlib
 import hashlib
 import json
+import logging
 import math
 import os
 import socket
@@ -652,7 +653,12 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--fake", action="store_true", help="fake providers, fake utterances")
     p.add_argument("--out", type=Path, default=OUT)
     p.add_argument("--pause-ms", type=int, default=800)
+    p.add_argument("--log", default="WARNING", help="dubhash log level to stderr")
     a = p.parse_args(argv)
+    handler = logging.StreamHandler()
+    handler.setFormatter(logging.Formatter("%(relativeCreated)8.0f %(levelname)s %(message)s"))
+    logging.getLogger("dubhash").addHandler(handler)
+    logging.getLogger("dubhash").setLevel(a.log.upper())
     lines = SCRIPT[: a.n]
     opts = Opts(pair=a.pair, a_lang=a.a_lang, b_lang=a.b_lang, pause_ms=a.pause_ms)
     if a.fake:
