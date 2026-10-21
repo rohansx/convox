@@ -183,3 +183,60 @@ async def test_transcript_export():
     text = s.to_text()
     assert "2 tablets at 8 pm" in text and "2 गोळ्या" in text and "numbers differ" in text
     assert "Marathi" in text and "Hindi" in text
+
+
+# --- pivot sides and the MT skip (L4) ------------------------------------------------
+
+
+class _SpyMT(FakeMT):
+    def __init__(self) -> None:
+        super().__init__()
+        self.langs: list[tuple[str, str]] = []
+
+    async def translate(self, text: str, src: str, tgt: str) -> str:
+        self.langs.append((src, tgt))
+        return await super().translate(text, src, tgt)
+
+
+def spy_fakes(script):
+    p = fakes(script=script)
+    p.mt = _SpyMT()
+    return p
+
+
+async def test_ward_translates_from_the_sides_mt_lang():
+    p = spy_fakes(["where is my parcel"])
+    s = WardSession(ward_pair("mr-IN", "hi-IN"), p, clock=FakeClock())
+    assert s.pair.a.mt_lang == "en-IN"  # mr-hi pivots: Marathi speech -> English final
+    turn = await s.handle_utterance("a", PRESS)
+    assert p.mt.langs == [("en-IN", "hi-IN")]
+    assert turn.src_lang == "mr-IN" and turn.tgt_lang == "hi-IN"
+    assert p.stt["a"].langs == ["mr-IN"]
+
+
+async def test_ward_skips_mt_when_stt_already_speaks_the_target():
+    p = spy_fakes(["I have had a fever for 3 days"])
+    s = WardSession(ward_pair("mr-IN", "en-IN"), p, clock=FakeClock())
+    turn = await s.handle_utterance("a", PRESS)
+    assert p.mt.langs == []  # no vendor call
+    assert turn.tgt_text == turn.src_text == "I have had a fever for 3 days"
+    assert turn.timings["mt_ms"] == 0 and turn.warning is None
+    assert p.tts["b"].requests[0][2] == "en-IN"
+
+
+async def test_ward_english_on_side_a_uses_the_swapped_mr_en_pair():
+    pair = ward_pair("en-IN", "mr-IN")
+    assert pair.key == "mr-en" and pair.b.stt == "sarvam-translate"
+    p = spy_fakes(["take this tablet twice a day"])
+    s = WardSession(pair, p, clock=FakeClock())
+    await s.handle_utterance("a", PRESS)
+    assert p.mt.langs == [("en-IN", "mr-IN")]
+
+
+def test_ward_offers_the_marathi_choices():
+    from dubhash.ward.service import DEFAULT_LANGS, PRESETS
+
+    assert DEFAULT_LANGS == PRESETS[0]
+    assert ("mr-IN", "hi-IN") in PRESETS and ("mr-IN", "en-IN") in PRESETS
+    for a, b in PRESETS:
+        ward_pair(a, b)  # each resolves

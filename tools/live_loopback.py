@@ -13,9 +13,15 @@ websocket clients that behave like static/loopback.html: each sends 20 ms PCM16 
 frames in real time (silence between turns), plays what it receives at real time into a
 recording, and acks each mark when its playout reaches it.
 
-The script is a delivery call (docs/product/problem-and-users.md, example call 1): the
-rider speaks Hindi on leg A, the customer Kannada on leg B. Utterances are synthesised once
-with Bulbul and cached in out/live/. THE KANNADA LINES NEED A NATIVE SPEAKER'S REVIEW.
+Scripts (--script, default: the one written for --a-lang/--b-lang): delivery-hi-kn (rider
+Hindi on A, customer Kannada on B; docs/product/problem-and-users.md example call 1),
+delivery-mr-hi (Marathi customer, Hindi rider) and clinic-mr-en (Marathi patient, English
+doctor). Utterances are synthesised once with Bulbul and cached in out/live/. THE KANNADA
+AND MARATHI LINES NEED A NATIVE SPEAKER'S REVIEW. Rows whose translation lost a number of
+the scripted line are flagged (the ward number check).
+
+    STT_IMPL=real MT_IMPL=real TTS_IMPL=real uv run python tools/live_loopback.py \
+        --script clinic-mr-en
 
 Per turn it measures what the listener hears: from the end of the speaker's last voiced
 frame to the earcon onset (earcon_ms) and to the first non-silent frame of the translation
@@ -76,52 +82,70 @@ class Line:
     review: bool = False  # written by us; needs a native speaker's check
 
 
-# Rider (A, Hindi, male) and customer (B, Kannada, female). Kannada lines: NATIVE REVIEW.
-SCRIPT: tuple[Line, ...] = (
-    Line("a", "भैया, मैं गेट के बाहर खड़ा हूँ। कौन सी बिल्डिंग है?"),
-    Line("b", "ಸಿ ಬ್ಲಾಕ್, ಮೂರನೇ ಮಹಡಿ. ಲಿಫ್ಟ್ ಕೆಲಸ ಮಾಡ್ತಿಲ್ಲ.", review=True),
-    Line("a", "ठीक है, मैं सीढ़ियों से आ रहा हूँ, दो मिनट।"),
-    Line("b", "ಸರಿ, ಮೆಟ್ಟಿಲುಗಳು ಎಡಗಡೆ ಇವೆ.", review=True),
-    Line("a", "मैडम, ऑर्डर देने के लिए ओटीपी बता दीजिए।"),
-    Line("b", "ಓಟಿಪಿ ನಾಲ್ಕು ಏಳು ಎರಡು ಒಂಬತ್ತು.", review=True),
-)
-VOICES = {"a": "bulbul:hi-male-1", "b": "bulbul:kn-female-1"}
+@dataclass(frozen=True)
+class Script:
+    a_lang: str
+    b_lang: str
+    voices: dict[str, str]  # side -> Bulbul voice the line is spoken in
+    lines: tuple[Line, ...]
 
-# Stage demo pair (docs/plan/demo-script.md, "Stage demo"): the same delivery call with a
-# Marathi rider (A, male) and a Hindi customer (B, female). MARATHI LINES: NATIVE REVIEW.
-SCRIPT_MR_HI: tuple[Line, ...] = (
-    Line("a", "नमस्कार, मी डिलिव्हरी घेऊन आलो आहे. तुमचं घर कुठे आहे?", review=True),
-    Line("b", "हम सी ब्लॉक में हैं, तीसरी मंज़िल पर। लिफ़्ट बंद है।"),
-    Line("a", "ठीक आहे, मी जिन्याने वर येतो. दोन मिनिटं लागतील.", review=True),
-    Line("b", "ठीक है, सीढ़ियाँ बाईं तरफ़ हैं।"),
-    Line("a", "ऑर्डर देण्यासाठी मला ओटीपी सांगा.", review=True),
-    Line("b", "ओटीपी है चार सात दो नौ।"),
-)
-SCRIPT_MR_EN: tuple[Line, ...] = (
-    SCRIPT_MR_HI[0],
-    Line("b", "We are in C block, on the third floor. The lift is not working."),
-    SCRIPT_MR_HI[2],
-    Line("b", "Okay, the stairs are on the left."),
-    SCRIPT_MR_HI[4],
-    Line("b", "The OTP is four seven two nine."),
-)
-SCRIPTS: dict[tuple[str, str], tuple[Line, ...]] = {
-    ("hi-IN", "kn-IN"): SCRIPT,
-    ("mr-IN", "hi-IN"): SCRIPT_MR_HI,
-    ("mr-IN", "en-IN"): SCRIPT_MR_EN,
+
+SCRIPTS: dict[str, Script] = {
+    # Rider (A, Hindi, male) and customer (B, Kannada, female). Kannada lines: NATIVE REVIEW.
+    "delivery-hi-kn": Script(
+        "hi-IN",
+        "kn-IN",
+        {"a": "bulbul:hi-male-1", "b": "bulbul:kn-female-1"},
+        (
+            Line("a", "भैया, मैं गेट के बाहर खड़ा हूँ। कौन सी बिल्डिंग है?"),
+            Line("b", "ಸಿ ಬ್ಲಾಕ್, ಮೂರನೇ ಮಹಡಿ. ಲಿಫ್ಟ್ ಕೆಲಸ ಮಾಡ್ತಿಲ್ಲ.", review=True),
+            Line("a", "ठीक है, मैं सीढ़ियों से आ रहा हूँ, दो मिनट।"),
+            Line("b", "ಸರಿ, ಮೆಟ್ಟಿಲುಗಳು ಎಡಗಡೆ ಇವೆ.", review=True),
+            Line("a", "मैडम, ऑर्डर देने के लिए ओटीपी बता दीजिए।"),
+            Line("b", "ಓಟಿಪಿ ನಾಲ್ಕು ಏಳು ಎರಡು ಒಂಬತ್ತು.", review=True),
+        ),
+    ),
+    # Customer (A, Marathi, female) and rider (B, Hindi, male). Marathi lines: NATIVE REVIEW.
+    "delivery-mr-hi": Script(
+        "mr-IN",
+        "hi-IN",
+        {"a": "bulbul:mr-female-1", "b": "bulbul:hi-male-1"},
+        (
+            Line("a", "हॅलो, मी फ्लॅट 302 मधून बोलतेय. माझं पार्सल कुठे आहे?", review=True),
+            Line("b", "मैडम, मैं आपकी बिल्डिंग के गेट पर खड़ा हूँ। कौन सा विंग है?"),
+            Line("a", "बी विंग, तिसरा मजला. लिफ्ट बंद आहे, जिना डावीकडे आहे.", review=True),
+            Line("b", "ठीक है, दो मिनट में ऊपर आता हूँ। ओटीपी बता दीजिए।"),
+            Line("a", "ओटीपी 4729 आहे.", review=True),
+            Line("b", "धन्यवाद मैडम, शाम को 6 बजे दूसरा पार्सल भी आएगा।"),
+            Line("a", "ठीक आहे, मी 6 वाजता घरी असेन.", review=True),
+        ),
+    ),
+    # Patient (A, Marathi, female) and clinic doctor (B, English, male). Marathi: NATIVE REVIEW.
+    "clinic-mr-en": Script(
+        "mr-IN",
+        "en-IN",
+        {"a": "bulbul:mr-female-1", "b": "bulbul:en-male-1"},
+        (
+            Line("a", "डॉक्टर, मला तीन दिवसांपासून ताप आहे.", review=True),
+            Line("b", "Okay. Do you also have a cough or a sore throat?"),
+            Line("a", "हो, थोडा खोकला आहे. रात्री जास्त होतो.", review=True),
+            Line("b", "Take this tablet twice a day, after breakfast and dinner."),
+            Line("a", "मी फ्लॅट 302, शिवाजी नगरमध्ये राहते. औषध घरी पाठवाल का?", review=True),
+            Line("b", "Yes. Your delivery OTP is 4729. It will reach you by 6 pm."),
+            Line("a", "ठीक आहे, मी 6 वाजता घरी असेन.", review=True),
+        ),
+    ),
 }
+DEFAULT_SCRIPT = "delivery-hi-kn"
+SCRIPT: tuple[Line, ...] = SCRIPTS[DEFAULT_SCRIPT].lines
+VOICES = SCRIPTS[DEFAULT_SCRIPT].voices
 
 
-def script_for(a_lang: str, b_lang: str) -> tuple[Line, ...]:
-    try:
-        return SCRIPTS[(a_lang, b_lang)]
-    except KeyError:
-        raise SystemExit(f"no script for {a_lang} -> {b_lang}; have {list(SCRIPTS)}") from None
-
-
-def voice_for(side: str, lang: str) -> str:
-    """A speaks with a male voice, B with a female one, in the line's own language."""
-    return f"bulbul:{lang.split('-')[0]}-{'male' if side == 'a' else 'female'}-1"
+def script_for(a_lang: str, b_lang: str) -> str | None:
+    """The script written for these side languages, if any."""
+    return next(
+        (k for k, sc in SCRIPTS.items() if (sc.a_lang, sc.b_lang) == (a_lang, b_lang)), None
+    )
 
 
 @dataclass
@@ -370,6 +394,15 @@ def stages(turn: dict[str, Any]) -> dict[str, int | None]:
     return out
 
 
+def numbers_check(row: TurnRow) -> str | None:
+    """Numbers in the scripted line that the listener's translation lost (ward's check)."""
+    from dubhash.ward.service import check_numbers
+
+    if not row.server:
+        return None
+    return check_numbers(row.text, " ".join(str(t.get("tgt_text") or "") for t in row.server))
+
+
 def join_server(rows: list[TurnRow], turns: list[dict[str, Any]], offset_ms: float) -> None:
     """Attach each server turn to the scripted turn whose window holds its t_speech_end.
     offset_ms converts server call-relative ms to the tick clock (ms since tick 0)."""
@@ -616,6 +649,8 @@ def table(result: dict[str, Any], summary: dict[str, Any]) -> str:
             lines.append(f"        tgt: {t.get('tgt_text')}")
         if len(r.server) > 1:
             lines.append(f"        ({len(r.server)} server turns: the utterance was split)")
+        if (warn := numbers_check(r)) is not None:
+            lines.append(f"        !! {warn}")
     lines.append("")
     for k, v in summary.items():
         lines.append(f"{k:>12}: n={v['n']} p50={v['p50']} p95={v['p95']} max={v['max']}")
@@ -686,7 +721,12 @@ def serve(settings_kw: dict[str, Any], env_file: Path | None) -> Iterator[Server
         th.join(timeout=15)
 
 
-async def synth_script(lines: tuple[Line, ...], langs: dict[str, str], out: Path) -> list[Utt]:
+async def synth_script(
+    lines: tuple[Line, ...],
+    langs: dict[str, str],
+    out: Path,
+    voices: dict[str, str] | None = None,
+) -> list[Utt]:
     """Bulbul-voiced utterances, cached by (voice, lang, text) in out/."""
     from dubhash.config.settings import Settings
     from dubhash.providers.sarvam_tts import BulbulTTS
@@ -695,8 +735,7 @@ async def synth_script(lines: tuple[Line, ...], langs: dict[str, str], out: Path
     tts: BulbulTTS | None = None
     try:
         for line in lines:
-            lang = langs[line.side]
-            voice = VOICES[line.side] if lines is SCRIPT else voice_for(line.side, lang)
+            voice, lang = (voices or VOICES)[line.side], langs[line.side]
             h = hashlib.sha1(f"{voice}|{lang}|{line.text}".encode()).hexdigest()[:10]
             path = out / f"utt_{lang}_{h}.wav"
             if not path.exists():
@@ -741,9 +780,15 @@ def fake_utts(lines: tuple[Line, ...], ms: int = 1200) -> list[Utt]:
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawTextHelpFormatter)
     p.add_argument("--pair", default=None, help="pairs.yaml key (default: by languages)")
-    p.add_argument("--a-lang", default="hi-IN")
-    p.add_argument("--b-lang", default="kn-IN")
-    p.add_argument("--n", type=int, default=6, help="script lines to play")
+    p.add_argument(
+        "--script",
+        choices=sorted(SCRIPTS),
+        default=None,
+        help=f"scripted call (default: the one for the languages, else {DEFAULT_SCRIPT})",
+    )
+    p.add_argument("--a-lang", default=None, help="default: the script's")
+    p.add_argument("--b-lang", default=None, help="default: the script's")
+    p.add_argument("--n", type=int, default=None, help="script lines to play (default: all)")
     p.add_argument("--join", action="store_true", help="stage path: POST /join, token sockets")
     p.add_argument("--fake", action="store_true", help="fake providers, fake utterances")
     p.add_argument("--out", type=Path, default=OUT)
@@ -754,15 +799,18 @@ def main(argv: list[str] | None = None) -> int:
     handler.setFormatter(logging.Formatter("%(relativeCreated)8.0f %(levelname)s %(message)s"))
     logging.getLogger("dubhash").addHandler(handler)
     logging.getLogger("dubhash").setLevel(a.log.upper())
-    lines = script_for(a.a_lang, a.b_lang)[: a.n]
-    opts = Opts(pair=a.pair, a_lang=a.a_lang, b_lang=a.b_lang, pause_ms=a.pause_ms, join=a.join)
+    name = a.script or script_for(a.a_lang, a.b_lang) or DEFAULT_SCRIPT
+    sc = SCRIPTS[name]
+    a_lang, b_lang = a.a_lang or sc.a_lang, a.b_lang or sc.b_lang
+    lines = sc.lines[: a.n]
+    opts = Opts(pair=a.pair, a_lang=a_lang, b_lang=b_lang, pause_ms=a.pause_ms, join=a.join)
     if a.fake:
         utts = fake_utts(lines)
         kw: dict[str, Any] = {"dubhash_env": "test"}
         env_file = None
     else:
         a.out.mkdir(parents=True, exist_ok=True)
-        utts = asyncio.run(synth_script(lines, {"a": a.a_lang, "b": a.b_lang}, a.out))
+        utts = asyncio.run(synth_script(lines, {"a": a_lang, "b": b_lang}, a.out, sc.voices))
         kw = {}
         env_file = ROOT / ".env"
         impl = {k: os.environ.get(k) for k in ("STT_IMPL", "MT_IMPL", "TTS_IMPL")}
@@ -771,7 +819,7 @@ def main(argv: list[str] | None = None) -> int:
     with serve(kw, env_file) as srv:
         result = asyncio.run(run_call(srv, utts, opts))
     summary = summarize(result)
-    print(f"call {result['call_id']}  pair {result['pair']}  status {result['status']}")
+    print(f"call {result['call_id']}  pair {result['pair']}  script {name}  {result['status']}")
     print(table(result, summary))
     print(f"opening: {result['opening']}  max tick late: {result['max_tick_late_ms']} ms")
     print(f"wrote {write_outputs(result, summary, a.out)}")

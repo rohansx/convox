@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Literal
 
@@ -50,6 +50,11 @@ class PairConfig:
     def side(self, side: Side) -> SideConfig:
         return self.a if side == "a" else self.b
 
+    def swapped(self) -> PairConfig:
+        """The same pair with the sides exchanged (a <-> b). Everything else, the key
+        included, is kept: it still names the pairs.yaml entry it came from."""
+        return replace(self, a=self.b, b=self.a)
+
 
 def load_pairs(path: Path) -> dict[str, PairConfig]:
     raw = yaml.safe_load(path.read_text())
@@ -70,9 +75,24 @@ def load_pairs(path: Path) -> dict[str, PairConfig]:
     return out
 
 
+def orient(pair: PairConfig, lang_a: str, lang_b: str) -> PairConfig | None:
+    """`pair` with side a speaking lang_a and side b lang_b: as is, swapped, or None."""
+    if (pair.a.lang, pair.b.lang) == (lang_a, lang_b):
+        return pair
+    if (pair.b.lang, pair.a.lang) == (lang_a, lang_b):
+        return pair.swapped()
+    return None
+
+
 def find_pair(pairs: dict[str, PairConfig], lang_a: str, lang_b: str) -> PairConfig | None:
-    """Match by side languages (either orientation is a different pair; we don't swap)."""
-    for p in pairs.values():
-        if p.a.lang == lang_a and p.b.lang == lang_b and "fake" not in p.key:
+    """The first non-fake pair for these side languages. An entry written in the exact
+    orientation wins; otherwise one written the other way round is returned swapped, so
+    one entry (e.g. mr-en) serves calls that put either language on side a."""
+    real = [p for p in pairs.values() if "fake" not in p.key]
+    for p in real:
+        if (p.a.lang, p.b.lang) == (lang_a, lang_b):
             return p
+    for p in real:
+        if (p.b.lang, p.a.lang) == (lang_a, lang_b):
+            return p.swapped()
     return None

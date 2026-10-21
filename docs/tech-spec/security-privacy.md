@@ -29,6 +29,8 @@ Played to each leg in its own language as soon as both legs have sent `start`, b
 | Hindi side | "aap hindi mein boliye, saamne wala kannada mein sunega. chhote vaakya boliye." |
 | Kannada side | "ನೀವು ಕನ್ನಡದಲ್ಲಿ ಮಾತನಾಡಿ, ಅವರು ಹಿಂದಿಯಲ್ಲಿ ಕೇಳುತ್ತಾರೆ." |
 
+As built (`session/prompts.py`, [L4](../plan/open-questions.md#answer-log)): one sentence of about 3.5 s per language, because the two-sentence line ran 7–9 s and held up the first translation. Hindi: "aap hindi mein chhote vaakya boliye, woh kannada mein sunenge." Kannada: the sentence above. Marathi and English lines exist for the Marathi pairs; the Marathi, Tamil and Kannada texts still need a native speaker's review (PQ5). The line goes through the floor controller and is marked, and no translation plays to a leg until its opening has finished.
+
 Gaps to close (**proposed**, TBD with counsel, see [open questions](../plan/open-questions.md)):
 
 - The source lines describe the mechanics but do not explicitly say the call is processed by an automated service, or how to turn it off. Proposed addition (both languages, about 2 s): "yeh call ek automatic dubhash dwara anuvaad ki ja rahi hai. band karne ke liye 0 dabaiye." (*This call is being translated automatically by dubhash. Press 0 to turn it off.*)
