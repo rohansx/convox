@@ -1,0 +1,36 @@
+# Per language pair. A side's tts/voice_* is the voice its language is spoken in, so it is
+# used when that side is the TARGET. Voice ids are placeholders until the Day 2 listening
+# test (open question 3). stt: sarvam | deepgram | fake. tts: bulbul | eleven | fake.
+
+hi-kn:
+  a: { lang: hi-IN, stt: sarvam, tts: eleven, voice_m: "eleven:hi-male-1", voice_f: "eleven:hi-female-1" }
+  b: { lang: kn-IN, stt: sarvam, tts: bulbul, voice_m: "bulbul:kn-male-1", voice_f: "bulbul:kn-female-1" }
+  eou_ms: 550
+  backchannel_max_ms: 600
+  barge_in_min_ms: 1200
+  duck_db: -14
+
+hi-ta:
+  a: { lang: hi-IN, stt: sarvam, tts: eleven, voice_m: "eleven:hi-male-1", voice_f: "eleven:hi-female-1" }
+  b: { lang: ta-IN, stt: sarvam, tts: bulbul, voice_m: "bulbul:ta-male-1", voice_f: "bulbul:ta-female-1" }
+  eou_ms: 550
+  backchannel_max_ms: 600
+  barge_in_min_ms: 1200
+  duck_db: -14
+
+mr-hi:
+  a: { lang: mr-IN, stt: sarvam, tts: bulbul, voice_m: "bulbul:mr-male-1", voice_f: "bulbul:mr-female-1" }
+  b: { lang: hi-IN, stt: sarvam, tts: eleven, voice_m: "eleven:hi-male-1", voice_f: "eleven:hi-female-1" }
+  eou_ms: 550
+  backchannel_max_ms: 600
+  barge_in_min_ms: 1200
+  duck_db: -14
+
+# all-fake pair for tests and the day-2 FakeLeg pipeline
+fake-fake:
+  a: { lang: hi-IN, stt: fake, tts: fake, voice_m: "fake:m", voice_f: "fake:f" }
+  b: { lang: kn-IN, stt: fake, tts: fake, voice_m: "fake:m", voice_f: "fake:f" }
+  eou_ms: 550
+  backchannel_max_ms: 600
+  barge_in_min_ms: 1200
+  duck_db: -14

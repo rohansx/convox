@@ -1,0 +1,88 @@
+"""Shared value types. Every module imports these; none of them do I/O."""
+
+from __future__ import annotations
+
+from collections.abc import AsyncIterator
+from dataclasses import dataclass, field
+from typing import Any, Literal
+
+Side = Literal["a", "b"]
+Direction = Literal["ab", "ba"]
+
+
+def other(side: Side) -> Side:
+    return "b" if side == "a" else "a"
+
+
+def direction(src: Side) -> Direction:
+    return "ab" if src == "a" else "ba"
+
+
+@dataclass(slots=True)
+class Translation:
+    """One interpreted utterance, handed from an Interpreter to the FloorController.
+
+    `side` is the source side; the audio plays to the other leg. `audio` is a live
+    iterator from TTS and can be consumed once.
+    """
+
+    side: Side
+    seq: int
+    src_text: str
+    tgt_text: str
+    audio: AsyncIterator[bytes]  # PCM16 mono @16k chunks, any length (mixer reframes)
+    voice: str
+    timings: dict[str, int] = field(default_factory=dict)  # t_* call-relative ms
+    source_audio: bytes = b""  # the speaker's buffered utterance, ducked under the translation
+    clipped_ms: int | None = None  # set by the controller when cut short
+
+    @property
+    def tag(self) -> str:
+        return f"{self.side}:{self.seq}"
+
+
+@dataclass(slots=True)
+class Turn:
+    """One row of the turn log. Field names match the `turns` table exactly."""
+
+    call_id: str
+    side: Side
+    seq: int
+    t_speech_start: int | None = None
+    t_speech_end: int | None = None
+    t_eou: int | None = None
+    t_stt_final: int | None = None
+    t_mt: int | None = None
+    t_tts_ttfb: int | None = None
+    t_play_start: int | None = None
+    t_play_end: int | None = None
+    src_text: str | None = None
+    tgt_text: str | None = None
+    backchannel: bool = False
+    clipped_ms: int | None = None
+    stt_provider: str | None = None
+    mt_provider: str | None = None
+    tts_provider: str | None = None
+    voice: str | None = None
+
+
+EventKind = Literal[
+    "state",  # floor state change: {from, to, queue_depth}
+    "turn",  # a Turn finished: {turn: Turn as dict}
+    "partial",  # stt partial for the console: {side, text}
+    "dtmf",  # {side, digit}
+    "barge_in",  # {side, clipped_ms}
+    "bypass",  # {side}
+    "gap",  # {side, gap_ms}
+    "provider_error",  # {provider, stage, error}
+    "leg",  # {side, status}
+    "call",  # {status}
+]
+
+
+@dataclass(slots=True)
+class CallEvent:
+    call_id: str
+    ts_ms: int  # call-relative ms
+    kind: EventKind
+    payload: dict[str, Any] = field(default_factory=dict)
