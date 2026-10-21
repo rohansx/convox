@@ -296,9 +296,18 @@ def test_an_indic_guess_beats_a_weaker_english_one_in_the_same_utterance():
     assert (up.state, up.lang) == (P, "hi-IN")
     sure_en = LanguageResolver("a")
     up = sure_en.observe(
-        speech_ms=LONG, stt_lang="en-IN", stt_confidence=0.99, lid=lid("hi-IN", 0.75)
+        speech_ms=LONG, stt_lang="hi-IN", stt_confidence=0.8, lid=lid("en-IN", 0.97)
     )
-    assert up is None  # a real disagreement stays unsure
+    assert up is None  # the LID sure of English against the STT: a real disagreement
+
+
+def test_the_stt_finals_english_never_outvotes_a_sure_indic_lid_guess():
+    """Live c_f4h2dho56j: Sarvam realtime (language_code=auto) said en-IN at 0.98-0.99 on
+    a Hindi speaker's lines with English words, while the LID said hi-IN at 0.95-0.96. The
+    final's English score is not calibrated; the LID's Indic guess wins."""
+    r = LanguageResolver("b")
+    up = r.observe(speech_ms=LONG, stt_lang="en-IN", stt_confidence=0.99, lid=lid("hi-IN", 0.948))
+    assert (up.state, up.lang, up.source) == (C, "hi-IN", "lid")
 
 
 def test_lang_is_a_call_event_kind():

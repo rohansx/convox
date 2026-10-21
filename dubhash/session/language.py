@@ -151,8 +151,12 @@ def combine(
     if any(
         lang != ENGLISH and lang in config.supported and conf >= config.confident
         for lang, conf, _ in evidence
-    ):  # Indian speech with English words is heard as English; a sure Indic guess wins
-        evidence = [e for e in evidence if e[0] != ENGLISH or e[1] >= en_need]
+    ):  # Indian speech with English words is heard as English; a sure Indic guess wins.
+        # The STT final's en-IN score is not calibrated (0.99 on Hindi speech, live
+        # c_f4h2dho56j), so it never outvotes one; the LID's en-IN must clear en_need.
+        evidence = [
+            e for e in evidence if e[0] != ENGLISH or (e[2] != "stt_final" and e[1] >= en_need)
+        ]
     supported = [e for e in evidence if e[0] in config.supported]
     unsupported = bool(evidence) and not supported
     if not supported:
