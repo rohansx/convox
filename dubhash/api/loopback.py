@@ -62,6 +62,7 @@ from dubhash.api.schemas import (
 )
 from dubhash.config.pairs import PairConfig, find_pair, orient
 from dubhash.config.settings import Settings
+from dubhash.interp.phrases import DEFAULT_VERTICAL
 from dubhash.join.tokens import verify_join_token
 from dubhash.legs.webrtc import WebRtcLeg
 
@@ -120,7 +121,13 @@ def create_loopback_call(
     # both phones in one room (/join, loopback): cross-talk gate on, no ducked original
     opening = req.opening_line or settings.loopback_opening_line
     session = factory(
-        call_id, pair, mode=req.mode, record=req.record, co_located=True, opening_line=opening
+        call_id,
+        pair,
+        mode=req.mode,
+        record=req.record,
+        co_located=True,
+        opening_line=opening,
+        vertical=req.vertical or DEFAULT_VERTICAL,
     )
     sessions.create(call_id, session)
     handle = CallHandle(

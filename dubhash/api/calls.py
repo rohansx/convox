@@ -46,6 +46,7 @@ from dubhash.api.schemas import (
 )
 from dubhash.config.pairs import PairConfig, find_pair, load_pairs
 from dubhash.config.settings import Settings
+from dubhash.interp.phrases import DEFAULT_VERTICAL
 from dubhash.telephony import Dialer, DialError, ProviderUnavailable, build_dialer, leg_ws_url
 from dubhash.types import Side
 
@@ -296,6 +297,7 @@ async def create_call(
         escape_dtmf=req.escape_dtmf,
         record=req.record,
         opening_line=settings.pstn_opening_line,
+        vertical=req.vertical or DEFAULT_VERTICAL,
     )
     sessions.create(call_id, session)
     handle = CallHandle(

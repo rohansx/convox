@@ -13,7 +13,9 @@ from typing import Any, Literal
 
 from fastapi import Request
 from fastapi.responses import JSONResponse
-from pydantic import AnyHttpUrl, BaseModel, Field, ValidationError
+from pydantic import AnyHttpUrl, BaseModel, Field, ValidationError, field_validator
+
+from dubhash.interp.phrases import verticals
 
 E164 = r"^\+[1-9]\d{7,14}$"
 INDIAN_MOBILE = r"^\+91\d{10}$"
@@ -32,6 +34,12 @@ ErrorCode = Literal[
 ]
 
 
+def _check_vertical(v: str | None) -> str | None:
+    if v is not None and v not in verticals():
+        raise ValueError(f"vertical must be one of {verticals()}")
+    return v
+
+
 class LegSpec(BaseModel):
     number: str = Field(pattern=INDIAN_MOBILE)
     lang: str = Field(pattern=BCP47)
@@ -46,6 +54,13 @@ class CreateCallRequest(BaseModel):
     escape_dtmf: str = Field(default="0", pattern=r"^[0-9]$")
     webhook: AnyHttpUrl | None = None
     record: bool = False
+    # phrase pack the call prefills (config/phrases/<vertical>.yaml, L10); default delivery
+    vertical: str | None = None
+
+    @field_validator("vertical")
+    @classmethod
+    def _vertical(cls, v: str | None) -> str | None:
+        return _check_vertical(v)
 
 
 class CreateCallResponse(BaseModel):
@@ -66,6 +81,12 @@ class LoopbackCallRequest(BaseModel):
     pair: str | None = None  # pairs.yaml key, e.g. "hi-kn-direct"; default: by languages
     # default: settings.loopback_opening_line ("short")
     opening_line: Literal["short", "full", "off"] | None = None
+    vertical: str | None = None  # phrase pack (L10); default delivery
+
+    @field_validator("vertical")
+    @classmethod
+    def _vertical(cls, v: str | None) -> str | None:
+        return _check_vertical(v)
 
 
 class LoopbackCallResponse(BaseModel):
