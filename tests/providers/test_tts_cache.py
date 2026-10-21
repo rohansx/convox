@@ -12,6 +12,10 @@ from dubhash.providers.fakes import FakeTTS
 from dubhash.providers.tts_cache import CachedTTS, TTSAudioCache, tts_key
 
 
+def pcm_files(d: Path) -> list[Path]:
+    return list(d.glob("*.pcm"))
+
+
 async def collect(it) -> bytes:
     return b"".join([c async for c in it])
 
@@ -117,7 +121,7 @@ async def test_disk_cache_survives_a_restart(tmp_path: Path):
     inner = FakeTTS()
     tts = CachedTTS(inner, TTSAudioCache(disk_dir=tmp_path))
     pcm = await tts.prefill("main gate ke bahar hoon", "v", "hi-IN", persist=True)
-    assert pcm and len(list(tmp_path.glob("*.pcm"))) == 1
+    assert pcm and len(pcm_files(tmp_path)) == 1
     # a new process: empty memory, same directory
     inner2 = FakeTTS()
     tts2 = CachedTTS(inner2, TTSAudioCache(disk_dir=tmp_path))
@@ -131,7 +135,7 @@ async def test_only_persisted_entries_go_to_disk(tmp_path: Path):
     """Ordinary turns (user content) stay in memory; only phrase-pack prefill is written."""
     tts = CachedTTS(FakeTTS(), TTSAudioCache(disk_dir=tmp_path))
     await collect(tts.synth("my flat is 302", "v", "en-IN"))
-    assert list(tmp_path.glob("*.pcm")) == []
+    assert pcm_files(tmp_path) == []
     assert tts.has("my flat is 302", "v", "en-IN")
 
 
