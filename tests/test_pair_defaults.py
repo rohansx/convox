@@ -31,3 +31,13 @@ def test_ward_speaks_hindi_with_bulbul():
     assert p.b.tts == "bulbul" and p.b.voice_f.startswith("bulbul:")
     q = ward_pair("en-IN", "ta-IN", {})
     assert q.a.tts == "bulbul"
+
+
+def test_marathi_pairs_with_hindi_and_english():
+    """Stage demo (docs/plan/demo-script.md): a Marathi speaker with a Hindi or English one."""
+    hi = find_pair(PAIRS, "mr-IN", "hi-IN")
+    en = find_pair(PAIRS, "mr-IN", "en-IN")
+    assert hi is not None and en is not None
+    assert en.a.stt == "sarvam" and en.b.stt == "sarvam"
+    assert en.a.tts == en.b.tts == "bulbul"
+    assert en.b.voice_m.startswith("bulbul:en-")
