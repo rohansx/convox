@@ -276,6 +276,7 @@ class CallRecorder:
             "heard": result["heard"],
             "stages": result["stages"],
             "clock": result["clock"],
+            "langs": result["langs"],
             "per_turn": [
                 {
                     k: r[k]
@@ -433,6 +434,10 @@ def session_meta(session: Any) -> dict[str, Any]:
                 "stt_lang": getattr(cfg, "mt_lang", cfg.lang),
                 "tts": cfg.tts,
             }
+    hints = getattr(getattr(session, "auto", None), "hints", None) or {}
+    for s, hint in hints.items():  # lang "auto": the side's lang above is where it started
+        if s in sides:
+            sides[s].update({"auto": True, "hint": hint})
     meta: dict[str, Any] = {
         "pair": getattr(pair, "key", None),
         "mode": getattr(session, "mode", None),

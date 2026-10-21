@@ -12,10 +12,11 @@
 <main class="phone-main" id="phone"
       data-call-id="{{ call_id }}" data-side="{{ side }}" data-lang="{{ me.lang }}"
       data-ws="{{ ws_path }}" data-worklet="/static/console/join_worklet.js" data-events="{{ events_url }}"
-      data-ui="{{ ui | tojson | forceescape }}">
+      data-ui="{{ ui | tojson | forceescape }}"
+      data-names='{{ names | tojson }}'>
   <header class="phone-top">
-    <h1 class="phone-lang" lang="{{ short }}">{{ me.native }}</h1>
-    <p class="phone-with">⇄ <span lang="{{ other.lang[:2] }}">{{ other.native }}</span>{% if me.english != me.native %} · <span lang="en">{{ me.english }}</span>{% endif %}</p>
+    <h1 class="phone-lang" id="me-native" lang="{{ short }}">{{ me.native }}</h1>
+    <p class="phone-with">⇄ <span id="other-native" lang="{{ other.lang[:2] }}">{{ other.native }}</span>{% if me.english != me.native %} · <span id="me-english" lang="en">{{ me.english }}</span>{% endif %}</p>
   </header>
 
   <section class="phone-stage">

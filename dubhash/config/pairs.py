@@ -91,6 +91,103 @@ def orient(pair: PairConfig, lang_a: str, lang_b: str) -> PairConfig | None:
     return None
 
 
+AUTO = "auto"  # a side's lang when it is detected on the call (session/language.py)
+AUTO_FALLBACK_LANG = "hi-IN"  # an auto side's language until detected, without a hint
+PIVOT_STT, PIVOT_SRC = "sarvam-translate", "en-IN"  # speech -> English, then MT (L1)
+PIVOT_EARLY_FINAL_MS = 200  # the tuned pivot pattern (L4, L6)
+
+
+def default_side(lang: str, tts: str = "bulbul") -> SideConfig:
+    """A side by the provider convention: Sarvam STT, `tts` voices <short>-male/female-1."""
+    short = lang.split("-")[0]
+    return SideConfig(
+        lang=lang,
+        stt="sarvam",
+        tts=tts,
+        voice_m=f"{tts}:{short}-male-1",
+        voice_f=f"{tts}:{short}-female-1",
+    )
+
+
+def language_sides(pairs: dict[str, PairConfig]) -> dict[str, SideConfig]:
+    """Per-language side defaults: the first non-fake pairs.yaml side for each language
+    (its stt, tts and voices). Used where a side's language is not fixed by a pair entry:
+    ward mode's free pick and lang "auto"."""
+    known: dict[str, SideConfig] = {}
+    for p in pairs.values():
+        if "fake" in p.key:
+            continue
+        for sc in (p.a, p.b):
+            known.setdefault(sc.lang, sc)
+    return known
+
+
+def auto_side(lang: str, sides: dict[str, SideConfig]) -> SideConfig:
+    """An auto side speaking `lang`: its tts and voices from the language's defaults, its
+    STT through the English pivot, so translating its speech never needs its language."""
+    base = sides.get(lang) or default_side(lang)
+    return replace(base, lang=lang, stt=PIVOT_STT, mt_src=PIVOT_SRC)
+
+
+def effective_pair(
+    base: PairConfig, langs: dict[Side, str], sides: dict[str, SideConfig]
+) -> PairConfig:
+    """`base` with the sides in `langs` now speaking those languages: tts and voices from
+    the language's defaults; stt and mt_src stay the base side's (its STT provider is built
+    once per call). Pair-level knobs (eou_ms, early_final_ms, ...) are kept."""
+    out = base
+    for s, lang in langs.items():
+        cur = base.side(s)
+        if cur.lang == lang:
+            continue
+        new = replace(sides.get(lang) or default_side(lang), lang=lang)
+        new = replace(new, stt=cur.stt, mt_src=cur.mt_src)
+        out = replace(out, a=new) if s == "a" else replace(out, b=new)
+    return out
+
+
+def auto_pair(
+    pairs: dict[str, PairConfig],
+    langs: dict[Side, str],
+    hints: dict[Side, str | None],
+    supported: tuple[str, ...] | None = None,
+) -> PairConfig:
+    """The starting pair for a call with at least one `auto` side. An auto side starts in
+    its hint (else AUTO_FALLBACK_LANG) on the pivot STT; a fixed side keeps the config the
+    pairs.yaml entry for the starting languages gives it, else its language's defaults.
+    Pair-level knobs come from that entry, else the defaults with the pivot's
+    early_final_ms. Raises ValueError for a fixed language we have no side for."""
+    from dubhash.interp.langid import SUPPORTED_LANGS
+
+    supported = supported or SUPPORTED_LANGS
+    sides = language_sides(pairs)
+    start: dict[Side, str] = {}
+    for s in ("a", "b"):
+        lang = langs[s]
+        if lang == AUTO:
+            hint = hints.get(s)
+            start[s] = hint if hint in supported else AUTO_FALLBACK_LANG
+        elif lang not in supported or lang not in sides:
+            raise ValueError(f"unsupported language {lang!r}")
+        else:
+            start[s] = lang
+    found = find_pair(pairs, start["a"], start["b"]) if start["a"] != start["b"] else None
+    cfg: dict[Side, SideConfig] = {}
+    for s in ("a", "b"):
+        if langs[s] == AUTO:
+            cfg[s] = auto_side(start[s], sides)
+        else:
+            cfg[s] = found.side(s) if found is not None else sides[start[s]]
+
+    def short(s: Side) -> str:
+        return AUTO if langs[s] == AUTO else langs[s].split("-")[0]
+
+    key = f"{short('a')}-{short('b')}"
+    if found is not None:
+        return replace(found, key=key, a=cfg["a"], b=cfg["b"])
+    return PairConfig(key=key, a=cfg["a"], b=cfg["b"], early_final_ms=PIVOT_EARLY_FINAL_MS)
+
+
 def find_pair(pairs: dict[str, PairConfig], lang_a: str, lang_b: str) -> PairConfig | None:
     """The first non-fake pair for these side languages. An entry written in the exact
     orientation wins; otherwise one written the other way round is returned swapped, so

@@ -184,3 +184,55 @@ def line_check_text(lang: str) -> str:
     """The soft "are you on the line?" prompt after 10 s of silence."""
     spec = _LANGS.get(_base(lang))
     return spec.line_check if spec is not None else "Are you still on the line?"
+
+
+# --- lang "auto" (docs/tech-spec/language-detection.md) ----------------------------------
+# TODO(PQ5): native review of every line below; we wrote them.
+
+_AUTO_EN = "Please speak in your language."
+# "Hello, speak in your own language", in the hint language (romanised Hindi: Bulbul reads
+# it fine, as the line check). English follows in every line.
+_AUTO_OPENING: dict[str, str] = {
+    "hi": "Namaste, apni bhasha mein boliye.",
+    "mr": "नमस्कार, तुमच्या भाषेत बोला.",
+    "gu": "નમસ્તે, તમારી ભાષામાં બોલો.",
+    "kn": "ನಮಸ್ಕಾರ, ನಿಮ್ಮ ಭಾಷೆಯಲ್ಲಿ ಮಾತನಾಡಿ.",
+    "ta": "வணக்கம், உங்கள் மொழியில் பேசுங்கள்.",
+}
+# "Speak", for a listener whose partner's language is still unknown: "<own language>. Speak."
+_SPEAK: dict[str, str] = {
+    "hi": "बोलिए.",
+    "mr": "बोला.",
+    "gu": "બોલો.",
+    "kn": "ಮಾತನಾಡಿ.",
+    "ta": "பேசுங்கள்.",
+    "en": "Go ahead.",
+}
+LANGUAGE_MENU = (
+    "Hindi ke liye 1 dabaiye, Marathi 2, Gujarati 3, Kannada 4, Tamil 5, English 6. "
+    "For Hindi press 1, Marathi 2, Gujarati 3, Kannada 4, Tamil 5, English 6."
+)
+
+
+def auto_opening_text(hint: str | None) -> str:
+    """The opening for an auto side: "speak in your language" in the hint language (Hindi
+    without one), then in English."""
+    me = _base(hint) if hint else "hi"
+    if me == "en":
+        return _AUTO_EN
+    return f"{_AUTO_OPENING.get(me, _AUTO_OPENING['hi'])} {_AUTO_EN}"
+
+
+def partner_auto_opening_text(lang: str) -> str:
+    """The short opening for a listener whose partner's language is not known yet: their
+    own language's name and "speak"."""
+    me = _base(lang)
+    if me not in _SPEAK:
+        return _SPEAK["en"]
+    names = _SHORT.get(me, _SHORT["en"])[1]
+    return f"{names.get(me, _EN_NAMES.get(me, me))}. {_SPEAK[me]}"
+
+
+def language_menu_text() -> str:
+    """The keypad language menu (session/language.py MENU_DIGITS), in Hindi then English."""
+    return LANGUAGE_MENU

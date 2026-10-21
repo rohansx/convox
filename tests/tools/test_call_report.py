@@ -103,6 +103,30 @@ def test_json_output(tmp_path, capsys):
     assert doc["stages"]["eou_wait"] is not None
 
 
+def test_lang_decisions_get_their_own_section(tmp_path, capsys):
+    d = write_call(tmp_path)
+    lines = (d / "events.jsonl").read_text()
+    lang = {"side": "a", "lang": "ta-IN", "state": "CONFIRMED", "confidence": 0.95,
+            "source": "lid"}  # fmt: skip
+    menu = {"side": "b", "lang": None, "state": "UNKNOWN", "confidence": 0.0, "source": "lid",
+            "menu": True}  # fmt: skip
+    extra = [
+        {"ts": "t", "ms": 2500, "kind": "lang", "payload": lang},
+        {"ts": "t", "ms": 3000, "kind": "lang", "payload": menu},
+    ]
+    (d / "events.jsonl").write_text(lines + "".join(json.dumps(e) + "\n" for e in extra))
+    assert call_report.main([str(d)]) == 0
+    out = capsys.readouterr().out
+    assert "LANGUAGE (2)" in out
+    assert "2.50  a  ta-IN" in out and "CONFIRMED" in out and "lid 0.95" in out
+    assert "keypad menu" in out
+
+
+def test_no_lang_section_without_auto_sides(tmp_path, capsys):
+    assert call_report.main([str(write_call(tmp_path))]) == 0
+    assert "LANGUAGE" not in capsys.readouterr().out
+
+
 def test_unknown_call_is_an_error(tmp_path, capsys):
     with pytest.raises(SystemExit):
         call_report.main(["c_missing", "--dir", str(tmp_path)])

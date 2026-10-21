@@ -72,6 +72,7 @@ Decision 3's original weekday labels (Tue/Thu) were wrong: 21 Oct 2026 is a Wedn
 |---|---|
 | [interpreter-pipeline.md](tech-spec/interpreter-pipeline.md) | One direction's eight stages, latency budget, backchannel rule, translation cache, interfaces |
 | [floor-controller.md](tech-spec/floor-controller.md) | States, rules, invariants, the speaking-while-playing case, worked event traces |
+| [language-detection.md](tech-spec/language-detection.md) | `lang: "auto"`: detecting a caller's language on the call, the per-side resolver, the keypad menu fallback, the same-language bridge |
 | [audio.md](tech-spec/audio.md) | Internal format, `FrameClock`, gaps, Silero windowing, resampling, mixer math, chunking, pitch heuristic |
 | [leg-transports.md](tech-spec/leg-transports.md) | `LegTransport` contract and the Exotel, Plivo, WebRTC and Fake implementations; sample-rate confirmation |
 | [api.md](tech-spec/api.md) | `/v1/calls`, `/ws/leg`, provider webhooks, outbound platform events, dial-in, console endpoints |

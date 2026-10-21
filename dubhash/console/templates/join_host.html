@@ -36,6 +36,21 @@
     {% endfor %}
     <button type="submit" class="start">Start call</button>
   </form>
+  <form method="post" action="/join" class="pairs per-side">
+    <h2>Or pick each side</h2>
+    <p class="muted">Auto-detect: the phone asks the person to speak, and the call learns their language.</p>
+    {% for side in ("a", "b") %}
+    <label class="side-pick">Side {{ side | upper }}
+      <select name="{{ side }}_lang">
+        <option value="auto"{% if side == "a" %} selected{% endif %}>Auto-detect · अपनी भाषा</option>
+        {% for l in side_langs %}
+        <option value="{{ l.lang }}"{% if side == "b" and loop.first %} selected{% endif %}>{{ l.native }}{% if l.english != l.native %} · {{ l.english }}{% endif %}</option>
+        {% endfor %}
+      </select>
+    </label>
+    {% endfor %}
+    <button type="submit" class="start">Start call</button>
+  </form>
 </main>
 {% else %}
 <main class="host-main call" id="call"

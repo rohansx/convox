@@ -85,9 +85,13 @@ class FloorController:
         on_played: Callable[[Translation], None] | None = None,
         on_bypass: Callable[[], None] | None = None,
         bypass: bool = False,
+        dtmf_hook: Callable[[Side, str], bool] | None = None,
     ) -> None:
         """bypass=True starts in passthrough (bridge mode): forward() relays frames from
-        the first frame, with no bypass event and no on_bypass call."""
+        the first frame, with no bypass event and no on_bypass call. dtmf_hook(side, digit)
+        sees every digit first (after the "dtmf" event); True means it took the digit (the
+        keypad language menu, session/language.py) and the floor's 1/0 meanings are
+        skipped."""
         self.call_id = call_id
         self._legs = legs
         self._clock = clock
@@ -104,6 +108,7 @@ class FloorController:
         self._line_check = line_check
         self._on_played = on_played
         self._on_bypass = on_bypass
+        self._dtmf_hook = dtmf_hook
 
         self._lock = asyncio.Lock()
         self._state: State = "IDLE"
@@ -125,6 +130,7 @@ class FloorController:
         # legs hearing a prompt: side -> (mark tag, deadline ms; _NEVER while sending)
         self._prompts: dict[Side, tuple[str, int]] = {}
         self._prompt_sent: dict[Side, int] = {}  # bytes of the current prompt sent so far
+        self._uncut: set[Side] = set()  # legs whose prompt holds translations (the menu)
 
     # --- public view ---------------------------------------------------------------------
 
@@ -181,17 +187,23 @@ class FloorController:
         *,
         tag: str = PROMPT_TAG,
         grace_ms: int = PROMPT_GRACE_MS,
+        cuttable: bool = True,
     ) -> int:
         """Send a session prompt (the opening line) to `side` as it is produced, then
         mark it. The leg counts as hearing it until the mark comes back, or until the
         prompt's length plus grace_ms after its first byte was sent. A translation that
         starts for this leg meanwhile cuts it: sending stops (the rest of `audio` is
-        closed unsent) and no mark is sent. Returns the bytes sent. If `audio` fails, the
-        hold ends at once and the error propagates."""
+        closed unsent) and no mark is sent. cuttable=False (the keypad language menu): a
+        translation for this leg waits until the prompt is over instead. Returns the bytes
+        sent. If `audio` fails, the hold ends at once and the error propagates."""
         leg = self._legs[side]
         async with self._lock:
             self._prompts[side] = (tag, _NEVER)
             self._prompt_sent[side] = 0
+            if cuttable:
+                self._uncut.discard(side)
+            else:
+                self._uncut.add(side)
         sent = 0
         t0: int | None = None
 
@@ -236,6 +248,7 @@ class FloorController:
         if held is None or held[0] != tag:
             return False
         del self._prompts[side]
+        self._uncut.discard(side)
         self.quiet_from(self._clock.now_ms())
         if self._bypass or self._pb is not None or not self._queue:
             return True
@@ -317,10 +330,20 @@ class FloorController:
             log.info("floor.dtmf", extra={"side": side, "digit": digit})
             if self._bypass:
                 return
+            if self._dtmf_hook is not None and self._dtmf_hook(side, digit):
+                return
             if digit == self.escape_dtmf:
-                await self._enter_bypass(side, digit)
+                await self._enter_bypass(side, {"digit": digit})
             elif digit == self.replay_dtmf:
                 self._replay(side)
+
+    async def enter_bypass(self, side: Side, *, reason: str) -> None:
+        """Passthrough for the rest of the call, entered by the session (e.g. "same_lang":
+        both sides turned out to speak one language). As DTMF escape, but the "bypass"
+        event carries the reason instead of a digit. A no-op if already in bypass."""
+        async with self._lock:
+            if not self._bypass:
+                await self._enter_bypass(side, {"reason": reason})
 
     async def forward(self, side: Side, frame: bytes) -> None:
         """Bypass passthrough: a frame from `side` goes to the other leg at 0 dB.
@@ -388,7 +411,7 @@ class FloorController:
         self._internal.add(id(tr))
         self._accept(tr)
 
-    async def _enter_bypass(self, side: Side, digit: str) -> None:
+    async def _enter_bypass(self, side: Side, why: dict[str, str]) -> None:
         """Rule 6: plain mixer for the rest of the call. Nothing is dropped silently."""
         pb = self._pb
         if pb is not None:
@@ -401,8 +424,9 @@ class FloorController:
             self._stop_line_check(s)
         self._bypass = True
         self._prompts.clear()
+        self._uncut.clear()
         self._speaking.clear()
-        self._publish("bypass", {"side": side, "digit": digit})
+        self._publish("bypass", {"side": side, **why})
         log.info("floor.bypass", extra={"side": side})
         if self._state != "IDLE":
             self._set_state("IDLE")
@@ -476,6 +500,10 @@ class FloorController:
         """Start the head of the queue if nothing is playing. True if something started."""
         if self._pb is not None or not self._queue:
             return False
+        if other(self._queue[0].side) in self._uncut and other(self._queue[0].side) in (
+            self._prompts
+        ):
+            return False  # the listener is hearing the menu: wait for its end
         tr = self._queue.popleft()
         pb = _Playback(tr, other(tr.side))
         if pb.listener in self._prompts:  # still hearing a prompt: cut it (L7)

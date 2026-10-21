@@ -35,7 +35,14 @@ from typing import TYPE_CHECKING, Any, Literal
 
 from dubhash.audio.frames import SAMPLE_RATE, SAMPLE_WIDTH, Reframer
 from dubhash.clock import Clock, MonotonicClock
-from dubhash.config.pairs import PairConfig, SideConfig, find_pair, load_pairs
+from dubhash.config.pairs import (
+    PairConfig,
+    SideConfig,
+    default_side,
+    find_pair,
+    language_sides,
+    load_pairs,
+)
 from dubhash.config.settings import PACKAGE_DIR
 from dubhash.interp.contracts import MT, STT, TTS, STTStream
 from dubhash.interp.gender import THRESHOLD_HZ, estimate_f0
@@ -85,14 +92,7 @@ def lang_label(code: str) -> str:
 
 def _default_side(lang: str) -> SideConfig:
     short = lang.split("-")[0]
-    tts = "eleven" if short in ELEVEN_LANGS else "bulbul"
-    return SideConfig(
-        lang=lang,
-        stt="sarvam",
-        tts=tts,
-        voice_m=f"{tts}:{short}-male-1",
-        voice_f=f"{tts}:{short}-female-1",
-    )
+    return default_side(lang, tts="eleven" if short in ELEVEN_LANGS else "bulbul")
 
 
 def ward_pair(lang_a: str, lang_b: str, pairs: dict[str, PairConfig] | None = None) -> PairConfig:
@@ -110,12 +110,7 @@ def ward_pair(lang_a: str, lang_b: str, pairs: dict[str, PairConfig] | None = No
     exact = find_pair(pairs, lang_a, lang_b)
     if exact is not None:
         return exact
-    known: dict[str, SideConfig] = {}
-    for p in pairs.values():
-        if "fake" in p.key:
-            continue
-        for sc in (p.a, p.b):
-            known.setdefault(sc.lang, sc)
+    known = language_sides(pairs)
 
     def side(lang: str) -> SideConfig:
         return known.get(lang) or _default_side(lang)

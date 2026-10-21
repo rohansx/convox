@@ -140,7 +140,26 @@
     if (["ended", "completed", "failed"].includes(p.status)) finish();
   }
 
+  // lang "auto": the page shows "speak in your language" until the call confirms one
+  const names = JSON.parse(root.dataset.names || "{}");
+  function onLang(p) {
+    if (!p || p.state !== "CONFIRMED" || !names[p.lang]) return;
+    const [en, nat] = names[p.lang];
+    const short = p.lang.slice(0, 2);
+    if (p.side === side) {
+      const h = document.getElementById("me-native");
+      if (h) { h.textContent = nat; h.lang = short; }
+      const e = document.getElementById("me-english");
+      if (e) e.textContent = en === nat ? "" : en;
+      root.dataset.lang = p.lang;
+    } else {
+      const o = document.getElementById("other-native");
+      if (o) { o.textContent = nat; o.lang = short; }
+    }
+  }
+
   const source = new EventSource(root.dataset.events);
+  source.addEventListener("lang", (e) => onLang(JSON.parse(e.data)));
   source.addEventListener("turn", (e) => onTurn(JSON.parse(e.data)));
   source.addEventListener("partial", (e) => onPartial(JSON.parse(e.data)));
   source.addEventListener("call", (e) => onCall(JSON.parse(e.data)));
