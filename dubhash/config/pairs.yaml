@@ -96,6 +96,9 @@ mr-en:
 # (Sarvam speech->English, then en->hi / en->gu) with early_final_ms 200; gu-hi-direct is
 # the plain route (gu<->hi MT). gu-en: the Gujarati side's STT outputs English, so MT is
 # skipped; the English side is en-IN STT then en->gu. Gujarati quality needs a native check.
+# Live heard first-audio p50/p95: gu-hi 1500/1640 (gu->hi), 1460/1700 (hi->gu); direct
+# 2400/2540, 2600/4860; gu-en 800/980 (gu->en), 1480/1580 (en->gu). Both gu-hi routes lost
+# "OTP 4729 છે" as 47296 ("છે" heard as "છ", six); gu-en kept every number.
 gu-hi:
   a: { lang: gu-IN, stt: sarvam-translate, mt_src: en-IN, tts: bulbul, voice_m: "bulbul:gu-male-1", voice_f: "bulbul:gu-female-1" }
   b: { lang: hi-IN, stt: sarvam-translate, mt_src: en-IN, tts: bulbul, voice_m: "bulbul:hi-male-1", voice_f: "bulbul:hi-female-1" }

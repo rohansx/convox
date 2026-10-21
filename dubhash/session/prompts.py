@@ -4,10 +4,11 @@ language and is synthesised with that side's TTS voice.
 
 The opening line is ONE short sentence (about 3 s of Bulbul speech; the two-sentence
 version ran 7-9 s and held up the first translation, L2/L4). Live Bulbul lengths (L4):
-hi 3.7 s, mr 3.4-3.7 s, en 3.2 s, kn 4.3 s. The Hindi line folds the spec's "chhote vaakya
-boliye" into a shortened form of its first sentence; the Kannada line is the spec's
-sentence (docs/tech-spec/security-privacy.md). Everything else is an unverified draft.
-With record=true the "text is being saved" sentence is appended (about 3 s more).
+hi 3.7 s, mr 3.4-3.7 s, en 3.2 s, kn 4.3 s, gu 3.6-4.9 s (L6). The Hindi line folds the
+spec's "chhote vaakya boliye" into a shortened form of its first sentence; the Kannada line
+is the spec's sentence (docs/tech-spec/security-privacy.md). Everything else is an
+unverified draft. With record=true the "text is being saved" sentence is appended (about
+3 s more; about 4 s in Gujarati).
 TODO(PQ5): native-speaker and counsel review of every kn/ta/mr/gu string below, and of the
 proposed "automatic interpreter / press 0" disclosure sentence (open question G17).
 """
