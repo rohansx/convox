@@ -4,6 +4,12 @@ The only code allowed to call send/clear/mark on a leg. Every public handler tak
 asyncio.Lock, so handlers never interleave. Playback runs as one task per Translation,
 outside the lock; a handler that cuts playback short cancels and awaits that task before
 touching the leg, so no frame is sent after a clear().
+
+Prompts (play_prompt, the opening line): the session's own audio to one leg, sent here like
+everything else and followed by a mark. Until that mark comes back, or the prompt's length
+plus grace_ms has passed, the leg is "hearing its prompt": a translation for it waits at
+the head of the queue (it is not dropped), and starts once the hold ends and the usual
+rules allow. Playback to the other leg is not held.
 """
 
 from __future__ import annotations
@@ -25,6 +31,10 @@ from dubhash.types import CallEvent, EventKind, Side, Translation, other
 log = logging.getLogger(__name__)
 
 State = Literal["IDLE", "A_SPEAKING", "B_SPEAKING", "PLAYING_AB", "PLAYING_BA"]
+
+PROMPT_TAG = "opening"
+PROMPT_GRACE_MS = 1500  # after the prompt's own length, stop waiting for its mark
+_NEVER = 2**62
 
 Render = Callable[[Translation], AsyncIterator[bytes]]
 
@@ -108,6 +118,8 @@ class FloorController:
         self._last_heard: dict[Side, tuple[Translation, bytes]] = {}
         self._internal: set[int] = set()  # id() of replay Translations made here
         self._replay_seq = 0
+        # legs hearing a prompt: side -> (mark tag, deadline ms; _NEVER while sending)
+        self._prompts: dict[Side, tuple[str, int]] = {}
 
     # --- public view ---------------------------------------------------------------------
 
@@ -126,6 +138,10 @@ class FloorController:
     @property
     def bypass(self) -> bool:
         return self._bypass
+
+    def prompt_playing(self, side: Side) -> bool:
+        """The leg is still hearing a prompt (its mark has not come back)."""
+        return side in self._prompts
 
     # --- lifecycle -------------------------------------------------------------------------
 
@@ -152,6 +168,62 @@ class FloorController:
         self._bg.add(task)
         task.add_done_callback(self._bg.discard)
         return task
+
+    async def play_prompt(
+        self,
+        side: Side,
+        audio: AsyncIterator[bytes],
+        *,
+        tag: str = PROMPT_TAG,
+        grace_ms: int = PROMPT_GRACE_MS,
+    ) -> int:
+        """Send a session prompt (the opening line) to `side` as it is produced, then
+        mark it. Interpretation playback to that leg waits until the mark comes back, or
+        until the prompt's length plus grace_ms after its first byte was sent. Returns the
+        bytes sent. If `audio` fails, the hold ends at once and the error propagates."""
+        leg = self._legs[side]
+        async with self._lock:
+            self._prompts[side] = (tag, _NEVER)
+        sent = 0
+        t0: int | None = None
+        try:
+            async for chunk in audio:
+                if not chunk:
+                    continue
+                if t0 is None:
+                    t0 = self._clock.now_ms()
+                await leg.send(chunk)
+                sent += len(chunk)
+            await leg.mark(tag)
+        except BaseException:
+            self._spawn(self._end_prompt(side, tag))
+            aclose = getattr(audio, "aclose", None)
+            if aclose is not None:
+                with contextlib.suppress(Exception):
+                    await aclose()
+            raise
+        deadline = (t0 if t0 is not None else self._clock.now_ms()) + bytes_to_ms(sent)
+        async with self._lock:
+            if self._prompts.get(side, ("",))[0] == tag:
+                self._prompts[side] = (tag, deadline + grace_ms)
+        return sent
+
+    async def _end_prompt(self, side: Side, tag: str) -> None:
+        async with self._lock:
+            self._release_prompt(side, tag)
+
+    def _release_prompt(self, side: Side, tag: str) -> bool:
+        """End the hold on `side` if it is for `tag`; start what was waiting for it."""
+        held = self._prompts.get(side)
+        if held is None or held[0] != tag:
+            return False
+        del self._prompts[side]
+        self.quiet_from(self._clock.now_ms())
+        if self._bypass or self._pb is not None or not self._queue:
+            return True
+        if self._state in ("IDLE", _speaking(self._queue[0].side)):
+            self._drain()
+        return True
 
     async def aclose(self) -> None:
         """Stop playback and background tasks. Whatever is still playing or queued is
@@ -210,6 +282,8 @@ class FloorController:
 
     async def on_mark(self, side: Side, tag: str) -> None:
         async with self._lock:
+            if self._release_prompt(side, tag):
+                return
             pb = self._pb
             if pb is None or side != pb.listener or tag != pb.tr.tag:
                 return  # stale (e.g. after a clear) or foreign
@@ -245,6 +319,10 @@ class FloorController:
             if self._bypass:
                 return
             now = self._clock.now_ms()
+            for side, (tag, deadline) in list(self._prompts.items()):
+                if now >= deadline:  # the mark never came back
+                    log.warning("floor.prompt_mark_timeout", extra={"side": side, "tag": tag})
+                    self._release_prompt(side, tag)
             pb = self._pb
             if (
                 pb is not None
@@ -304,6 +382,7 @@ class FloorController:
         for s in list(self._line_tasks):
             self._stop_line_check(s)
         self._bypass = True
+        self._prompts.clear()
         self._speaking.clear()
         self._publish("bypass", {"side": side, "digit": digit})
         log.info("floor.bypass", extra={"side": side})
@@ -379,6 +458,8 @@ class FloorController:
         """Start the head of the queue if nothing is playing. True if something started."""
         if self._pb is not None or not self._queue:
             return False
+        if other(self._queue[0].side) in self._prompts:
+            return False  # its listener is still hearing a prompt
         tr = self._queue.popleft()
         pb = _Playback(tr, other(tr.side))
         self._pb = pb
