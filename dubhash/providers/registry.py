@@ -35,11 +35,15 @@ def build_stt(name: str, settings: Settings) -> STT:
         from dubhash.providers.sarvam_stt import SarvamSTT
 
         return SarvamSTT(_key(settings.sarvam_api_key, "SARVAM_API_KEY", name))
+    if name == "sarvam-translate":
+        from dubhash.providers.sarvam_stt_translate import SarvamSTTTranslate
+
+        return SarvamSTTTranslate(_key(settings.sarvam_api_key, "SARVAM_API_KEY", name))
     if name == "deepgram":
         from dubhash.providers.deepgram_stt import DeepgramSTT
 
         return DeepgramSTT(_key(settings.deepgram_api_key, "DEEPGRAM_API_KEY", name))
-    raise _unknown("stt", name, ("sarvam", "deepgram", "fake"))
+    raise _unknown("stt", name, ("sarvam", "sarvam-translate", "deepgram", "fake"))
 
 
 def build_mt(name: str, settings: Settings) -> MT:

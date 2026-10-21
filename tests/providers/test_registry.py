@@ -6,6 +6,7 @@ from dubhash.providers.eleven_tts import ElevenTTS
 from dubhash.providers.registry import ProviderUnavailable, build_mt, build_stt, build_tts
 from dubhash.providers.sarvam_mt import SarvamMT
 from dubhash.providers.sarvam_stt import SarvamSTT
+from dubhash.providers.sarvam_stt_translate import SarvamSTTTranslate
 from dubhash.providers.sarvam_tts import BulbulTTS
 
 
@@ -28,6 +29,7 @@ def test_builds_real_stt_providers():
     s = _settings(sarvam_api_key="sk", deepgram_api_key="dg")
     assert isinstance(build_stt("sarvam", s), SarvamSTT)
     assert isinstance(build_stt("deepgram", s), DeepgramSTT)
+    assert isinstance(build_stt("sarvam-translate", s), SarvamSTTTranslate)
 
 
 def test_builds_real_mt_and_tts_providers():
@@ -41,6 +43,7 @@ def test_builds_real_mt_and_tts_providers():
     ("build", "name", "env"),
     [
         (build_stt, "sarvam", "SARVAM_API_KEY"),
+        (build_stt, "sarvam-translate", "SARVAM_API_KEY"),
         (build_stt, "deepgram", "DEEPGRAM_API_KEY"),
         (build_mt, "sarvam", "SARVAM_API_KEY"),
         (build_tts, "bulbul", "SARVAM_API_KEY"),

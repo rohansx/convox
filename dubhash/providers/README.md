@@ -7,6 +7,7 @@ a `websockets.serve` server on 127.0.0.1). All TTS output is PCM16 mono 16 kHz.
 | Module | Class (`name`) | Protocol | Transport |
 |---|---|---|---|
 | `sarvam_stt.py` | `SarvamSTT` (`sarvam`) → `SarvamSTTStream` | STT / STTStream | websocket, warm pool |
+| `sarvam_stt_translate.py` | `SarvamSTTTranslate` (`sarvam-translate`) | STT / STTStream | as `sarvam`, plus `mode=translate`: finals in English, partials in the source language |
 | `deepgram_stt.py` | `DeepgramSTT` (`deepgram`) → `DeepgramSTTStream` | STT / STTStream | websocket, warm pool (mock-tested only) |
 | `sarvam_mt.py` | `SarvamMT` (`sarvam`) | MT | REST, shared `httpx.AsyncClient` |
 | `sarvam_tts.py` | `BulbulTTS` (`bulbul`) | TTS | websocket, warm pool |
@@ -166,3 +167,72 @@ Source: [listen streaming reference](https://developers.deepgram.com/reference/s
   sockets close with 1008 unless pinged (`{"event":"ping"}`); timeout length not stated.
   Our default: warm pool + ping every 10 s + reconnect-and-replay on failure. Still to
   test: the 5 s / 30 s / 70 s silence experiment from the plan, with and without ping.
+
+## Pivot trial (L1)
+
+Question: is Sarvam speech→English (realtime STT `mode=translate`) followed by en→kn MT
+faster than hi STT followed by hi→kn MT? Measured **live** on 21 Oct with
+`uv run python tools/pivot_probe.py` (and `--translate-model saaras:v4`).
+
+**The API.** The realtime socket `wss://api.sarvam.ai/speech-to-text-realtime/ws` takes
+`mode=transcribe|translate|verbatim|translit|codemix` (default `transcribe`);
+`translate` = "Translation to English". Models: `saaras:v3-realtime` (default) or
+`saaras:v4`. Per the guide, the task is applied to the **final only**: "Partials are always
+plain transcription", so partials stream in Hindi and the one final per utterance is
+English. Sources: [realtime guide](https://docs.sarvam.ai/api/api-guides-tutorials/speech-to-text/realtime-streaming),
+[WS reference](https://docs.sarvam.ai/api-reference/speech-to-text/transcribe/realtime/ws).
+`SarvamSTTTranslate` is `SarvamSTT` with `mode=translate` on the URL (same warm pool,
+manual endpointing, reconnect-and-replay). Enable it per pair with `stt: sarvam-translate`
+and `mt_src: en-IN` (pair `hi-kn-pivot` in `config/pairs.yaml`).
+
+**Setup.** 10 short colloquial Hindi delivery/clinic sentences, synthesised by Bulbul
+(`bulbul:hi-female-1`) with 300 ms of trailing silence, pushed in real time on warm
+sockets. STT = `speech_end` → final. MT = Sarvam `mayura:v1` modern-colloquial on a warm
+httpx client. The routes alternate which goes first. n = 10 per run, so p95 is the max.
+
+| stage (ms) | v3-realtime p50 | p95 | v4 run p50 | p95 |
+|---|---|---|---|---|
+| A: STT hi (transcribe) | 287 | 318 | 283 | 317 |
+| A: MT hi→kn | 1357 | 1585 | 1385 | 1606 |
+| **A: STT + MT** | **1630** | **1872** | **1667** | **1882** |
+| B: STT hi→en (translate) | 277 | 327 | 284 | 291 |
+| B: MT en→kn | 716 | 780 | 705 | 762 |
+| **B: STT + MT** | **962** | **1107** | **988** | **1031** |
+| MT hi→en (on A's transcript) | 707 | 771 | 739 | 788 |
+| first-audio est. A (+550 EOU +250 TTS +200 playout) | 2630 | 2872 | 2667 | 2882 |
+| first-audio est. B | 1962 | 2107 | 1988 | 2031 |
+
+(Route A's STT is `saaras:v3-realtime` in both runs; only route B's model changes.)
+
+**Findings.**
+- Translate mode costs nothing extra at the STT: its final arrives as fast as a plain
+  transcript (277 vs 287 ms p50).
+- Route B saves **about 670 ms at p50 and 770–850 ms at p95**, every sentence (B's slowest,
+  1107 ms, is faster than A's fastest, 1478 ms).
+- hi→kn ≈ hi→en + en→kn: the sums ran 1366–1529 ms against hi→kn at 1228–1606 ms. This
+  supports the guess that Sarvam pivots through English inside hi→kn. Route B does the
+  first hop inside the STT for free.
+- B alone gets the estimated p95 to about 2.0–2.1 s and p50 to about 2.0 s: at the p95
+  target, but not the 1.5 s p50 target. The EOU wait (550 ms) is now the largest fixed cost.
+
+**Quality (no native Kannada rating yet; flags taken from the English intermediate).**
+Each sentence lists names and numbers a faithful translation must keep (`keeps` in the
+probe). Route B's English kept all of them in both runs: Sharma, Mehta, Priya, 302, 450,
+6 PM, 10 AM, five minutes, OTP four digits. Things that are visible:
+- Route B was **more** faithful than A on 3 of 10. #5: A's Hindi STT misheard "चार अंकों
+  वाला" as "चार अंक आना" and A's Kannada says the OTP "should start with four digits";
+  B (from audio) says "four digit OTP". #6: A's hi→kn says "tell Priya to share *her*
+  name"; B keeps "tell Priya *your* name". #9: B keeps "tomorrow morning"; A's drops "morning".
+- Route B makes the Kannada more code-mixed (English loanwords in Latin script, e.g.
+  "please ಕೆಳಗೆ ಬನ್ನಿ", "five minutes", "arrive ಆಗ್ತೀನಿ"). Bulbul reads Latin loanwords
+  fine (L1), but a Kannada speaker should judge whether it sounds natural.
+- v4 English writes "₹450" and "6:00 PM", which MT copies into the Kannada as is. Check
+  that Bulbul reads "₹450" correctly before choosing v4. v3-realtime wrote "four hundred
+  fifty rupees".
+- Honorifics come through as English ("Sharma Ji", "Brother" for भैया) in both routes.
+
+**Trade-off with speculative MT on partials.** In translate mode the partials are Hindi
+and only the final is English, so en→kn cannot start before the final arrives. Speculative
+MT would have to run hi→kn on Hindi partials (about 1.36 s), and that result is thrown
+away whenever B's English final is used. The two speed-ups do not stack unless both
+sockets (transcribe and translate) are opened per utterance, which doubles STT cost.

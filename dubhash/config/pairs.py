@@ -20,6 +20,13 @@ class SideConfig:
     tts: str
     voice_m: str
     voice_f: str
+    # MT source language when the STT does not output `lang`, e.g. "en-IN" for an STT
+    # that translates speech to English (sarvam-translate). None means `lang`.
+    mt_src: str | None = None
+
+    @property
+    def mt_lang(self) -> str:
+        return self.mt_src or self.lang
 
     def voice(self, gender: Gender) -> str:
         return self.voice_m if gender == "m" else self.voice_f

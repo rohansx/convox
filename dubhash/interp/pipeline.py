@@ -332,7 +332,7 @@ class Interpreter:
             self._jobs.discard(job)
 
     async def _translate(self, text: str) -> str:
-        return await self.mt.translate(text, self.src_lang, self.tgt.lang)
+        return await self.mt.translate(text, self.pair.side(self.side).mt_lang, self.tgt.lang)
 
     async def _pump_partials(self, stream: STTStream, job: _Job) -> None:
         try:
