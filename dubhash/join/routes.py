@@ -58,10 +58,11 @@ Pairs = Annotated[dict[str, PairConfig], Depends(get_pairs)]
 Registry = Annotated[CallRegistry, Depends(get_registry)]
 
 # Stage order: the user's pair first, then the rest of the demo languages.
-PREFERRED = ("mr-IN", "hi-IN", "en-IN", "kn-IN", "ta-IN")
+PREFERRED = ("mr-IN", "hi-IN", "en-IN", "gu-IN", "kn-IN", "ta-IN")
 
 # Phone UI strings in the phone's own language, with English underneath on the page.
-# Kannada, Tamil and Marathi strings were written by us: they need a native speaker's check.
+# Kannada, Tamil, Marathi and Gujarati strings were written by us: they need a native
+# speaker's check.
 UI: dict[str, dict[str, str]] = {
     "en": {"start": "Tap to start", "listening": "Listening", "speaking": "Speaking",
            "leave": "Leave call", "ended": "Call ended", "waiting": "Waiting for the other phone",
@@ -79,6 +80,10 @@ UI: dict[str, dict[str, str]] = {
            "leave": "அழைப்பை விடு", "ended": "அழைப்பு முடிந்தது",
            "waiting": "மற்ற போனுக்காகக் காத்திருக்கிறது", "connecting": "இணைக்கிறது",
            "you": "நீங்கள்", "resume": "தொடர தட்டவும்"},
+    # TODO(PQ5): native Gujarati review.
+    "gu": {"start": "શરૂ કરવા માટે ટૅપ કરો", "listening": "સાંભળી રહ્યું છે", "speaking": "બોલી રહ્યું છે",
+           "leave": "કૉલ છોડો", "ended": "કૉલ પૂરો થયો", "waiting": "બીજા ફોનની રાહ જોવાઈ રહી છે",
+           "connecting": "જોડાઈ રહ્યું છે", "you": "તમે", "resume": "ફરી શરૂ કરવા માટે ટૅપ કરો"},
 }  # fmt: skip
 
 
