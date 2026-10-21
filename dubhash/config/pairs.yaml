@@ -25,11 +25,11 @@
 # rarely a cancelled MT call).
 # max_utterance_ms (default 15000, not set below; 7000 cut live sentences mid-phrase, L9): an utterance that has run this long ends at
 # the next pause between words (L7), so a noisy room or a monologue is never held back.
-# chunking (default false, not set below), chunk_pause_ms (300), chunk_min_ms (1200):
+# chunking (default false), chunk_pause_ms (300), chunk_min_ms (1200):
 # chunked interpretation (L9). A pause of chunk_pause_ms after chunk_min_ms of speech
 # commits the clause so far (>= 4 words, not ending in a number) and plays its translation
-# while the speaker goes on. Off on every pair until it is measured live per pair (meaning
-# of the English pivot and numbers intact for verb-final hi/mr/gu).
+# while the speaker goes on. On (300/1200) for mr-hi, mr-en and gu-en, measured live with
+# meaning and numbers intact (L9); off on every other pair until it is measured there.
 
 hi-kn:
   a: { lang: hi-IN, stt: sarvam-translate, mt_src: en-IN, tts: bulbul, voice_m: "bulbul:hi-male-1", voice_f: "bulbul:hi-female-1" }
@@ -81,6 +81,9 @@ mr-hi:
   spec_mt: false
   spec_after_ms: 200
   early_final_ms: 200
+  chunking: true  # L9, live 21 Oct: no hold stall, numbers kept
+  chunk_pause_ms: 300
+  chunk_min_ms: 1200
 
 mr-hi-direct:
   a: { lang: mr-IN, stt: sarvam, tts: bulbul, voice_m: "bulbul:mr-male-1", voice_f: "bulbul:mr-female-1" }
@@ -108,6 +111,9 @@ mr-en:
   spec_mt: false
   spec_after_ms: 200
   early_final_ms: 200
+  chunking: true  # L9, live 21 Oct: no hold stall, numbers kept
+  chunk_pause_ms: 300
+  chunk_min_ms: 1200
 
 # Gujarati (L6) follows the tuned Marathi pattern: gu-hi pivots both sides through English
 # (Sarvam speech->English, then en->hi / en->gu) with early_final_ms 200; gu-hi-direct is
@@ -150,6 +156,9 @@ gu-en:
   spec_mt: false
   spec_after_ms: 200
   early_final_ms: 200
+  chunking: true  # L9, live 21 Oct: no hold stall, numbers kept
+  chunk_pause_ms: 300
+  chunk_min_ms: 1200
 
 # all-fake pair for tests and the day-2 FakeLeg pipeline
 fake-fake:

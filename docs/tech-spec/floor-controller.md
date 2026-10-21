@@ -100,7 +100,8 @@ The code comments in the spec leave three transitions implicit. These readings k
 4. **Chunked utterances (L9).** With `chunking` on, a `Translation` may be one chunk of A's utterance that A is still speaking (`final_chunk=False`). Rule 1 above already plays it at once (`A_SPEAKING` is the source's floor), so B hears it **while A talks**. Once a chunk of A's has started, A is the floor's *holder* until A's final chunk starts:
    - a playback that ends with nothing of A's queued goes to `A_SPEAKING`, not `IDLE` (more of A's utterance is coming);
    - only A's next chunk may start, so chunk n+1 plays right behind chunk n and a translation from B (queued meanwhile) waits until A's utterance is complete, never in the middle of it;
-   - the hold ends when A's final chunk starts, when the rest of A's utterance is discarded (`A_SPEAKING → IDLE`, rule 2), when B barges in on A's chunk (rule 4: B takes the floor, A's remaining chunks queue in arrival order), on bypass, or by the 4 s rescue (rule 5) if A's final chunk is lost. A DTMF replay does not end it.
+   - the hold ends when A's utterance's **last delivery** starts: its final chunk, or, when the rest of A's utterance is discarded (rule 2), the last chunk of A's still in the queue (marked as the last at the discard; with none queued the hold ends at once, `A_SPEAKING → IDLE`). The interpreter hands over an utterance's chunks and its discard in order, so whatever of A's is queued at the discard belongs to an utterance that has ended. It also ends when B barges in on A's chunk (rule 4: B takes the floor, A's remaining chunks queue in arrival order) and on bypass. A DTMF replay does not end it;
+   - **the hold never outlives its utterance.** Live call c_uiaxt3slo6 stalled because the discard came while A's chunk 0 was still queued behind another playback: the discard found no hold to end, chunk 0 then started and took one nothing released but the 4 s rescue, so the other side's ready translation waited ~4 s. Defensive backstop: with the holder silent, nothing of its playing or queued and no sign of it (a chunk queued, a playback ending, its speech) for `hold_timeout_ms` (`max(4 × chunk_pause_ms, 1500)`), the hold is released with a `hold_released` event `{side, reason: "timeout", idle_ms}` and a `floor.hold_released` warning. The 4 s rescue (rule 5) stays behind it.
    Each chunk is its own playback (earcon only on chunk 0, mark, barge-in, clip), so invariants 1, 2 and 4 hold per chunk.
 
 ---
@@ -186,7 +187,9 @@ Test approach: drive the controller with **scripted event sequences** against tw
 | a1 arrives while a0 plays | queued; starts in a0's mark handler, no `IDLE` between. |
 | b1 arrives between A's chunks | waits until A's final chunk has played. |
 | B barges in on a0 | a0 clipped, `B_SPEAKING`; A's later chunks queue in arrival order. |
-| Rest of A's utterance discarded / final chunk lost | hold released at once / by the 4 s rescue. |
+| Rest of A's utterance discarded / final chunk lost | hold released at once / by `hold_timeout_ms` (1.5 s; `hold_released` event). |
+| Rest discarded while a0 still waits behind another playback (`tests/session/test_chunk_hold_session.py`, the c_uiaxt3slo6 stall) | a0 is the utterance's last delivery: it plays, then `IDLE`; B's reply plays at once, not after 4 s. |
+| Rest discarded with b1 queued before a1 | a1 still plays before b1, then the hold is over. |
 
 ---
 

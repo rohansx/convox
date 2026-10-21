@@ -24,3 +24,12 @@ def test_yaml_values_are_read(tmp_path):
     p = load_pairs(f)["x"]
     assert (p.chunking, p.chunk_pause_ms, p.chunk_min_ms) == (True, 250, 1000)
     assert p.swapped().chunking is True
+
+
+ON = ("mr-hi", "mr-en", "gu-en")  # measured live with meaning and numbers intact (L9)
+
+
+def test_chunking_is_on_for_the_pairs_measured_live_and_off_elsewhere():
+    for name, p in load_pairs(PAIRS_YAML).items():
+        want = (name in ON, 300, 1200)
+        assert (p.chunking, p.chunk_pause_ms, p.chunk_min_ms) == want, name
