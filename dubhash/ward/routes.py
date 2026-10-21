@@ -42,10 +42,12 @@ from dubhash.config.settings import Settings
 from dubhash.ward.service import (
     DEFAULT_LANGS,
     LANGS,
+    PRESETS,
     WardProviders,
     WardSession,
     WardUtterance,
     build_ward_providers,
+    lang_label,
     ward_pair,
 )
 
@@ -104,6 +106,9 @@ async def ward_page(request: Request) -> HTMLResponse:
             "langs": langs,
             "default_a": DEFAULT_LANGS[0],
             "default_b": DEFAULT_LANGS[1],
+            "presets": [
+                {"a": a, "b": b, "label": f"{lang_label(a)} ⇄ {lang_label(b)}"} for a, b in PRESETS
+            ],
             "ws_token": make_ws_token(settings),
         },
     )

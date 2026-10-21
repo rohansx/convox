@@ -53,7 +53,7 @@ from dubhash.api.schemas import (
     LoopbackCallResponse,
     validation_error,
 )
-from dubhash.config.pairs import PairConfig, find_pair
+from dubhash.config.pairs import PairConfig, find_pair, orient
 from dubhash.config.settings import Settings
 from dubhash.join.tokens import verify_join_token
 from dubhash.legs.webrtc import WebRtcLeg
@@ -95,8 +95,9 @@ def create_loopback_call(
 ) -> LoopbackCallResponse:
     settings: Settings = request.app.state.settings
     if req.pair is not None:
-        pair = pairs.get(req.pair)
-        if pair is None or (pair.a.lang, pair.b.lang) != (req.a_lang, req.b_lang):
+        named = pairs.get(req.pair)
+        pair = orient(named, req.a_lang, req.b_lang) if named is not None else None
+        if pair is None:
             raise ApiError(
                 422, "unsupported_pair", f"no pair {req.pair!r} for {req.a_lang}-{req.b_lang}"
             )

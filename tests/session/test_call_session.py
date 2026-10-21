@@ -14,7 +14,7 @@ from dubhash.config.pairs import load_pairs
 from dubhash.legs.fake import FakeLeg
 from dubhash.providers.fakes import EnergyVAD, FakeMT, FakeSTT, FakeTTS
 from dubhash.session.call_session import CallSession
-from dubhash.session.prompts import line_check_text
+from dubhash.session.prompts import line_check_text, opening_text
 from dubhash.session.providers import Providers
 from tests.audio_fixtures import conversation, speech
 from tests.floor_helpers import RecordingBus
@@ -288,3 +288,63 @@ async def test_record_flag_reaches_the_writer():
     await drive_lockstep(session, legs, clock, {"a": pcm})
     await session.wait_closed()
     assert w.records == [True] and w.finished == 1
+
+
+# --- opening line: marked, and holds that leg's interpretation playback (L4) ----------
+
+
+def _opening_ms(tts: FakeTTS, side: str) -> int:
+    other = "b" if side == "a" else "a"
+    return len(opening_text(PAIR.side(side).lang, PAIR.side(other).lang)) * tts.ms_per_char
+
+
+async def test_opening_is_marked_and_translation_waits_until_it_has_played():
+    tts = {"a": FakeTTS(), "b": FakeTTS(ms_per_char=90)}  # b's opening: ~4 s
+    session, legs, clock, bus = make(prov=providers(tts=tts), opening_line=True)
+    await attach_both(session, legs)
+    pcm = conversation([("silence", 300), ("speech", 1200), ("silence", 8000)])
+    await drive_lockstep(session, legs, clock, {"a": pcm})
+    await session.wait_closed()
+    marks = [e[1][0] for e in legs["b"].log if e[0] == "mark"]
+    assert marks == ["opening", "a:0"]
+    (turn,) = session.turn_log.turns
+    b_opening_ms = _opening_ms(tts["b"], "b")
+    assert turn.t_eou < b_opening_ms  # ready while B still heard the opening
+    assert turn.t_play_start >= b_opening_ms  # ... but played only after it
+    assert turn.clipped_ms is None
+
+
+async def test_speech_during_the_opening_is_interpreted_not_dropped():
+    """The opening takes time to synthesise and play; the caller may start talking."""
+    session, legs, clock, bus = make(opening_line=True)
+    for t in session.providers.tts.values():
+        t.ttfb_ms, t.clock = 800, clock  # type: ignore[attr-defined]
+    await attach_both(session, legs)
+    pcm = conversation([("silence", 200), ("speech", 1200), ("silence", 9000)])
+    await drive_lockstep(session, legs, clock, {"a": pcm})
+    await session.wait_closed()
+    (turn,) = session.turn_log.turns
+    assert turn.t_speech_start <= 300  # heard from the start, during synthesis
+    assert turn.t_play_start >= 800 + _opening_ms(session.providers.tts["b"], "b")
+
+
+class _NoOpeningMarkLeg(FakeLeg):
+    async def mark(self, tag: str) -> None:
+        if tag == "opening":
+            self.log.append(("mark", (tag,)))  # sent, but the far end never acks it
+        else:
+            await super().mark(tag)
+
+
+async def test_opening_mark_that_never_returns_times_out():
+    from dubhash.session.floor import PROMPT_GRACE_MS
+
+    session, legs, clock, bus = make(opening_line=True)
+    legs["b"] = _NoOpeningMarkLeg("b", clock=clock)
+    await attach_both(session, legs)
+    pcm = conversation([("silence", 300), ("speech", 1200), ("silence", 9000)])
+    await drive_lockstep(session, legs, clock, {"a": pcm})
+    await session.wait_closed()
+    (turn,) = session.turn_log.turns
+    limit = _opening_ms(session.providers.tts["b"], "b") + PROMPT_GRACE_MS
+    assert limit <= turn.t_play_start <= limit + 100

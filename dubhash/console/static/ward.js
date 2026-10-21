@@ -337,6 +337,15 @@
     onLangChange('a');
   };
 
+  document.querySelectorAll('[data-preset-a]').forEach((btn) => {
+    btn.onclick = () => {
+      selects.a.value = btn.dataset.presetA;
+      selects.b.value = btn.dataset.presetB;
+      for (const s of ['a', 'b']) selects[s].dataset.prev = selects[s].value;
+      onLangChange('a');
+    };
+  });
+
   try {
     const saved = JSON.parse(localStorage.getItem('dubhash.ward.langs') || 'null');
     if (Array.isArray(saved) && saved[0] !== saved[1]) {

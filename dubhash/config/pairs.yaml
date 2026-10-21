@@ -51,7 +51,23 @@ hi-ta:
   spec_mt: false
   spec_after_ms: 200
 
+# mr-hi (L4): the pivot on BOTH sides (Sarvam speech->English, then en->hi / en->mr) plus
+# early_final_ms 200. Live heard first-audio p50/p95 2500/3240 (mr->hi) and 2480/2580
+# (hi->mr) direct -> 1580/1940 and 1540/1720; numbers kept (the direct route turned "सहा
+# वाजता" into "six बजे"). Direct mr<->hi MT takes ~1.3 s, about two en hops (as hi->kn, L1).
+# Marathi quality still needs a native speaker's check. The direct route is mr-hi-direct.
 mr-hi:
+  a: { lang: mr-IN, stt: sarvam-translate, mt_src: en-IN, tts: bulbul, voice_m: "bulbul:mr-male-1", voice_f: "bulbul:mr-female-1" }
+  b: { lang: hi-IN, stt: sarvam-translate, mt_src: en-IN, tts: bulbul, voice_m: "bulbul:hi-male-1", voice_f: "bulbul:hi-female-1" }
+  eou_ms: 550
+  backchannel_max_ms: 600
+  barge_in_min_ms: 1200
+  duck_db: -14
+  spec_mt: false
+  spec_after_ms: 200
+  early_final_ms: 200
+
+mr-hi-direct:
   a: { lang: mr-IN, stt: sarvam, tts: bulbul, voice_m: "bulbul:mr-male-1", voice_f: "bulbul:mr-female-1" }
   b: { lang: hi-IN, stt: sarvam, tts: bulbul, voice_m: "bulbul:hi-male-1", voice_f: "bulbul:hi-female-1" }
   eou_ms: 550
@@ -61,10 +77,12 @@ mr-hi:
   spec_mt: false
   spec_after_ms: 200
 
-# Stage demo (QR phones, /join): a Marathi speaker with an English one. Direct routes, not
-# measured yet; early_final off until it is.
+# Marathi <-> English (L4). The Marathi side's STT outputs English (sarvam-translate), which
+# is already the listener's language, so the pipeline skips MT (t_mt = t_stt_final). The
+# English side is Sarvam STT in en-IN, then en->mr MT. find_pair also serves en-IN on side a
+# (it swaps sides), so there is no en-mr entry.
 mr-en:
-  a: { lang: mr-IN, stt: sarvam, tts: bulbul, voice_m: "bulbul:mr-male-1", voice_f: "bulbul:mr-female-1" }
+  a: { lang: mr-IN, stt: sarvam-translate, mt_src: en-IN, tts: bulbul, voice_m: "bulbul:mr-male-1", voice_f: "bulbul:mr-female-1" }
   b: { lang: en-IN, stt: sarvam, tts: bulbul, voice_m: "bulbul:en-male-1", voice_f: "bulbul:en-female-1" }
   eou_ms: 550
   backchannel_max_ms: 600
@@ -72,6 +90,7 @@ mr-en:
   duck_db: -14
   spec_mt: false
   spec_after_ms: 200
+  early_final_ms: 200
 
 # all-fake pair for tests and the day-2 FakeLeg pipeline
 fake-fake:

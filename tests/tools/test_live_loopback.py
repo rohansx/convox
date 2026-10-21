@@ -125,7 +125,7 @@ def test_stages_unchanged_for_sequential_pipeline():
 async def test_join_path_uses_the_qr_token_sockets(server):
     """--join: the call is started from the host page (POST /join) and both tabs connect
     with the token from the QR URLs, like the stage phones."""
-    utts = ll.fake_utts(ll.script_for("mr-IN", "hi-IN")[:2])
+    utts = ll.fake_utts(ll.SCRIPTS[ll.script_for("mr-IN", "hi-IN")].lines[:2])
     opts = ll.Opts(
         a_lang="mr-IN", b_lang="hi-IN", join=True, opening="skip", pause_ms=300,
         quiet_ms=400, turn_timeout_s=6,
@@ -138,10 +138,28 @@ async def test_join_path_uses_the_qr_token_sockets(server):
     assert all(r.heard_ms is not None for r in result["rows"])
 
 
-def test_scripts_and_voices_follow_the_languages():
-    mr = ll.script_for("mr-IN", "hi-IN")
-    assert len(mr) >= 6 and mr[0].side == "a" and mr[1].side == "b"
-    assert ll.script_for("hi-IN", "kn-IN") == ll.SCRIPT
-    assert [ln.side for ln in ll.script_for("mr-IN", "en-IN")] == ["a", "b"] * 3
-    assert ll.voice_for("a", "mr-IN") == "bulbul:mr-male-1"
-    assert ll.voice_for("b", "hi-IN") == "bulbul:hi-female-1"
+def test_scripts_cover_the_marathi_pairs():
+    assert ll.SCRIPT == ll.SCRIPTS["delivery-hi-kn"].lines
+    for key, langs in {
+        "delivery-hi-kn": ("hi-IN", "kn-IN"),
+        "delivery-mr-hi": ("mr-IN", "hi-IN"),
+        "clinic-mr-en": ("mr-IN", "en-IN"),
+    }.items():
+        sc = ll.SCRIPTS[key]
+        assert (sc.a_lang, sc.b_lang) == langs
+        assert {ln.side for ln in sc.lines} == {"a", "b"}
+        assert set(sc.voices) == {"a", "b"}
+        assert ll.script_for(*langs) == key
+    # the Marathi lines are ours: flagged for a native speaker
+    for key in ("delivery-mr-hi", "clinic-mr-en"):
+        assert all(ln.review for ln in ll.SCRIPTS[key].lines if ln.side == "a")
+    assert ll.script_for("ta-IN", "hi-IN") is None
+
+
+def test_number_check_against_the_scripted_line():
+    row = ll.TurnRow(0, "a", "ओटीपी 4729 आहे, फ्लॅट 302.", n_start=0, n_voice_end=1)
+    row.server = [{"src_text": "OTP is 4729, flat 302.", "tgt_text": "ओटीपी 4729 है, फ्लैट 32."}]
+    assert ll.numbers_check(row) == "numbers differ: 302 missing in translation"
+    row.server[0]["tgt_text"] = "ओटीपी 4729 है, फ्लैट 302."
+    assert ll.numbers_check(row) is None
+    assert ll.numbers_check(ll.TurnRow(1, "b", "x", n_start=0, n_voice_end=1)) is None

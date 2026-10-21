@@ -16,6 +16,9 @@ Decisions where the spec is open:
   and Western thousands grouping removed) as a multiset: every source number must appear
   in the translation. Extra numbers in the translation are not flagged (MT may turn a
   number word into digits). Number words are not parsed.
+- MT translates from the side's mt_lang: with a pivot side (stt sarvam-translate, mt_src
+  en-IN) the transcript is English. When that already is the target language, MT is
+  skipped (mt_ms = 0).
 """
 
 from __future__ import annotations
@@ -32,7 +35,7 @@ from typing import TYPE_CHECKING, Any, Literal
 
 from dubhash.audio.frames import SAMPLE_RATE, SAMPLE_WIDTH, Reframer
 from dubhash.clock import Clock, MonotonicClock
-from dubhash.config.pairs import PairConfig, SideConfig, load_pairs
+from dubhash.config.pairs import PairConfig, SideConfig, find_pair, load_pairs
 from dubhash.config.settings import PACKAGE_DIR
 from dubhash.interp.contracts import MT, STT, TTS, STTStream
 from dubhash.interp.gender import THRESHOLD_HZ, estimate_f0
@@ -44,7 +47,10 @@ if TYPE_CHECKING:
 
 Gender = Literal["m", "f"]
 
-DEFAULT_LANGS: tuple[str, str] = ("mr-IN", "hi-IN")
+# Quick choices on the ward page (side A, side B); the first is the default. A Marathi
+# speaker with a Hindi or an English speaker (L4).
+PRESETS: tuple[tuple[str, str], ...] = (("mr-IN", "hi-IN"), ("mr-IN", "en-IN"))
+DEFAULT_LANGS: tuple[str, str] = PRESETS[0]
 MAX_UTTERANCE_S = 60  # a press longer than this is truncated (stuck button, pocket)
 GENDER_DEFAULT: Gender = "m"
 
@@ -86,8 +92,9 @@ def _default_side(lang: str) -> SideConfig:
 
 def ward_pair(lang_a: str, lang_b: str, pairs: dict[str, PairConfig] | None = None) -> PairConfig:
     """A PairConfig for two picker languages. Ward mode lets the nurse pick any two, so
-    each side's config (stt, tts, voices) comes from the first non-fake pair in
-    pairs.yaml that speaks that language, else from the provider convention."""
+    each side's config (stt, tts, voices) comes from the pairs.yaml entry for the two
+    languages (either orientation, find_pair), else from the first non-fake pair that
+    speaks that language, else from the provider convention."""
     for lang in (lang_a, lang_b):
         if lang not in LANGS:
             raise ValueError(f"unsupported language {lang!r}")
@@ -95,14 +102,7 @@ def ward_pair(lang_a: str, lang_b: str, pairs: dict[str, PairConfig] | None = No
         raise ValueError("both sides have the same language")
     if pairs is None:
         pairs = load_pairs(PACKAGE_DIR / "config" / "pairs.yaml")
-    exact = next(
-        (
-            p
-            for p in pairs.values()
-            if "fake" not in p.key and (p.a.lang, p.b.lang) == (lang_a, lang_b)
-        ),
-        None,
-    )
+    exact = find_pair(pairs, lang_a, lang_b)
     if exact is not None:
         return exact
     known: dict[str, SideConfig] = {}
@@ -356,8 +356,12 @@ class WardUtterance:
         )
         if not src_text:
             return turn, _empty()
-        turn.tgt_text = (await s.mt.translate(src_text, src_lang, tgt_lang)).strip()
-        t_mt = clock.now_ms()
+        mt_lang = s.pair.side(self.side).mt_lang  # what the STT outputs (pivot: en-IN)
+        if mt_lang == tgt_lang:  # e.g. Marathi speech -> English final for English: no MT
+            turn.tgt_text, t_mt = src_text, t_stt
+        else:
+            turn.tgt_text = (await s.mt.translate(src_text, mt_lang, tgt_lang)).strip()
+            t_mt = clock.now_ms()
         turn.timings["mt_ms"] = t_mt - t_stt
         turn.numbers = extract_numbers(src_text)
         turn.warning = check_numbers(src_text, turn.tgt_text)

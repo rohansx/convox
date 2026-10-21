@@ -2,8 +2,12 @@
 sentences") and the line check ("aap line par hain?"). Each is in the listener's own
 language and is synthesised with that side's TTS voice.
 
-Only the Hindi opening line comes from the spec (docs/tech-spec/security-privacy.md), and
-the Kannada opening's first sentence. Everything else here is an unverified draft.
+The opening line is ONE short sentence (about 3 s of Bulbul speech; the two-sentence
+version ran 7-9 s and held up the first translation, L2/L4). Live Bulbul lengths (L4):
+hi 3.7 s, mr 3.4-3.7 s, en 3.2 s, kn 4.3 s. The Hindi line folds the spec's "chhote vaakya
+boliye" into a shortened form of its first sentence; the Kannada line is the spec's
+sentence (docs/tech-spec/security-privacy.md). Everything else is an unverified draft.
+With record=true the "text is being saved" sentence is appended (about 3 s more).
 TODO(PQ5): native-speaker and counsel review of every kn/ta/mr string below, and of the
 proposed "automatic interpreter / press 0" disclosure sentence (open question G17).
 """
@@ -21,16 +25,18 @@ class _Lang:
     record: str  # appended when the call's text is being kept (record=true)
 
 
+_EN_NAMES = {"hi": "Hindi", "kn": "Kannada", "ta": "Tamil", "mr": "Marathi", "en": "English"}
+
 _LANGS: dict[str, _Lang] = {
     "hi": _Lang(
-        opening="aap {self} mein boliye, saamne wala {other} mein sunega. chhote vaakya boliye.",
+        opening="aap {self} mein chhote vaakya boliye, woh {other} mein sunenge.",
         names={"hi": "hindi", "kn": "kannada", "ta": "tamil", "mr": "marathi", "en": "angrezi"},
         line_check="aap line par hain?",
         record=" is baatcheet ka text save kiya ja raha hai.",  # TODO(PQ5): verify wording
     ),
-    # TODO(PQ5): verify. First sentence is the spec's; the second is a draft.
+    # TODO(PQ5): verify. The spec's sentence; the "short sentences" hint is not in it yet.
     "kn": _Lang(
-        opening="ನೀವು {self} ಮಾತನಾಡಿ, ಅವರು {other} ಕೇಳುತ್ತಾರೆ. ಚಿಕ್ಕ ವಾಕ್ಯಗಳಲ್ಲಿ ಮಾತನಾಡಿ.",
+        opening="ನೀವು {self} ಮಾತನಾಡಿ, ಅವರು {other} ಕೇಳುತ್ತಾರೆ.",
         names={
             "kn": "ಕನ್ನಡದಲ್ಲಿ",
             "hi": "ಹಿಂದಿಯಲ್ಲಿ",
@@ -43,7 +49,7 @@ _LANGS: dict[str, _Lang] = {
     ),
     # TODO(PQ5): verify the whole Tamil set.
     "ta": _Lang(
-        opening="நீங்கள் {self} பேசுங்கள், அவர்கள் {other} கேட்பார்கள். சிறிய வாக்கியங்களில் பேசுங்கள்.",
+        opening="நீங்கள் {self} பேசுங்கள், அவர்கள் {other} கேட்பார்கள்.",
         names={
             "ta": "தமிழில்",
             "hi": "இந்தியில்",
@@ -54,9 +60,10 @@ _LANGS: dict[str, _Lang] = {
         line_check="நீங்கள் லைனில் இருக்கிறீர்களா?",
         record=" இந்த உரையாடலின் உரை சேமிக்கப்படுகிறது.",
     ),
-    # TODO(PQ5): verify the whole Marathi set.
+    # TODO(PQ5): native Marathi review of the whole set ("speak short sentences in Marathi,
+    # the other person will hear it in Hindi/English").
     "mr": _Lang(
-        opening="तुम्ही {self} बोला, समोरची व्यक्ती {other} ऐकेल. छोटी वाक्ये बोला.",
+        opening="{self} छोटी वाक्ये बोला, ते {other} ऐकतील.",
         names={
             "mr": "मराठीत",
             "hi": "हिंदीत",
@@ -67,9 +74,13 @@ _LANGS: dict[str, _Lang] = {
         line_check="तुम्ही लाइनवर आहात का?",
         record=" या संभाषणाचा मजकूर जतन केला जात आहे.",
     ),
+    "en": _Lang(
+        opening="Speak short {self} sentences; they hear {other}.",
+        names=_EN_NAMES,
+        line_check="Are you still on the line?",
+        record=" The text of this conversation is being saved.",
+    ),
 }
-
-_EN_NAMES = {"hi": "Hindi", "kn": "Kannada", "ta": "Tamil", "mr": "Marathi", "en": "English"}
 
 
 def _base(lang: str) -> str:
@@ -81,12 +92,8 @@ def opening_text(lang: str, other_lang: str, *, record: bool = False) -> str:
     (BCP-47, e.g. "hi-IN"). Unknown languages fall back to English."""
     me, them = _base(lang), _base(other_lang)
     spec = _LANGS.get(me)
-    if spec is None:
-        text = (
-            f"Please speak in {_EN_NAMES.get(me, me)}; the other person will hear "
-            f"{_EN_NAMES.get(them, them)}. Use short sentences."
-        )
-        return text + (" The text of this conversation is being saved." if record else "")
+    if spec is None:  # English, naming the languages in English
+        spec = _LANGS["en"]
     text = spec.opening.format(
         self=spec.names.get(me, me), other=spec.names.get(them, _EN_NAMES.get(them, them))
     )

@@ -109,6 +109,19 @@ def test_loopback_call_picks_a_named_pair():
     assert env.sessions[1].pair.key == "hi-kn"
 
 
+def test_loopback_named_pair_in_the_other_orientation_is_swapped():
+    env = Env()
+    r = env.client.post(
+        "/loopback/calls", json={"a_lang": "kn-IN", "b_lang": "hi-IN", "pair": "hi-kn-direct"}
+    )
+    assert r.status_code == 201, r.text
+    pair = env.sessions[0].pair
+    assert pair.key == "hi-kn-direct" and (pair.a.lang, pair.b.lang) == ("kn-IN", "hi-IN")
+    env.client.post("/loopback/calls", json={"a_lang": "kn-IN", "b_lang": "hi-IN"})
+    pair = env.sessions[1].pair
+    assert pair.key == "hi-kn" and pair.b.stt == "sarvam-translate"  # the Hindi side's pivot
+
+
 @pytest.mark.parametrize(
     "body",
     [

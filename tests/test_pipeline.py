@@ -629,3 +629,40 @@ async def test_mt_source_language_defaults_to_side_lang():
     await interp.run(feed(pcm, clock))
     await interp.aclose()
     assert mt.langs == [("hi-IN", "kn-IN")]
+
+
+# --- MT skip: the STT already speaks the target language (e.g. mr speech -> English) ----
+
+SKIP_PAIR = dataclasses.replace(
+    PAIR,
+    key="mr-en-test",
+    a=dataclasses.replace(PAIR.a, lang="mr-IN", mt_src="en-IN"),
+    b=dataclasses.replace(PAIR.b, lang="en-IN"),
+)
+
+
+@pytest.mark.parametrize("early_final_ms", [0, 200])
+async def test_mt_skipped_when_mt_lang_is_the_target_lang(early_final_ms):
+    clock = FakeClock()
+    mt = FakeMT(delay_ms=700, clock=clock)
+    pair = dataclasses.replace(SKIP_PAIR, early_final_ms=early_final_ms)
+    interp, sink = make(clock, stt=FakeSTT(script=["doctor I have fever"]), mt=mt, pair=pair)
+    pcm = conversation([("silence", 300), ("speech", 1500), ("silence", 800)])
+    async with asyncio.timeout(5):  # a 700 ms MT call on a FakeClock that stopped never ends
+        await interp.run(feed(pcm, clock))
+    await interp.aclose()
+    (tr,) = sink.translations
+    assert mt.calls == 0  # no vendor call
+    assert tr.src_text == tr.tgt_text == "doctor I have fever"
+    assert tr.timings["t_mt"] == tr.timings["t_stt_final"]
+
+
+async def test_mt_still_called_in_the_other_direction_of_a_skip_pair():
+    clock = FakeClock()
+    mt = _SpyMT()
+    interp, sink = make(clock, stt=FakeSTT(script=["take this tablet"]), mt=mt, pair=SKIP_PAIR,
+                        side="b")  # fmt: skip
+    pcm = conversation([("silence", 300), ("speech", 1500), ("silence", 800)])
+    await interp.run(feed(pcm, clock))
+    await interp.aclose()
+    assert mt.langs == [("en-IN", "mr-IN")]
