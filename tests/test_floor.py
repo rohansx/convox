@@ -4,7 +4,14 @@
 from __future__ import annotations
 
 from dubhash.audio.frames import FRAME_BYTES
-from tests.floor_helpers import FeedAudio, Rig, check_all_ended, frames_of, settle
+from tests.floor_helpers import (
+    LINE_CHECK_MARKER,
+    FeedAudio,
+    Rig,
+    check_all_ended,
+    frames_of,
+    settle,
+)
 
 # --- basic flow ------------------------------------------------------------------------
 
@@ -292,4 +299,103 @@ async def test_trace_6_3_cross_direction_queueing_and_order():
     await rig.finish()
     assert (fc.state, list(fc.queue)) == ("IDLE", [])
     assert rig.legs["a"].entries("clear") == [] and rig.legs["b"].entries("clear") == []
+    check_all_ended(rig)
+
+
+# --- silence ticks ----------------------------------------------------------------------
+
+
+def line_checks(rig: Rig, side: str) -> int:
+    return sum(1 for e in rig.legs[side].entries("send") if e.marker == LINE_CHECK_MARKER)
+
+
+async def test_queue_non_empty_both_silent_4s_force_plays_head():
+    rig = Rig()
+    fc = rig.fc
+    await fc.on_speech_start("b")
+    a1 = rig.tr("a", 1)
+    await rig.hand(a1)
+    await rig.advance(500)
+    await fc.on_speech_end("b")
+    await rig.advance(3950)
+    assert fc.state == "B_SPEAKING" and list(fc.queue) == [a1]
+    await rig.advance(50)
+    assert fc.state == "PLAYING_AB" and fc.playing is a1
+    await rig.finish()
+    check_all_ended(rig)
+
+
+async def test_no_force_play_while_anyone_speaks():
+    rig = Rig()
+    fc = rig.fc
+    await fc.on_speech_start("b")
+    a1 = rig.tr("a", 1)
+    await rig.hand(a1)
+    await rig.advance(6000)  # B is still talking
+    assert fc.state == "B_SPEAKING" and list(fc.queue) == [a1]
+    await fc.on_speech_start("a")
+    await fc.on_speech_end("b")
+    await rig.advance(6000)  # A is talking now
+    assert list(fc.queue) == [a1]
+    await fc.on_speech_end("a")
+    await rig.advance(4000)
+    assert fc.playing is a1
+
+
+async def test_10s_total_silence_plays_line_check_to_both_legs_once():
+    rig = Rig()
+    fc = rig.fc
+    await rig.advance(9950)
+    assert line_checks(rig, "a") == 0 and line_checks(rig, "b") == 0
+    await rig.advance(50)
+    assert line_checks(rig, "a") == 3 and line_checks(rig, "b") == 3
+    assert fc.state == "IDLE"
+    await rig.advance(25000)  # same silence period: once only
+    assert line_checks(rig, "a") == 3
+    await fc.on_speech_start("a")
+    await rig.advance(500)
+    await fc.on_speech_end("a")
+    await fc.on_utterance_discarded("a")
+    await rig.advance(10000)
+    assert line_checks(rig, "a") == 6 and line_checks(rig, "b") == 6
+
+
+async def test_no_line_check_while_playing_or_queued():
+    rig = Rig()
+    feed = FeedAudio()
+    a1 = rig.tr("a", 1, audio=feed)
+    feed.push(*frames_of(1, 2))
+    await rig.hand(a1)
+    await rig.advance(12000)  # TTS stalled: still playing
+    assert line_checks(rig, "a") == 0 and line_checks(rig, "b") == 0
+    feed.end()
+    await rig.step()
+    rig.clock.advance(100)
+    await rig.finish()
+    await rig.advance(9900)
+    assert line_checks(rig, "b") == 0  # silence is counted from the end of playback
+    await rig.advance(100)
+    assert line_checks(rig, "b") == 3
+
+
+async def test_no_line_check_without_a_prompt_source():
+    rig = Rig()
+    rig.fc = rig.make(line_check=None)
+    await rig.advance(11000)
+    assert rig.log == []
+
+
+async def test_trace_6_4_held_floor_rescued_by_4s_tick():
+    rig = Rig()
+    fc = rig.fc
+    await fc.on_speech_start("b")
+    a1 = rig.tr("a", 1)
+    await rig.hand(a1)  # 1: the listener holds the floor
+    assert (fc.state, list(fc.queue)) == ("B_SPEAKING", [a1])
+    await rig.advance(700)
+    await fc.on_speech_end("b")  # 2: the discard event never comes
+    assert (fc.state, list(fc.queue)) == ("B_SPEAKING", [a1])
+    await rig.advance(4000)  # 3
+    assert (fc.state, list(fc.queue)) == ("PLAYING_AB", [])
+    await rig.finish()
     check_all_ended(rig)

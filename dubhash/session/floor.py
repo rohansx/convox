@@ -96,6 +96,11 @@ class FloorController:
         self._bg: set[asyncio.Task[Any]] = set()
         self._speaking: set[Side] = set()
         self._barge_since: int | None = None  # listener speech start during playback
+        now = clock.now_ms()
+        self._last_speech = now  # last speech start/end on either leg
+        self._quiet_since = now  # last speech or end of playback
+        self._line_checked = False  # once per silence period
+        self._line_tasks: dict[Side, asyncio.Task[None]] = {}
 
     # --- public view ---------------------------------------------------------------------
 
@@ -159,6 +164,7 @@ class FloorController:
             if self._bypass:
                 return
             self._speaking.add(side)
+            self._activity()
             if self._state == "IDLE":
                 self._set_state(_speaking(side))
             elif self._pb is not None and side == self._pb.listener:
@@ -167,6 +173,9 @@ class FloorController:
     async def on_speech_end(self, side: Side) -> None:
         async with self._lock:
             self._speaking.discard(side)
+            if self._bypass:
+                return
+            self._activity()
             if self._pb is not None and side == self._pb.listener:
                 self._barge_since = None  # under barge_in_min_ms: never interrupts
 
@@ -192,8 +201,7 @@ class FloorController:
             if pb is None or side != pb.listener or tag != pb.tr.tag:
                 return  # stale (e.g. after a clear) or foreign
             await self._stop_task(pb)
-            self._pb = None
-            self._barge_since = None
+            self._playback_ended()
             self._end(pb.tr, clipped_ms=bytes_to_ms(pb.sent) if pb.failed else None)
             if not self._drain():
                 self._set_state("IDLE")
@@ -218,8 +226,51 @@ class FloorController:
                 and now - self._barge_since >= self.barge_in_min_ms
             ):
                 await self._barge_in(pb.listener)
+            if self._pb is not None or self._speaking:
+                return
+            if self._queue and now - self._last_speech >= self.force_play_silence_ms:
+                self._drain()  # rule 5: rescue a held floor
+            elif (
+                not self._queue
+                and not self._line_checked
+                and now - self._quiet_since >= self.line_check_silence_ms
+            ):
+                self._line_checked = True
+                self._start_line_check()
 
     # --- internals (call with the lock held) ---------------------------------------------
+
+    def _activity(self) -> None:
+        self._last_speech = self._quiet_since = self._clock.now_ms()
+        self._line_checked = False
+
+    def _start_line_check(self) -> None:
+        if self._line_check is None:
+            return
+        for side in self._legs:
+            self._line_tasks[side] = self._spawn(self._send_line_check(side))
+
+    async def _send_line_check(self, side: Side) -> None:
+        assert self._line_check is not None
+        leg = self._legs[side]
+        try:
+            async for chunk in self._line_check(side):
+                await leg.send(chunk)
+        except asyncio.CancelledError:
+            raise
+        except Exception as e:
+            log.warning("floor.line_check_error", extra={"side": side, "error": repr(e)})
+
+    def _stop_line_check(self, side: Side) -> None:
+        task = self._line_tasks.pop(side, None)
+        if task is not None:
+            task.cancel()
+
+    def _playback_ended(self) -> None:
+        self._pb = None
+        self._barge_since = None
+        self._quiet_since = self._clock.now_ms()
+        self._line_checked = False
 
     async def _barge_in(self, side: Side) -> None:
         """Rule 4: the listener spoke past barge_in_min_ms. Clear, clip, take the floor."""
@@ -242,8 +293,7 @@ class FloorController:
         it in its buffer, so this is an upper bound on what the listener heard.
         """
         await self._stop_task(pb)
-        self._pb = None
-        self._barge_since = None
+        self._playback_ended()
         with contextlib.suppress(Exception):
             await self._legs[pb.listener].clear()
         clipped_ms = bytes_to_ms(pb.sent)
@@ -257,6 +307,7 @@ class FloorController:
         tr = self._queue.popleft()
         pb = _Playback(tr, other(tr.side))
         self._pb = pb
+        self._stop_line_check(pb.listener)
         # a listener already talking when playback starts is talking over it
         self._barge_since = self._clock.now_ms() if pb.listener in self._speaking else None
         self._set_state(_playing(tr.side))
