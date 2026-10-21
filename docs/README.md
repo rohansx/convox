@@ -97,6 +97,7 @@ Decision 3's original weekday labels (Tue/Thu) were wrong: 21 Oct 2026 is a Wedn
 |---|---|
 | [repo-structure.md](engineering/repo-structure.md) | Target module layout, responsibilities, owners, where each interface and fake lives, dependency rules |
 | [dev-setup.md](engineering/dev-setup.md) | From a clean laptop to FakeLeg and WebRTC loopback runs; env vars; real-phone smoke test |
+| [exotel-setup.md](engineering/exotel-setup.md) | Exotel values, Voicebot applet with the dynamic URL, `tools/exotel_check.py`, region notes |
 | [testing-strategy.md](engineering/testing-strategy.md) | Day 2 fakes rule, unit tests, bench, rating, loopback, PSTN scenarios, chaos tests, CI |
 | [latency-engineering.md](engineering/latency-engineering.md) | Stage budget, latency techniques (v1/v2), PSTN-only measurement, timestamps to log |
 | [evaluation-and-metrics.md](engineering/evaluation-and-metrics.md) | v1 metrics and targets, corpus, rating process, what we publish, honest limits |

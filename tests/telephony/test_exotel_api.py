@@ -72,3 +72,32 @@ def test_parse_custom_field():
     assert parse_custom_field("c_abc:z") is None
     assert parse_custom_field("") is None
     assert parse_custom_field(None) is None
+
+
+async def test_dial_sends_transactional_call_type_and_time_limit():
+    seen: list[httpx.Request] = []
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        seen.append(req)
+        return httpx.Response(200, json={"Call": {"Sid": "s"}})
+
+    d = make(handler)
+    await d.dial("c_abc", "b", "+919812345678", "+918047000000", "wss://e")
+    form = parse_qs(seen[0].content.decode())
+    assert form["CallType"] == ["trans"]
+    assert form["TimeLimit"] == ["3600"]
+
+
+def test_build_dialer_defaults_host_to_singapore_region():
+    from dubhash.config.settings import Settings
+    from dubhash.telephony import build_dialer
+
+    s = Settings(
+        _env_file=None,
+        exotel_account_sid="rohan28",
+        exotel_api_key="k",
+        exotel_api_token="t",
+        exotel_flow_url="http://my.exotel.com/rohan28/exoml/start_voice/1",
+    )
+    d = build_dialer("exotel", s)
+    assert d._url == "https://api.exotel.com/v1/Accounts/rohan28/Calls/connect.json"

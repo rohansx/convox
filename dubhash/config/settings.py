@@ -36,7 +36,7 @@ class Settings(BaseSettings):
     exotel_account_sid: str = ""
     exotel_api_key: str = ""
     exotel_api_token: str = ""
-    exotel_api_host: str = ""
+    exotel_api_host: str = "api.exotel.com"  # Singapore; India: api.in.exotel.com
     exotel_exophone: str = ""
     exotel_flow_url: str = ""
     exotel_dialin_number: str = ""
@@ -58,6 +58,12 @@ class Settings(BaseSettings):
     tts_impl: Literal["real", "fake"] = "fake"
     enable_webrtc_leg: bool = True
     bench_realtime: bool = False
+
+    @field_validator("exotel_api_host")
+    @classmethod
+    def _exotel_host(cls, v: str) -> str:
+        v = v.strip().removeprefix("https://").removeprefix("http://").rstrip("/")
+        return v or "api.exotel.com"
 
     @field_validator("pairs_file")
     @classmethod

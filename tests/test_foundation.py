@@ -64,3 +64,9 @@ def test_relative_pairs_file_resolves_from_any_cwd(tmp_path, monkeypatch):
     for rel in ("config/pairs.yaml", "dubhash/config/pairs.yaml"):
         s = Settings(_env_file=None, pairs_file=rel)
         assert s.pairs_file.exists(), rel
+
+
+def test_exotel_host_empty_or_with_scheme_normalises():
+    assert Settings(_env_file=None, exotel_api_host="").exotel_api_host == "api.exotel.com"
+    h = Settings(_env_file=None, exotel_api_host="https://api.in.exotel.com/").exotel_api_host
+    assert h == "api.in.exotel.com"

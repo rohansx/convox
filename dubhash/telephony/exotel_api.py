@@ -14,6 +14,9 @@ What Exotel documents (checked 2026-10-21):
     chars, echoed in start.custom_parameters) or "an HTTPS endpoint that dynamically
     returns the WSS URL" as JSON {"url": "wss://..."}.
 
+Regions (developer.exotel.com/docs/voice): Singapore accounts use api.exotel.com, India
+accounts api.in.exotel.com. EXOTEL_API_HOST defaults to api.exotel.com.
+
 How the per-leg ws URL reaches the applet (open question material):
   Calls/connect has no parameter that sets the applet's URL, and a static URL cannot carry
   a per-call `call` id. So the flow's Voicebot applet is configured with the dynamic
@@ -76,11 +79,15 @@ class ExotelDialer:
         status_callback: Callable[[str, Side], str] | None = None,
         client: httpx.AsyncClient | None = None,
         ring_timeout_s: int = 25,
+        time_limit_s: int = 3600,
+        call_type: str = "trans",
     ) -> None:
         self.account_sid = account_sid
         self.flow_url = flow_url
         self.status_callback = status_callback
         self.ring_timeout_s = ring_timeout_s
+        self.time_limit_s = time_limit_s
+        self.call_type = call_type
         self._auth = (api_key, api_token)
         self._url = f"https://{_host(host)}/v1/Accounts/{account_sid}/Calls/connect.json"
         self._client = client or httpx.AsyncClient(timeout=DEFAULT_TIMEOUT_S)
@@ -92,6 +99,8 @@ class ExotelDialer:
             "Url": self.flow_url,
             "CustomField": f"{call_id}:{side}",
             "TimeOut": str(self.ring_timeout_s),
+            "TimeLimit": str(self.time_limit_s),
+            "CallType": self.call_type,
         }
         if self.status_callback is not None:
             form["StatusCallback"] = self.status_callback(call_id, side)
