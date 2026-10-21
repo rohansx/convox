@@ -40,12 +40,15 @@ Per the spec's figure 4.1, the post-EOU part is about 1.2 s to first word. STT r
 
 | Technique | What it buys | When | Owner |
 |---|---|---|---|
-| **warm STT sockets per leg** | Sarvam websocket connect + auth costs 150 to 300 ms. Keep one open per leg and send a reset between utterances instead of reconnecting. Whether the reset works is open question 4; a keepalive is likely needed (the Pipecat SarvamSTT issue reports streams dying after 60 s of silence). | v1 | P2 |
+| **warm STT sockets per leg** | Built: every provider socket (STT per source side, TTS per target side, the MT HTTPS connection) is prewarmed when the call is created and again when both legs are attached (`session/providers.prewarm`, L7). Sarvam websocket connect + auth costs 150 to 300 ms. Keep one open per leg and send a reset between utterances instead of reconnecting. Whether the reset works is open question 4; a keepalive is likely needed (the Pipecat SarvamSTT issue reports streams dying after 60 s of silence). | v1 | P2 |
 | **warm TTS sockets** | ElevenLabs and Bulbul streaming both benefit from a persistent connection. Keep one per leg-direction. | v1 | P3 |
 | **stream TTS to transport** | the first chunk goes to the leg before synthesis finishes; saves 300 to 800 ms on long sentences | v1 | P3 / Rohan |
 | **earcon** | not a latency cut, but perceived latency drops more than any real cut. Silence should never exceed about 700 ms without a signal. The spec's latency table puts it at EOU (heard about 100 ms after EOU fires); the mix stage and the overview put it at translation start. Which one is TBD, see [audio.md](../tech-spec/audio.md#unresolved-mixer-details) and [open questions](../plan/open-questions.md). | v1 | Rohan |
 | **ducked original** | the listener hears the real speaker at −14 dB, so the delay reads as interpretation | v1 | Rohan |
-| **opening line** | 5 s at call start in each language ("aap hindi mein boliye, saamne wala kannada mein sunega. chhote vaakya boliye.") sets the rhythm and prompts short sentences, which translate faster | v1 | Rohan / P5 |
+| **opening line** | sets the rhythm and prompts short sentences, but it is also dead time before the first translation. `opening_line: short` (the two language names and "speak", ~2 s; `/join` and loopback), `full` (one disclosure sentence, ~3.5 s, plus ~3 s with `record: true`; PSTN) or `off`. A translation that starts for a leg still hearing its opening cuts it (L7: speaking at once used to wait 2-3 s behind a 7 s opening) | v1 | Rohan / P5 |
+| **noise-floor gate** | a frame is speech only if Silero says so and it is 6 dB over an adaptive noise floor (`NoiseFloorGate`), so a TV, other voices or AGC pumping the room noise up do not hold EOU off; `max_utterance_ms` (7000) ends a never-ending utterance at the next dip between words (L7) | v1 | P2 |
+| **MT keep-alive** | httpx dropped the idle Sarvam connection after 5 s, so most turns paid a new TLS handshake; kept 60 s now (about 20 ms live, L7) | v1 | P2 |
+| **no websocket compression** | permessage-deflate is off (`--ws-per-message-deflate false`): PCM does not compress and every 20 ms frame paid a deflate step both ways | v1 | Rohan |
 | **per-pair EOU tuning** | 550 ms is a guess. On the bench set, measure false-EOU rate (sentence split mid-way) against latency, per language. Tamil speakers pause differently from Hindi speakers. Result goes in `eou_ms` in `pairs.yaml`. | v1 | P2 |
 | **translation cache** | greetings, confirmations and numbers repeat. An exact-match cache per pair skips MT entirely (~200 ms). | v1 | P2 |
 | **Mumbai colocation** | app in ap-south-1; Sarvam and Exotel are in India. ElevenLabs is not: its RTT from Mumbai is 150 to 250 ms, which is why Bulbul is primary for Indic targets. | v1 | Rohan |
@@ -64,6 +67,19 @@ Rules:
 1. Any latency number in the deck, the README or the demo comes from the `turns` table of real PSTN calls, with the call ids recorded.
 2. Bench and loopback numbers are labelled "bench" or "loopback" wherever they appear, and are only used to compare changes against each other.
 3. Tune `eou_ms`, `duck_db` and chunk size on PSTN (Day 6), not on browser audio.
+
+## Real phones (the `/join` stage demo)
+
+A phone adds what loopback cannot see: the browser's output latency (tens of ms, 150 ms and more on Bluetooth), the mic's own processing (echo cancellation, noise suppression and AGC, all on), the tunnel, and a room where the other person and the other phone can be heard. The phone page (`console/static/join_phone.js`, `join_worklet.js`) sends each 20 ms mic frame the moment it is full and plays received audio from the next render quantum (no jitter buffer). It also reports, on the leg's own websocket:
+
+| Message | When |
+|---|---|
+| `{"type":"telemetry","kind":"play_start","tag","client_ms","audio_ctx_ms"}` | first sample of a translation (or the opening, tag `opening`) heard; `client_ms` is epoch ms through `AudioContext.getOutputTimestamp()`, so device output latency is included |
+| `... "kind":"play_end" ...` | playout reached the translation's mark (`cleared: true` when a clear cut it) |
+| `{"type":"telemetry","kind":"mic_level","rms","client_ms"}` | every 500 ms, mic RMS before the half-duplex gate (`gated: true` while the page was playing) |
+| `{"type":"telemetry","kind":"pong","server_ms","client_ms"}` | answers the server's `{"type":"ping","server_ms"}` (every 2 s, the session clock) |
+
+The server logs each one as `leg.telemetry` (pongs with `rtt_ms`). Map `client_ms` to the session clock with the pongs (offset = `client_ms - server_ms - rtt_ms / 2`), then **heard latency = play_start (session ms) - the turn's `t_speech_end`**. Before L7 the stage demo's opening line (with the record sentence) ran ~7 s and held the first translation; see [L7](../plan/open-questions.md#answer-log).
 
 ## Timestamps to log
 

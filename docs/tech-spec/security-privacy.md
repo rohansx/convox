@@ -29,7 +29,7 @@ Played to each leg in its own language as soon as both legs have sent `start`, b
 | Hindi side | "aap hindi mein boliye, saamne wala kannada mein sunega. chhote vaakya boliye." |
 | Kannada side | "ನೀವು ಕನ್ನಡದಲ್ಲಿ ಮಾತನಾಡಿ, ಅವರು ಹಿಂದಿಯಲ್ಲಿ ಕೇಳುತ್ತಾರೆ." |
 
-As built (`session/prompts.py`, [L4](../plan/open-questions.md#answer-log)): one sentence of about 3.5 s per language, because the two-sentence line ran 7–9 s and held up the first translation. Hindi: "aap hindi mein chhote vaakya boliye, woh kannada mein sunenge." Kannada: the sentence above. Marathi and English lines exist for the Marathi pairs; the Marathi, Tamil and Kannada texts still need a native speaker's review (PQ5). The line goes through the floor controller and is marked, and no translation plays to a leg until its opening has finished.
+As built (`session/prompts.py`, [L4](../plan/open-questions.md#answer-log)): one sentence of about 3.5 s per language, because the two-sentence line ran 7–9 s and held up the first translation. Hindi: "aap hindi mein chhote vaakya boliye, woh kannada mein sunenge." Kannada: the sentence above. Marathi and English lines exist for the Marathi pairs; the Marathi, Tamil and Kannada texts still need a native speaker's review (PQ5). The line goes through the floor controller and is marked. Since L7 a translation for a leg still hearing its opening cuts it, and `/join` and loopback calls play a short line instead (the two language names and "speak", ~2 s, without the record sentence); PSTN calls keep the full disclosure (`PSTN_OPENING_LINE=full`). Counsel should confirm the disclosure may be cut short once the other party is already talking (G17).
 
 Gaps to close (**proposed**, TBD with counsel, see [open questions](../plan/open-questions.md)):
 

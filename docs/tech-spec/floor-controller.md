@@ -134,6 +134,10 @@ Between 600 and 1200 ms the listener's speech neither interrupts nor counts as a
 | **Both legs silent ≥ 4 s and queue non-empty** (nothing playing) | Force-play the head of the queue. This recovers from a held floor, e.g. a stuck `X_SPEAKING`. |
 | **Silence ≥ 10 s** | Play a soft **"aap line par hain?"** in both languages. The localised prompt text per language is TBD. |
 
+### Opening line (session prompt)
+
+The opening line is sent through the controller (`play_prompt`) and marked. A translation for a leg that is still hearing its opening does **not** wait for it (L7): when the usual rules start that playback, the opening is cut. No more prompt audio is sent, its mark is not sent (or no longer awaited), the playback clears the leg before its first frame so the transport drops what it still had queued, and a `prompt_cut` event is published. Playback to the other leg is never affected. Which opening a call gets (`short`, `full`, `off`) is a per-call setting ([configuration](configuration.md)).
+
 ### Rule 6: DTMF 1 replay, 0 bypass
 
 | Digit | Effect |
