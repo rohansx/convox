@@ -28,6 +28,7 @@ from websockets.asyncio.client import ClientConnection, connect
 from websockets.exceptions import ConnectionClosed, InvalidHandshake
 
 from dubhash.audio.frames import SAMPLE_RATE
+from dubhash.interp.langid import normalise
 from dubhash.providers.errors import ProviderError
 
 log = logging.getLogger(__name__)
@@ -126,8 +127,10 @@ class WarmSTTStream:
         self._closed = False
         self._recoveries = 0
         self.eou_signal = asyncio.Event()  # vendor end-of-utterance hint, when it has one
-        # language the vendor reports hearing on a final, when it does (session/crosstalk)
+        # language the vendor reports hearing on a final, when it does (session/crosstalk,
+        # lang auto), and its 0..1 confidence when it gives one
         self.detected_lang: str | None = None
+        self.detected_confidence: float | None = None
 
     # -- wire hooks -----------------------------------------------------------------
     def _final_per_stream(self) -> bool:
@@ -396,12 +399,18 @@ class SarvamSTTStream(WarmSTTStream):
         if event == "transcript.partial":
             self._partials.put_nowait(str(msg.get("text", "")))
         elif event == "transcript.final":
+            # With language_code=auto the final carries `language` + `language_confidence`
+            # (measured 21 Oct; also in mode=translate, where it is the *source* language).
+            # With a fixed language_code neither is sent. Partials carry `language` too, but
+            # it is unreliable (en-IN while Marathi is spoken), so only finals count.
             data = msg.get("data")
-            lang = msg.get("language_code") or (
-                data.get("language_code") if isinstance(data, dict) else None
-            )
+            data = data if isinstance(data, dict) else {}
+            lang = msg.get("language") or msg.get("language_code") or data.get("language_code")
             if lang:
-                self.detected_lang = str(lang)
+                self.detected_lang = normalise(str(lang))
+                conf = msg.get("language_confidence", data.get("language_confidence"))
+                if isinstance(conf, int | float):
+                    self.detected_confidence = float(conf)
             self._add_final(str(msg.get("text", "")))
         elif event == "vad.speech_start":
             self._speech_started()
@@ -451,6 +460,8 @@ class SarvamSTT(WarmSTTPool):
         self._vad_silence_ms = vad_silence_ms
 
     async def open(self, lang: str) -> SarvamSTTStream:
+        """lang is BCP-47, or "auto": Sarvam detects it per utterance and the stream's
+        detected_lang / detected_confidence are set from the final."""
         stream = await self._open(lang)
         assert isinstance(stream, SarvamSTTStream)
         return stream
