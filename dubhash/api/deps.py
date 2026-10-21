@@ -236,7 +236,7 @@ def get_session_registry(conn: HTTPConnection) -> Any:
 
 
 def get_session_factory(conn: HTTPConnection) -> Callable[..., Any]:
-    """factory(call_id, pair, *, mode, escape_dtmf, record) -> CallSession."""
+    """factory(call_id, pair, *, mode, escape_dtmf, record, co_located) -> CallSession."""
     state = conn.app.state
 
     def make(
@@ -246,6 +246,7 @@ def get_session_factory(conn: HTTPConnection) -> Callable[..., Any]:
         mode: Literal["interpret", "bridge"] = "interpret",
         escape_dtmf: str = "0",
         record: bool = False,
+        co_located: bool = False,
     ) -> Any:
         from dubhash.session.call_session import CallSession
         from dubhash.session.providers import build_providers
@@ -259,6 +260,7 @@ def get_session_factory(conn: HTTPConnection) -> Callable[..., Any]:
             mode=mode,
             escape_dtmf=escape_dtmf,
             record=record,
+            co_located=co_located,
         )
 
     return make
