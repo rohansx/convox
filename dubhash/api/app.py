@@ -69,6 +69,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             feeder.cancel()
             with contextlib.suppress(asyncio.CancelledError):
                 await feeder
+        recorders = getattr(app.state, "recorders", None)
+        if recorders is not None:  # store/recorder.py: flush calls still being recorded
+            await recorders.aclose()
         if app.state.writer is not None:
             await app.state.writer.close()
         engine = getattr(app.state, "engine", None)

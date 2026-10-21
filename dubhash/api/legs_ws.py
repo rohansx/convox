@@ -37,6 +37,8 @@ from dubhash.api.deps import get_session_registry
 from dubhash.config.settings import Settings
 from dubhash.legs.exotel import ExotelLeg
 from dubhash.legs.plivo import PlivoLeg
+from dubhash.legs.recording import RecordingLeg
+from dubhash.store.recorder import RecorderBook
 from dubhash.types import Side
 
 log = logging.getLogger(__name__)
@@ -144,13 +146,29 @@ async def close_ws(ws: Any, code: int) -> None:
         await ws.close(code)
 
 
+async def recording_leg(ws: Any, session: Any, side: Side, leg: Any) -> Any:
+    """`leg` wrapped in a RecordingLeg when settings.call_recording is on (dev/test only,
+    store/recorder.py), else `leg`. A recorder failure never stops the call."""
+    try:
+        state = ws.app.state
+        if not state.settings.call_recording or getattr(session, "clock", None) is None:
+            return leg
+        book = getattr(state, "recorders", None)
+        if book is None:
+            book = state.recorders = RecorderBook(state.settings.call_recording_dir, state.bus)
+        return RecordingLeg(leg, await book.recorder_for(session), side)
+    except Exception:
+        log.exception("recorder.attach_failed", extra={"side": side})
+        return leg
+
+
 async def serve_leg(
     ws: Any, session: Any, side: Side, leg: Any, book: CallBook, call_id: str
 ) -> None:
     """Pump the leg while attaching it to the session; record leg facts in the CallBook."""
     run = asyncio.create_task(leg.run())
     try:
-        await session.attach_leg(side, leg)
+        await session.attach_leg(side, await recording_leg(ws, session, side, leg))
     except Exception as e:
         log.warning("leg.rejected", extra={"call_id": call_id, "side": side, "error": repr(e)})
         leg.close_reason = "rejected"

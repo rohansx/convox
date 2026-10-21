@@ -372,6 +372,79 @@ class CallRecorder:
         )
 
 
+class RecorderBook:
+    """One CallRecorder per live call (both legs share it), closed when the call ends.
+    Lives on app.state; the leg websocket handler asks it for the call's recorder."""
+
+    def __init__(self, base_dir: Path | str, bus: EventBus | None) -> None:
+        self.base_dir = Path(base_dir)
+        self.bus = bus
+        self._recs: dict[str, CallRecorder] = {}
+        self._tasks: set[asyncio.Task[None]] = set()
+
+    def get(self, call_id: str) -> CallRecorder | None:
+        return self._recs.get(call_id)
+
+    async def recorder_for(self, session: Any) -> CallRecorder:
+        call_id = session.call_id
+        rec = self._recs.get(call_id)
+        if rec is not None:
+            return rec
+        rec = CallRecorder(
+            call_id,
+            self.base_dir,
+            session.clock,
+            meta=session_meta(session),
+            record_text=bool(getattr(session, "record", False)),
+        )
+        self._recs[call_id] = rec
+        await rec.start(self.bus)
+        task = asyncio.create_task(self._finish(session, rec), name=f"rec-end-{call_id}")
+        self._tasks.add(task)
+        task.add_done_callback(self._tasks.discard)
+        log.info("recorder.start", extra={"call_id": call_id, "path": str(rec.dir)})
+        return rec
+
+    async def _finish(self, session: Any, rec: CallRecorder) -> None:
+        try:
+            await session.wait_closed()
+        finally:
+            await rec.close()
+            self._recs.pop(rec.call_id, None)
+            log.info("recorder.done", extra={"call_id": rec.call_id, "path": str(rec.dir)})
+
+    async def aclose(self) -> None:
+        for task in list(self._tasks):
+            task.cancel()
+        for task in list(self._tasks):
+            with contextlib.suppress(asyncio.CancelledError, Exception):
+                await task
+
+
+def session_meta(session: Any) -> dict[str, Any]:
+    pair = getattr(session, "pair", None)
+    sides: dict[str, Any] = {}
+    for s in ("a", "b"):
+        cfg = pair.side(s) if pair is not None else None
+        if cfg is not None:
+            sides[s] = {
+                "lang": cfg.lang,
+                "stt": cfg.stt,
+                "stt_lang": getattr(cfg, "mt_lang", cfg.lang),
+                "tts": cfg.tts,
+            }
+    meta: dict[str, Any] = {
+        "pair": getattr(pair, "key", None),
+        "mode": getattr(session, "mode", None),
+        "record": bool(getattr(session, "record", False)),
+        "sides": sides,
+    }
+    for k in ("eou_ms", "early_final_ms", "barge_in_min_ms", "duck_db"):
+        if pair is not None and hasattr(pair, k):
+            meta[k] = getattr(pair, k)
+    return meta
+
+
 def _strip_text(kind: str, payload: Any) -> Any:
     if not isinstance(payload, dict):
         return payload
