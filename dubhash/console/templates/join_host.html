@@ -28,9 +28,9 @@
     <label class="pair-card" data-pair="{{ p.value }}">
       <input type="radio" name="pair" value="{{ p.value }}" {% if loop.first %}checked{% endif %}>
       <span class="pair-langs">
-        <span class="pair-side"><b lang="{{ p.a.lang[:2] }}">{{ p.a.native }}</b><small>{{ p.a.english }}</small></span>
+        <span class="pair-side"><b lang="{{ p.a.lang[:2] }}">{{ p.a.native }}</b>{% if p.a.english != p.a.native %}<small>{{ p.a.english }}</small>{% endif %}</span>
         <span class="pair-arrow">⇄</span>
-        <span class="pair-side"><b lang="{{ p.b.lang[:2] }}">{{ p.b.native }}</b><small>{{ p.b.english }}</small></span>
+        <span class="pair-side"><b lang="{{ p.b.lang[:2] }}">{{ p.b.native }}</b>{% if p.b.english != p.b.native %}<small>{{ p.b.english }}</small>{% endif %}</span>
       </span>
     </label>
     {% endfor %}

@@ -43,6 +43,7 @@
   }
 
   function setLeg(side, status) {
+    if (!side) return;
     legs[side] = status === "attached";
     const n = $("leg-" + side);
     n.dataset.status = status || "";
@@ -99,13 +100,17 @@
     if (st) setLeg(s, st);
   }
   setState($("state").dataset.state || "IDLE");
+  if (root.dataset.status === "ringing") $("state").textContent = "Waiting for phones";
   if (["ended", "completed", "failed"].includes(root.dataset.status)) setEnded();
 
   const handlers = {
     turn: onTurn,
     state: (p) => { if (p.to || p.state) setState(p.to || p.state); },
     leg: (p) => setLeg(p.side, p.status),
-    call: (p) => { if (["ended", "completed", "failed"].includes(p.status)) setEnded(); },
+    call: (p) => {
+      if (p.status === "active") setState($("state").dataset.state || "IDLE");
+      if (["ended", "completed", "failed"].includes(p.status)) setEnded();
+    },
     partial: (p) => {
       const n = $("partial-" + p.side);
       if (!n) return;
