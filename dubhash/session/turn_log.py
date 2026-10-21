@@ -8,6 +8,10 @@ translation. Each Turn is published as a "turn" event and handed to the backgrou
 
 `seq` is the per-call order in which turns are logged, across both directions (the
 `turns` table is UNIQUE (call_id, seq)); it is not the interpreter's per-direction seq.
+
+Flags (L10): the interpreter's other timings (phrase_hit, ack, mt_cache_hit,
+tts_cache_hit, number_fix, stt_open_ms, spec_*, early_final_*) are not `turns` columns.
+They are kept in `flags` by turn seq and sent as "flags" on the turn event.
 """
 
 from __future__ import annotations
@@ -58,6 +62,7 @@ class TurnLog:
         self._writer = writer
         self.record = record
         self.turns: list[Turn] = []
+        self.flags: dict[int, dict[str, int]] = {}
 
     def on_played(self, tr: Translation) -> Turn:
         """FloorController on_played callback: tr was played fully or clipped."""
@@ -76,7 +81,10 @@ class TurnLog:
             tts_provider=self._name(self._providers.tts.get(other(tr.side))),
             voice=tr.voice,
         )
-        return self._log(turn)
+        flags = {k: v for k, v in tr.timings.items() if k not in _TIMING_FIELDS}
+        if flags:
+            self.flags[turn.seq] = flags
+        return self._log(turn, flags or None)
 
     def on_backchannel(
         self,
@@ -106,10 +114,12 @@ class TurnLog:
     def summary(self) -> dict[str, int | None]:
         return summarize(self.turns)
 
-    def _log(self, turn: Turn) -> Turn:
+    def _log(self, turn: Turn, flags: dict[str, int] | None = None) -> Turn:
         self.turns.append(turn)
         if self._bus is not None:
             payload: dict[str, Any] = {"turn": dataclasses.asdict(turn)}
+            if flags:
+                payload["flags"] = flags
             self._bus.publish(CallEvent(self.call_id, self._clock.now_ms(), "turn", payload))
         if self._writer is not None:
             try:
