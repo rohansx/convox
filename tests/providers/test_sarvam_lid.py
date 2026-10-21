@@ -6,7 +6,7 @@ import wave
 import httpx
 
 from dubhash.interp.langid import SUPPORTED_LANGS, LangGuess, LanguageID
-from dubhash.providers.sarvam_lid import SarvamLID
+from dubhash.providers.sarvam_lid import Detection, SarvamLID, decide
 
 SEC = b"\x01\x00" * 16000  # 1 s of PCM16 @16k
 HI_MR = ["hi-IN", "mr-IN"]
@@ -174,6 +174,60 @@ async def test_per_language_thresholds_are_configurable():
     assert (await lid.identify(SEC, ["en-IN"])).lang == "en-IN"
     lid = _lid(lambda req: _stt_reply("hi-IN", 0.8), lang_thresholds={"hi-IN": 0.9})
     assert await lid.identify(SEC, ["hi-IN"]) == LangGuess(None, 0.8, "lid")
+
+
+def _two_models(v3: tuple[str | None, float], v4: tuple[str | None, float] | None):
+    def handler(req: httpx.Request) -> httpx.Response:
+        model = _form(req)[0]["model"]
+        if model == "saaras:v4":
+            if v4 is None:
+                return httpx.Response(503)
+            return _stt_reply(*v4)
+        return _stt_reply(*v3)
+
+    return handler
+
+
+async def test_second_model_runs_in_parallel_and_agreement_decides():
+    """L8: saaras:v3 is calibrated (safe at 0.7) but often unsure; saaras:v4 is more
+    often right but says 0.99 when wrong. Both agreeing was never wrong on PSTN audio."""
+    models: list[str] = []
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        models.append(_form(req)[0]["model"])
+        return _two_models(("mr-IN", 0.45), ("mr-IN", 1.0))(req)
+
+    lid = _lid(handler, second_model="saaras:v4")
+    assert await lid.identify(SEC, HI_MR) == LangGuess("mr-IN", 1.0, "lid")
+    assert sorted(models) == ["saaras:v3", "saaras:v4"]
+
+
+async def test_disagreement_falls_back_to_the_calibrated_primary():
+    sure = _lid(_two_models(("mr-IN", 0.8), ("hi-IN", 0.99)), second_model="saaras:v4")
+    assert await sure.identify(SEC, HI_MR) == LangGuess("mr-IN", 0.8, "lid")
+    unsure = _lid(_two_models(("mr-IN", 0.5), ("hi-IN", 0.99)), second_model="saaras:v4")
+    assert await unsure.identify(SEC, HI_MR) == LangGuess(None, 0.5, "lid")
+
+
+async def test_agreement_outside_the_candidates_is_none():
+    lid = _lid(_two_models(("bn-IN", 0.9), ("bn-IN", 1.0)), second_model="saaras:v4")
+    assert (await lid.identify(SEC, HI_MR)).lang is None
+
+
+async def test_second_model_failure_falls_back_to_the_primary_alone():
+    lid = _lid(_two_models(("mr-IN", 0.75), None), second_model="saaras:v4")
+    assert await lid.identify(SEC, HI_MR) == LangGuess("mr-IN", 0.75, "lid")
+    lid = _lid(_two_models(("mr-IN", 0.5), None), second_model="saaras:v4")
+    assert (await lid.identify(SEC, HI_MR)).lang is None
+
+
+def test_decide_is_the_shared_rule():
+    p = Detection("hi-IN", 0.4, "", 0)
+    s = Detection("hi-IN", 0.9, "", 0)
+    assert decide(p, s, HI_MR, threshold=0.7) == LangGuess("hi-IN", 0.9, "lid")
+    assert decide(p, None, HI_MR, threshold=0.7) == LangGuess(None, 0.4, "lid")
+    en = Detection("en-IN", 0.9, "", 0)
+    assert decide(en, None, ["en-IN"], threshold=0.7, lang_thresholds={"en-IN": 0.95}).lang is None
 
 
 async def test_model_is_configurable():

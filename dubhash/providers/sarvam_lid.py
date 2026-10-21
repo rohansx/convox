@@ -2,10 +2,12 @@
 
 Speech: the REST STT `POST /speech-to-text` with `language_code=unknown` auto-detects and
 answers `language_code` plus `language_probability` (0..1). We send the first `window_ms`
-of the utterance as a 16 kHz WAV. Text (optional second opinion): `POST /text-lid` names
-the language of a transcript (no confidence); with `text_check=True` a disagreement vetoes
-the speech guess. Measured numbers and the chosen defaults: providers/README.md
-("Language identification") and docs/plan/open-questions.md row L8.
+of the utterance as a 16 kHz WAV. With `second_model` the same audio goes to a second
+model in parallel, and `decide()` accepts the language when both models agree, or when the
+primary alone clears its threshold. Text (optional): `POST /text-lid` names the language
+of a transcript (no confidence); with `text_check=True` a disagreement vetoes the guess.
+Measured numbers and the chosen defaults: providers/README.md ("Language identification")
+and docs/plan/open-questions.md row L8.
 
 https://docs.sarvam.ai/api-reference/speech-to-text/transcribe
 https://docs.sarvam.ai/api-reference/text/identify-language
@@ -16,9 +18,10 @@ menu), so a vendor failure is logged as `lid.error` and answered with None.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import time
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 
 import httpx
@@ -30,10 +33,12 @@ from dubhash.interp.langid import LangGuess, normalise, pick
 log = logging.getLogger(__name__)
 
 DEFAULT_BASE_URL = "https://api.sarvam.ai"
+# saaras:v3's confidence is calibrated: on 8 kHz mu-law audio (L8) no Indic guess at >= 0.7
+# was wrong. The wrong guesses that pass 0.7 are en-IN on loanword-only utterances ("Flat
+# number 302", "Cash on delivery ₹400", up to 0.93 on wideband audio), so English needs
+# more. saaras:v4 is right more often but says 0.99 when wrong, so it only ever votes.
 DEFAULT_MODEL = "saaras:v3"
-# Measured on 8 kHz mu-law audio (L8): no Indic guess at >= 0.7 was wrong. The guesses
-# that pass 0.7 and are wrong are en-IN on loanword-only utterances ("Flat number 302",
-# "Cash on delivery ₹400", up to 0.93 on wideband audio), so English needs more.
+DEFAULT_SECOND_MODEL = "saaras:v4"
 DEFAULT_THRESHOLD = 0.7
 DEFAULT_LANG_THRESHOLDS: dict[str, float] = {"en-IN": 0.95}
 DEFAULT_WINDOW_MS = 2000
@@ -42,12 +47,31 @@ KEEPALIVE_S = 60.0  # as SarvamMT: keep the TLS connection between turns
 
 @dataclass(frozen=True, slots=True)
 class Detection:
-    """Sarvam's raw speech answer, before candidates and threshold are applied."""
+    """One model's raw speech answer, before candidates and threshold are applied."""
 
     lang: str | None
     confidence: float
     transcript: str
     latency_ms: int
+
+
+def decide(
+    primary: Detection,
+    second: Detection | None,
+    candidates: Sequence[str],
+    *,
+    threshold: float = DEFAULT_THRESHOLD,
+    lang_thresholds: Mapping[str, float] = DEFAULT_LANG_THRESHOLDS,
+) -> LangGuess:
+    """Both models name the same candidate -> that language (confidence: the higher of
+    the two). Otherwise the primary alone, if it clears its language's threshold."""
+    if second is not None and primary.lang is not None and primary.lang == second.lang:
+        agreed = pick(primary.lang, max(primary.confidence, second.confidence), candidates,
+                      threshold=0.0)  # fmt: skip
+        if agreed.lang is not None:
+            return agreed
+    t = lang_thresholds.get(primary.lang or "", threshold)
+    return pick(primary.lang, primary.confidence, candidates, threshold=t)
 
 
 class SarvamLID:
@@ -60,6 +84,7 @@ class SarvamLID:
         client: httpx.AsyncClient | None = None,
         base_url: str = DEFAULT_BASE_URL,
         model: str = DEFAULT_MODEL,
+        second_model: str | None = None,
         threshold: float = DEFAULT_THRESHOLD,
         lang_thresholds: dict[str, float] | None = None,
         window_ms: int | None = DEFAULT_WINDOW_MS,
@@ -74,6 +99,7 @@ class SarvamLID:
         self._base = base_url.rstrip("/")
         self._timeout = timeout_s
         self.model = model
+        self.second_model = second_model
         self.threshold = threshold
         self.lang_thresholds = dict(
             DEFAULT_LANG_THRESHOLDS if lang_thresholds is None else lang_thresholds
@@ -86,39 +112,50 @@ class SarvamLID:
             pcm16_16k = pcm16_16k[: ms_to_bytes(self.window_ms)]
         if not pcm16_16k:
             return LangGuess(None, 0.0, "lid")
-        try:
-            d = await self.detect(pcm16_16k)
-        except _Failed:
+        t0 = time.monotonic()
+        calls = [self.detect(pcm16_16k)]
+        if self.second_model:
+            calls.append(self.detect(pcm16_16k, model=self.second_model))
+        results = await asyncio.gather(*calls, return_exceptions=True)
+        for r in results:
+            if isinstance(r, BaseException) and not isinstance(r, _Failed):
+                raise r
+        first = results[0]
+        if not isinstance(first, Detection):
             return LangGuess(None, 0.0, "lid")
-        threshold = self.lang_thresholds.get(d.lang or "", self.threshold)
-        guess = pick(d.lang, d.confidence, candidates, threshold=threshold)
-        if guess.lang is not None and self.text_check and d.transcript.strip():
+        second = results[1] if len(results) > 1 else None
+        second = second if isinstance(second, Detection) else None
+        guess = decide(first, second, candidates, threshold=self.threshold,
+                       lang_thresholds=self.lang_thresholds)  # fmt: skip
+        if guess.lang is not None and self.text_check and first.transcript.strip():
             try:
-                second = await self.text_lid(d.transcript)
+                text_lang = await self.text_lid(first.transcript)
             except _Failed:
-                second = None
-            if second != guess.lang:
+                text_lang = None
+            if text_lang != guess.lang:
                 log.info("lid.veto", extra={"provider": self.name, "speech": guess.lang})
-                return LangGuess(None, d.confidence, "lid")
+                return LangGuess(None, guess.confidence, "lid")
         log.info(
             "lid.done",
             extra={
                 "provider": self.name,
                 "lang": guess.lang,
-                "confidence": d.confidence,
-                "latency_ms": d.latency_ms,
+                "detected": first.lang,
+                "second": second.lang if second else None,
+                "confidence": guess.confidence,
+                "latency_ms": int((time.monotonic() - t0) * 1000),
             },
         )
         return guess
 
-    async def detect(self, pcm16_16k: bytes) -> Detection:
+    async def detect(self, pcm16_16k: bytes, *, model: str | None = None) -> Detection:
         """One speech-LID call on all of `pcm16_16k` (no window, no candidates)."""
         t0 = time.monotonic()
         wav = pcm_to_wav_bytes(pcm16_16k, SAMPLE_RATE)
         body = await self._post(
             "/speech-to-text",
             files={"file": ("utterance.wav", wav, "audio/wav")},
-            data={"model": self.model, "language_code": "unknown"},
+            data={"model": model or self.model, "language_code": "unknown"},
         )
         prob = body.get("language_probability")
         return Detection(
