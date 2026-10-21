@@ -1,0 +1,20 @@
+# secrets
+.env
+.env.*
+!.env.example
+
+# python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+*.egg-info/
+
+# audio artifacts from bench/fake runs
+out/
+*.wav
+!tests/fixtures/*.wav
+
+.DS_Store

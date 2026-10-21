@@ -140,7 +140,8 @@ Read with pydantic-settings from the environment (`.env` in dev, Compose `env_fi
 |---|---|
 | `SARVAM_API_KEY` | Sarvam STT (Saarika/Saaras streaming), Mayura translate, Bulbul TTS, language id (dial-in) |
 | `ELEVENLABS_API_KEY` | ElevenLabs Flash v2.5 TTS (hi, en) |
-| `DEEPGRAM_API_KEY` | Deepgram Nova streaming STT (English/Hinglish fallback) |
+| `ANTHROPIC_API_KEY` | LLM idiom repair on low-confidence translations (v2). `ANTHROPIC_MODEL` picks the model; `LLM_REPAIR_ENABLED=false` by default |
+| `DEEPGRAM_API_KEY` | optional. Deepgram Nova streaming STT (English/Hinglish fallback). No key yet: when empty, every leg uses Sarvam STT |
 
 ### Platform API and console
 
@@ -182,22 +183,9 @@ These rarely change. They live in `settings.py` with env overrides (proposed nam
 | `DTMF_REPLAY` / default `escape_dtmf` | `1` / `0` | replay last translation / bypass |
 | `MT_CACHE` | on | exact-text cache per pair (saves about 200 ms of MT) |
 
-## Example `.env` (dev)
+## Example `.env`
 
-```dotenv
-DUBHASH_ENV=dev
-PUBLIC_BASE_URL=https://localhost:8443
-EDGE_WSS_BASE=wss://localhost:8443
-DATABASE_URL=postgresql+asyncpg://dubhash:dubhash@localhost:5432/dubhash
-REDIS_URL=redis://localhost:6379/0
-SARVAM_API_KEY=
-ELEVENLABS_API_KEY=
-DEEPGRAM_API_KEY=
-STT_IMPL=fake
-MT_IMPL=fake
-TTS_IMPL=fake
-ENABLE_WEBRTC_LEG=true
-```
+The full template is [`.env.example`](../../.env.example) at the repo root. Copy it to `.env` (gitignored) and fill in the keys.
 
 ## Related
 

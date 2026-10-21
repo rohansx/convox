@@ -56,7 +56,8 @@ The canonical list of variable names, with examples, is in [configuration](../te
 | `PAIRS_FILE` | interpreters | defaults to `config/pairs.yaml` (inside the `dubhash/` package) |
 | `SARVAM_API_KEY` | Sarvam STT (Saarika/Saaras), Mayura translate, Bulbul TTS | |
 | `ELEVENLABS_API_KEY` | ElevenLabs Flash v2.5 (hi, en targets) | |
-| `DEEPGRAM_API_KEY` | Deepgram Nova (English/Hinglish fallback) | |
+| `ANTHROPIC_API_KEY` | LLM idiom repair (v2) | off unless `LLM_REPAIR_ENABLED=true` |
+| `DEEPGRAM_API_KEY` | Deepgram Nova (English/Hinglish fallback) | optional; empty means Sarvam STT on every leg |
 | `EXOTEL_ACCOUNT_SID`, `EXOTEL_API_KEY`, `EXOTEL_API_TOKEN` | ExotelLeg call setup | used for `POST /v1/Accounts/{sid}/Calls/connect` |
 | `EXOTEL_EXOPHONE` | ExotelLeg | the ExoPhone used as `CallerId` |
 | `EXOTEL_FLOW_URL` | ExotelLeg | applet-flow URL whose Voicebot applet points at `/ws/leg` |
