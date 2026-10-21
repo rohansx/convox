@@ -4,11 +4,12 @@ language and is synthesised with that side's TTS voice.
 
 The opening line is ONE short sentence (about 3 s of Bulbul speech; the two-sentence
 version ran 7-9 s and held up the first translation, L2/L4). Live Bulbul lengths (L4):
-hi 3.7 s, mr 3.4-3.7 s, en 3.2 s, kn 4.3 s. The Hindi line folds the spec's "chhote vaakya
-boliye" into a shortened form of its first sentence; the Kannada line is the spec's
-sentence (docs/tech-spec/security-privacy.md). Everything else is an unverified draft.
-With record=true the "text is being saved" sentence is appended (about 3 s more).
-TODO(PQ5): native-speaker and counsel review of every kn/ta/mr string below, and of the
+hi 3.7 s, mr 3.4-3.7 s, en 3.2 s, kn 4.3 s, gu 3.6-4.9 s (L6). The Hindi line folds the
+spec's "chhote vaakya boliye" into a shortened form of its first sentence; the Kannada line
+is the spec's sentence (docs/tech-spec/security-privacy.md). Everything else is an
+unverified draft. With record=true the "text is being saved" sentence is appended (about
+3 s more; about 4 s in Gujarati).
+TODO(PQ5): native-speaker and counsel review of every kn/ta/mr/gu string below, and of the
 proposed "automatic interpreter / press 0" disclosure sentence (open question G17).
 """
 
@@ -25,12 +26,26 @@ class _Lang:
     record: str  # appended when the call's text is being kept (record=true)
 
 
-_EN_NAMES = {"hi": "Hindi", "kn": "Kannada", "ta": "Tamil", "mr": "Marathi", "en": "English"}
+_EN_NAMES = {
+    "hi": "Hindi",
+    "kn": "Kannada",
+    "ta": "Tamil",
+    "mr": "Marathi",
+    "gu": "Gujarati",
+    "en": "English",
+}
 
 _LANGS: dict[str, _Lang] = {
     "hi": _Lang(
         opening="aap {self} mein chhote vaakya boliye, woh {other} mein sunenge.",
-        names={"hi": "hindi", "kn": "kannada", "ta": "tamil", "mr": "marathi", "en": "angrezi"},
+        names={
+            "hi": "hindi",
+            "kn": "kannada",
+            "ta": "tamil",
+            "mr": "marathi",
+            "gu": "gujarati",
+            "en": "angrezi",
+        },
         line_check="aap line par hain?",
         record=" is baatcheet ka text save kiya ja raha hai.",  # TODO(PQ5): verify wording
     ),
@@ -42,6 +57,7 @@ _LANGS: dict[str, _Lang] = {
             "hi": "ಹಿಂದಿಯಲ್ಲಿ",
             "ta": "ತಮಿಳಿನಲ್ಲಿ",
             "mr": "ಮರಾಠಿಯಲ್ಲಿ",
+            "gu": "ಗುಜರಾತಿಯಲ್ಲಿ",
             "en": "ಇಂಗ್ಲಿಷ್‌ನಲ್ಲಿ",
         },
         line_check="ನೀವು ಲೈನ್‌ನಲ್ಲಿ ಇದ್ದೀರಾ?",
@@ -55,6 +71,7 @@ _LANGS: dict[str, _Lang] = {
             "hi": "இந்தியில்",
             "kn": "கன்னடத்தில்",
             "mr": "மராத்தியில்",
+            "gu": "குஜராத்தியில்",
             "en": "ஆங்கிலத்தில்",
         },
         line_check="நீங்கள் லைனில் இருக்கிறீர்களா?",
@@ -69,10 +86,26 @@ _LANGS: dict[str, _Lang] = {
             "hi": "हिंदीत",
             "kn": "कन्नडमध्ये",
             "ta": "तमिळमध्ये",
+            "gu": "गुजरातीत",
             "en": "इंग्रजीत",
         },
         line_check="तुम्ही लाइनवर आहात का?",
         record=" या संभाषणाचा मजकूर जतन केला जात आहे.",
+    ),
+    # TODO(PQ5): native Gujarati review of the whole set ("speak short sentences in
+    # Gujarati, they will hear it in Hindi/English"; "are you on the line?").
+    "gu": _Lang(
+        opening="{self} નાનાં વાક્યો બોલો, તેઓ {other} સાંભળશે.",
+        names={
+            "gu": "ગુજરાતીમાં",
+            "hi": "હિન્દીમાં",
+            "en": "અંગ્રેજીમાં",
+            "mr": "મરાઠીમાં",
+            "kn": "કન્નડમાં",
+            "ta": "તમિલમાં",
+        },
+        line_check="તમે લાઇન પર છો?",
+        record=" આ વાતચીતનું લખાણ સાચવવામાં આવી રહ્યું છે.",
     ),
     "en": _Lang(
         opening="Speak short {self} sentences; they hear {other}.",

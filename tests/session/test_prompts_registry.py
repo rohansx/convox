@@ -15,14 +15,14 @@ def test_hindi_opening_line_names_the_other_language():
     assert "angrezi" in opening_text("hi-IN", "en-IN")
 
 
-@pytest.mark.parametrize("lang", ["kn-IN", "ta-IN", "mr-IN"])
+@pytest.mark.parametrize("lang", ["kn-IN", "ta-IN", "mr-IN", "gu-IN"])
 def test_every_supported_language_has_an_opening_and_line_check(lang):
     text = opening_text(lang, "hi-IN")
     assert text and text != opening_text("xx-IN", "hi-IN")
     assert line_check_text(lang) and line_check_text(lang) != line_check_text("xx-IN")
 
 
-LANGS = ["hi-IN", "kn-IN", "ta-IN", "mr-IN", "en-IN"]
+LANGS = ["hi-IN", "kn-IN", "ta-IN", "mr-IN", "gu-IN", "en-IN"]
 
 
 @pytest.mark.parametrize("lang", LANGS)
@@ -43,6 +43,17 @@ def test_marathi_and_english_openings_for_the_marathi_pairs():
     assert opening_text("en-IN", "mr-IN") == ("Speak short English sentences; they hear Marathi.")
     assert line_check_text("en-IN") == "Are you still on the line?"
     assert line_check_text("mr-IN") == "तुम्ही लाइनवर आहात का?"
+
+
+def test_gujarati_openings_for_the_gujarati_pairs():
+    assert opening_text("gu-IN", "hi-IN") == "ગુજરાતીમાં નાનાં વાક્યો બોલો, તેઓ હિન્દીમાં સાંભળશે."
+    assert opening_text("gu-IN", "en-IN") == "ગુજરાતીમાં નાનાં વાક્યો બોલો, તેઓ અંગ્રેજીમાં સાંભળશે."
+    assert opening_text("hi-IN", "gu-IN") == (
+        "aap hindi mein chhote vaakya boliye, woh gujarati mein sunenge."
+    )
+    assert opening_text("en-IN", "gu-IN") == "Speak short English sentences; they hear Gujarati."
+    assert line_check_text("gu-IN") == "તમે લાઇન પર છો?"
+    assert opening_text("gu-IN", "hi-IN", record=True) != opening_text("gu-IN", "hi-IN")
 
 
 def test_kannada_opening_matches_the_spec_sentence():

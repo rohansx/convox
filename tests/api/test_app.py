@@ -121,13 +121,13 @@ def basic(user: str, pw: str) -> dict[str, str]:
 
 
 async def test_console_requires_basic_auth_outside_test():
-    app = create_app(settings(dubhash_env="dev", console_password="s3cret"))
+    app = create_app(settings(dubhash_env="dev", console_password="test-console-pw"))
     async with client(app) as c:
         assert (await c.get("/healthz")).status_code == 200
         r = await c.get("/console")
         assert r.status_code == 401 and r.headers["www-authenticate"].startswith("Basic")
         assert (await c.get("/console", headers=basic("op", "wrong"))).status_code == 401
-        assert (await c.get("/console", headers=basic("op", "s3cret"))).status_code == 200
+        assert (await c.get("/console", headers=basic("op", "test-console-pw"))).status_code == 200
         assert (await c.get("/console/events")).status_code == 401
         assert (await c.get("/ward")).status_code == 401
 

@@ -15,9 +15,10 @@ recording, and acks each mark when its playout reaches it.
 
 Scripts (--script, default: the one written for --a-lang/--b-lang): delivery-hi-kn (rider
 Hindi on A, customer Kannada on B; docs/product/problem-and-users.md example call 1),
-delivery-mr-hi (Marathi customer, Hindi rider) and clinic-mr-en (Marathi patient, English
-doctor). Utterances are synthesised once with Bulbul and cached in out/live/. THE KANNADA
-AND MARATHI LINES NEED A NATIVE SPEAKER'S REVIEW. Rows whose translation lost a number of
+delivery-mr-hi (Marathi customer, Hindi rider), clinic-mr-en (Marathi patient, English
+doctor), and the same two calls in Gujarati (delivery-gu-hi, clinic-gu-en). Utterances are
+synthesised once with Bulbul and cached in out/live/. THE KANNADA, MARATHI AND GUJARATI
+LINES NEED A NATIVE SPEAKER'S REVIEW. Rows whose translation lost a number of
 the scripted line are flagged (the ward number check).
 
     STT_IMPL=real MT_IMPL=real TTS_IMPL=real uv run python tools/live_loopback.py \
@@ -133,6 +134,37 @@ SCRIPTS: dict[str, Script] = {
             Line("a", "मी फ्लॅट 302, शिवाजी नगरमध्ये राहते. औषध घरी पाठवाल का?", review=True),
             Line("b", "Yes. Your delivery OTP is 4729. It will reach you by 6 pm."),
             Line("a", "ठीक आहे, मी 6 वाजता घरी असेन.", review=True),
+        ),
+    ),
+    # Customer (A, Gujarati, female) and rider (B, Hindi, male). Gujarati: NATIVE REVIEW.
+    "delivery-gu-hi": Script(
+        "gu-IN",
+        "hi-IN",
+        {"a": "bulbul:gu-female-1", "b": "bulbul:hi-male-1"},
+        (
+            Line("a", "હેલો, હું ફ્લેટ 302 માંથી બોલું છું. મારું પાર્સલ ક્યાં છે?", review=True),
+            Line("b", "मैडम, मैं आपकी बिल्डिंग के गेट पर खड़ा हूँ। कौन सा विंग है?"),
+            Line("a", "બી વિંગ, ત્રીજો માળ. લિફ્ટ બંધ છે, દાદર ડાબી બાજુ છે.", review=True),
+            Line("b", "ठीक है, दो मिनट में ऊपर आता हूँ। ओटीपी बता दीजिए।"),
+            Line("a", "ઓટીપી 4729 છે.", review=True),
+            Line("b", "धन्यवाद मैडम, शाम को 6 बजे दूसरा पार्सल भी आएगा।"),
+            Line("a", "સારું, હું 6 વાગ્યે ઘરે હોઈશ.", review=True),
+        ),
+    ),
+    # Patient (A, Gujarati, female) and clinic doctor (B, English, male). Gujarati: NATIVE
+    # REVIEW.
+    "clinic-gu-en": Script(
+        "gu-IN",
+        "en-IN",
+        {"a": "bulbul:gu-female-1", "b": "bulbul:en-male-1"},
+        (
+            Line("a", "ડૉક્ટર, મને ત્રણ દિવસથી તાવ છે.", review=True),
+            Line("b", "Okay. Do you also have a cough or a sore throat?"),
+            Line("a", "હા, થોડી ઉધરસ છે. રાત્રે વધારે થાય છે.", review=True),
+            Line("b", "Take this tablet twice a day, after breakfast and dinner."),
+            Line("a", "હું ફ્લેટ 302, નવરંગપુરામાં રહું છું. દવા ઘરે મોકલશો?", review=True),
+            Line("b", "Yes. Your delivery OTP is 4729. It will reach you by 6 pm."),
+            Line("a", "સારું, હું 6 વાગ્યે ઘરે હોઈશ.", review=True),
         ),
     ),
 }

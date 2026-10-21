@@ -182,3 +182,19 @@ def test_phone_page_bad_side_is_404():
 def test_join_pages_off_with_the_webrtc_leg():
     env = Env(enable_webrtc_leg=False)
     assert env.client.get("/join").status_code == 404
+
+
+def test_picker_and_phone_page_label_gujarati_in_its_own_script():
+    env = Env()
+    r = env.client.get("/join")
+    offered = {tuple(p.split("|")) for p in re.findall(r'data-pair="([^"]+)"', r.text)}
+    assert {("gu-IN", "hi-IN"), ("gu-IN", "en-IN")} <= offered
+    assert "ગુજરાતી" in r.text
+    assert set(routes.UI["gu"]) == set(routes.UI["en"])
+    loc = start(env, "gu-IN", "hi-IN", follow_redirects=False).headers["location"]
+    call_id = loc.rsplit("/", 1)[1]
+    assert env.sessions[-1].pair.key == "gu-hi"
+    tok = make_join_token(env.app.state.settings, call_id, "a")
+    text = html.unescape(env.client.get(f"/join/{call_id}/a?t={tok}").text)
+    assert "ગુજરાતી" in text and 'lang="gu"' in text
+    assert routes.UI["gu"]["start"] in text

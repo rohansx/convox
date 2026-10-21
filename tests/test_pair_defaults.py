@@ -63,3 +63,28 @@ def test_mr_hi_default_pivots_both_sides_through_english():
     d = PAIRS["mr-hi-direct"]
     assert (d.a.stt, d.b.stt) == ("sarvam", "sarvam") and d.early_final_ms == 0
     assert (d.a.mt_lang, d.b.mt_lang) == ("mr-IN", "hi-IN")
+
+
+def test_gu_hi_default_pivots_both_sides_through_english():
+    """Gujarati follows the tuned Marathi pattern (L4, L6)."""
+    p = find_pair(PAIRS, "gu-IN", "hi-IN")
+    assert p is not None and p.key == "gu-hi"
+    assert (p.a.lang, p.b.lang) == ("gu-IN", "hi-IN")
+    for side in (p.a, p.b):
+        assert side.stt == "sarvam-translate" and side.mt_lang == "en-IN"
+        assert side.tts == "bulbul"
+    assert p.early_final_ms == 200
+    assert p.a.voice_m == "bulbul:gu-male-1" and p.a.voice_f == "bulbul:gu-female-1"
+    d = PAIRS["gu-hi-direct"]
+    assert (d.a.lang, d.b.lang) == ("gu-IN", "hi-IN")
+    assert (d.a.stt, d.b.stt) == ("sarvam", "sarvam") and d.early_final_ms == 0
+    assert (d.a.mt_lang, d.b.mt_lang) == ("gu-IN", "hi-IN")
+
+
+def test_gu_en_gujarati_side_speaks_english_straight_from_stt():
+    p = PAIRS["gu-en"]
+    assert (p.a.lang, p.b.lang) == ("gu-IN", "en-IN")
+    assert p.a.stt == "sarvam-translate" and p.a.mt_lang == p.b.lang  # MT skipped
+    assert p.b.stt == "sarvam" and p.b.mt_lang == "en-IN"  # then en -> gu MT
+    assert p.a.voice_f == "bulbul:gu-female-1" and p.b.voice_f.startswith("bulbul:en-")
+    assert p.early_final_ms == 200

@@ -116,7 +116,7 @@ def client_ip(ws: WebSocket) -> str:
     return peer
 
 
-def _basic_ok(header: str | None, user: str, password: str) -> bool:
+def _basic_ok(header: str | None, user: str, basic_pass: str) -> bool:
     scheme, _, encoded = (header or "").partition(" ")
     if scheme.lower() != "basic" or not user:
         return False
@@ -125,16 +125,16 @@ def _basic_ok(header: str | None, user: str, password: str) -> bool:
     except (binascii.Error, UnicodeDecodeError):
         return False
     user_ok = secrets.compare_digest(got_user.encode(), user.encode())
-    pass_ok = secrets.compare_digest(got_pass.encode(), password.encode())
+    pass_ok = secrets.compare_digest(got_pass.encode(), basic_pass.encode())
     return user_ok and pass_ok
 
 
 def exotel_authorized(ws: WebSocket, settings: Settings) -> bool:
     allowed = {ip.strip() for ip in settings.exotel_allowed_ips.split(",") if ip.strip()}
-    user, password = settings.exotel_ws_basic_user, settings.exotel_ws_basic_pass
+    user, basic_pass = settings.exotel_ws_basic_user, settings.exotel_ws_basic_pass
     if not allowed and not user:
         return True
-    if user and _basic_ok(ws.headers.get("authorization"), user, password):
+    if user and _basic_ok(ws.headers.get("authorization"), user, basic_pass):
         return True
     return bool(allowed) and client_ip(ws) in allowed
 

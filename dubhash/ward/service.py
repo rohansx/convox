@@ -48,8 +48,13 @@ if TYPE_CHECKING:
 Gender = Literal["m", "f"]
 
 # Quick choices on the ward page (side A, side B); the first is the default. A Marathi
-# speaker with a Hindi or an English speaker (L4).
-PRESETS: tuple[tuple[str, str], ...] = (("mr-IN", "hi-IN"), ("mr-IN", "en-IN"))
+# speaker with a Hindi or an English speaker (L4), then the same for Gujarati (L6).
+PRESETS: tuple[tuple[str, str], ...] = (
+    ("mr-IN", "hi-IN"),
+    ("mr-IN", "en-IN"),
+    ("gu-IN", "hi-IN"),
+    ("gu-IN", "en-IN"),
+)
 DEFAULT_LANGS: tuple[str, str] = PRESETS[0]
 MAX_UTTERANCE_S = 60  # a press longer than this is truncated (stuck button, pocket)
 GENDER_DEFAULT: Gender = "m"

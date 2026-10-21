@@ -46,9 +46,9 @@ def test_ward_pair_builds_sides_for_reversed_and_unlisted_orders():
 
 
 def test_ward_pair_synthesises_a_language_missing_from_pairs_yaml():
-    pair = ward_pair("gu-IN", "en-IN")
+    pair = ward_pair("bn-IN", "en-IN")
     assert pair.a.stt == "sarvam" and pair.a.tts == "bulbul"
-    assert pair.a.voice_m == "bulbul:gu-male-1"
+    assert pair.a.voice_m == "bulbul:bn-male-1"
     assert pair.b.tts == "bulbul" and pair.b.voice_f == "bulbul:en-female-1"
 
 
@@ -240,3 +240,12 @@ def test_ward_offers_the_marathi_choices():
     assert ("mr-IN", "hi-IN") in PRESETS and ("mr-IN", "en-IN") in PRESETS
     for a, b in PRESETS:
         ward_pair(a, b)  # each resolves
+
+
+def test_ward_offers_the_gujarati_choices():
+    from dubhash.ward.service import LANGS, PRESETS
+
+    assert ("gu-IN", "hi-IN") in PRESETS and ("gu-IN", "en-IN") in PRESETS
+    assert LANGS["gu-IN"] == ("Gujarati", "ગુજરાતી")
+    assert ward_pair("gu-IN", "hi-IN").key == "gu-hi"
+    assert ward_pair("en-IN", "gu-IN").key == "gu-en"

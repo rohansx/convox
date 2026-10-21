@@ -57,3 +57,14 @@ def test_english_and_hindi_users_both_reach_a_marathi_teammate():
         for a, b in ((me, "mr-IN"), ("mr-IN", me)):
             p = find_pair(PAIRS, a, b)
             assert p is not None and (p.a.lang, p.b.lang) == (a, b), (a, b)
+
+
+def test_gujarati_pairs_resolve_in_both_orientations():
+    for other, key in (("hi-IN", "gu-hi"), ("en-IN", "gu-en")):
+        for a, b in (("gu-IN", other), (other, "gu-IN")):
+            p = find_pair(PAIRS, a, b)
+            assert p is not None and p.key == key, (a, b)
+            assert (p.a.lang, p.b.lang) == (a, b)
+    swapped = find_pair(PAIRS, "en-IN", "gu-IN")
+    assert swapped == PAIRS["gu-en"].swapped()
+    assert swapped.b.mt_lang == "en-IN" == swapped.a.lang  # gu side still skips MT

@@ -5,7 +5,8 @@ from dubhash.join import tokens
 
 
 def settings(**kw) -> Settings:
-    return Settings(_env_file=None, **{"dubhash_env": "test", "console_password": "s3cret", **kw})
+    base = {"dubhash_env": "test", "console_password": "test-console-pw"}
+    return Settings(_env_file=None, **{**base, **kw})
 
 
 def test_sign_and_verify():

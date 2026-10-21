@@ -144,6 +144,8 @@ def test_scripts_cover_the_marathi_pairs():
         "delivery-hi-kn": ("hi-IN", "kn-IN"),
         "delivery-mr-hi": ("mr-IN", "hi-IN"),
         "clinic-mr-en": ("mr-IN", "en-IN"),
+        "delivery-gu-hi": ("gu-IN", "hi-IN"),
+        "clinic-gu-en": ("gu-IN", "en-IN"),
     }.items():
         sc = ll.SCRIPTS[key]
         assert (sc.a_lang, sc.b_lang) == langs
@@ -151,7 +153,7 @@ def test_scripts_cover_the_marathi_pairs():
         assert set(sc.voices) == {"a", "b"}
         assert ll.script_for(*langs) == key
     # the Marathi lines are ours: flagged for a native speaker
-    for key in ("delivery-mr-hi", "clinic-mr-en"):
+    for key in ("delivery-mr-hi", "clinic-mr-en", "delivery-gu-hi", "clinic-gu-en"):
         assert all(ln.review for ln in ll.SCRIPTS[key].lines if ln.side == "a")
     assert ll.script_for("ta-IN", "hi-IN") is None
 
@@ -163,3 +165,12 @@ def test_number_check_against_the_scripted_line():
     row.server[0]["tgt_text"] = "ओटीपी 4729 है, फ्लैट 302."
     assert ll.numbers_check(row) is None
     assert ll.numbers_check(ll.TurnRow(1, "b", "x", n_start=0, n_voice_end=1)) is None
+
+
+def test_gujarati_scripts_carry_the_numbers_to_check():
+    for key in ("delivery-gu-hi", "clinic-gu-en"):
+        sc = ll.SCRIPTS[key]
+        assert sc.voices["a"] == "bulbul:gu-female-1"
+        text = " ".join(ln.text for ln in sc.lines)
+        for n in ("302", "4729", "6"):
+            assert n in text, (key, n)
