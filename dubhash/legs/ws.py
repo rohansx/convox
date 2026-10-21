@@ -9,6 +9,8 @@ socket straight in. Tests use `ws_pair()`, an in-memory pair with the same surfa
 from __future__ import annotations
 
 import asyncio
+import base64
+import json
 import logging
 from collections import deque
 from collections.abc import AsyncIterator, Callable, Mapping
@@ -17,6 +19,7 @@ from typing import Any, Protocol, runtime_checkable
 from dubhash.audio.frames import SAMPLE_RATE, SAMPLE_WIDTH, Reframer, ms_to_bytes
 from dubhash.audio.resample import Resampler
 from dubhash.clock import Clock
+from dubhash.types import Side
 
 log = logging.getLogger(__name__)
 
@@ -221,6 +224,232 @@ class ChunkGapDetector:
         if last is None or n <= last + 1:
             return 0
         return (n - last - 1) * chunk_ms
+
+
+class JsonStreamLeg:
+    """Shared body of the provider legs (Exotel voicebot, Plivo audio stream): a JSON
+    message websocket carrying base64 audio both ways, plus clear/mark/dtmf/stop.
+
+    Subclasses parse provider events in `_handle` (calling `_begin`, `_media`,
+    `_mark_played`, `_dtmf`) and build outbound messages in `_media_message`,
+    `_mark_message` and `_clear_message`. `await run()` pumps inbound until stop or
+    disconnect, then closes. Audio and marks sent before `start` wait for it.
+    """
+
+    provider = "?"
+
+    def __init__(
+        self, leg_id: Side, ws: WSLike, *, outbound_chunk_ms: int = 100, default_rate: int
+    ) -> None:
+        self.leg_id = leg_id
+        self.ws = ws
+        self.sample_rate: int | None = None
+        self.close_reason: str | None = None
+        self.closed = False
+        self.started = asyncio.Event()
+        self._default_rate = default_rate
+        self._inbound = InboundAudio(default_rate)
+        self._out = OutboundAudio(outbound_chunk_ms, default_rate)
+        self._lock = asyncio.Lock()
+        self._prestart: list[tuple[str, Any]] = []
+        self._pending_marks: set[str] = set()
+        self._mark_cbs: list[Callable[[str], None]] = []
+        self._dtmf_cbs: list[Callable[[str], None]] = []
+        self._gap_cbs: list[Callable[[int], None]] = []
+        self._gaps = ChunkGapDetector()
+        self._closed_evt = asyncio.Event()
+
+    # LegTransport
+
+    def frames(self) -> AsyncIterator[bytes]:
+        return self._inbound.frames()
+
+    async def send(self, pcm16_16k: bytes) -> None:
+        if self.closed:
+            return
+        async with self._lock:
+            if not self.started.is_set():
+                self._prestart.append(("audio", pcm16_16k))
+                return
+            for chunk in self._out.add(pcm16_16k):
+                await self._send_json(self._media_message(chunk))
+
+    async def mark(self, tag: str) -> None:
+        if self.closed:
+            return
+        async with self._lock:
+            if not self.started.is_set():
+                self._prestart.append(("mark", tag))
+                return
+            await self._flush_and_mark(tag)
+
+    async def clear(self) -> None:
+        if self.closed:
+            return
+        async with self._lock:
+            self._prestart.clear()
+            self._pending_marks.clear()
+            self._out.clear()
+            if self.started.is_set():
+                await self._send_json(self._clear_message())
+
+    def on_mark(self, cb: Callable[[str], None]) -> None:
+        self._mark_cbs.append(cb)
+
+    def on_dtmf(self, cb: Callable[[str], None]) -> None:
+        self._dtmf_cbs.append(cb)
+
+    def on_gap(self, cb: Callable[[int], None]) -> None:
+        """cb(gap_ms) when the provider's chunk counter skips."""
+        self._gap_cbs.append(cb)
+
+    async def close(self) -> None:
+        if self.closed:
+            return
+        self.closed = True
+        self.close_reason = self.close_reason or "closed"
+        self._closed_evt.set()
+        self._pending_marks.clear()
+        self._inbound.end()
+        try:
+            await self.ws.close()
+        except Exception:  # already gone
+            pass
+        log.info(
+            "leg.close",
+            extra={
+                "side": self.leg_id,
+                "provider": self.provider,
+                "close_reason": self.close_reason,
+            },
+        )
+
+    async def run(self) -> None:
+        try:
+            while not self.closed:
+                raw = await self._receive()
+                if raw is None:
+                    self.close_reason = self.close_reason or "disconnect"
+                    break
+                try:
+                    msg = json.loads(raw)
+                except ValueError:
+                    log.warning("leg.bad_message", extra={"side": self.leg_id})
+                    continue
+                if not isinstance(msg, dict):
+                    continue
+                if await self._handle(str(msg.get("event", "")), msg):
+                    break
+        finally:
+            await self.close()
+
+    # for subclasses
+
+    async def _handle(self, event: str, msg: dict[str, Any]) -> bool:
+        """Handle one inbound message. Return True to stop (sets close_reason first)."""
+        raise NotImplementedError
+
+    def _media_message(self, wire_pcm16: bytes) -> dict[str, Any]:
+        raise NotImplementedError
+
+    def _mark_message(self, tag: str) -> dict[str, Any]:
+        raise NotImplementedError
+
+    def _clear_message(self) -> dict[str, Any]:
+        raise NotImplementedError
+
+    async def _begin(self, rate: int, stream_sid: str | None) -> None:
+        self.sample_rate = rate
+        self._inbound.set_rate(rate)
+        log.info(
+            "leg.start",
+            extra={
+                "side": self.leg_id,
+                "provider": self.provider,
+                "sample_rate": rate,
+                "stream_sid": stream_sid,
+            },
+        )
+        if rate != SAMPLE_RATE:
+            log.warning(
+                "leg.resample",
+                extra={"side": self.leg_id, "from_hz": rate, "to_hz": SAMPLE_RATE},
+            )
+        async with self._lock:
+            self._out.set_rate(rate)
+            self.started.set()
+            ops, self._prestart = self._prestart, []
+            for kind, arg in ops:
+                if kind == "audio":
+                    for chunk in self._out.add(arg):
+                        await self._send_json(self._media_message(chunk))
+                else:
+                    await self._flush_and_mark(arg)
+
+    def _media(self, wire_pcm16: bytes, chunk: Any = None) -> None:
+        if len(wire_pcm16) % SAMPLE_WIDTH:
+            wire_pcm16 = wire_pcm16[: len(wire_pcm16) - 1]
+        rate = self.sample_rate or self._default_rate
+        gap = self._gaps.observe(chunk, len(wire_pcm16) * 1000 // (rate * SAMPLE_WIDTH))
+        if gap:
+            log.warning("leg.gap", extra={"side": self.leg_id, "gap_ms": gap})
+            for cb in self._gap_cbs:
+                cb(gap)
+        self._inbound.push(wire_pcm16)
+
+    def _mark_played(self, tag: str) -> None:
+        if tag not in self._pending_marks:
+            return  # cleared, or not ours
+        self._pending_marks.discard(tag)
+        for cb in self._mark_cbs:
+            cb(tag)
+
+    def _dtmf(self, digit: str) -> None:
+        for cb in self._dtmf_cbs:
+            cb(digit)
+
+    # internals
+
+    async def _flush_and_mark(self, tag: str) -> None:
+        tail = self._out.flush_final()
+        if tail is not None:
+            await self._send_json(self._media_message(tail))
+        self._pending_marks.add(tag)
+        await self._send_json(self._mark_message(tag))
+
+    async def _send_json(self, msg: dict[str, Any]) -> None:
+        if self.closed:
+            return
+        try:
+            await self.ws.send_text(json.dumps(msg, separators=(",", ":")))
+        except Exception as e:
+            log.warning("leg.send_failed", extra={"side": self.leg_id, "error": repr(e)})
+            self.close_reason = self.close_reason or "disconnect"
+            self._closed_evt.set()
+
+    async def _receive(self) -> str | None:
+        recv = asyncio.ensure_future(self.ws.receive_text())
+        stop = asyncio.ensure_future(self._closed_evt.wait())
+        try:
+            done, _ = await asyncio.wait({recv, stop}, return_when=asyncio.FIRST_COMPLETED)
+        finally:
+            stop.cancel()
+            if not recv.done():
+                recv.cancel()
+        if recv not in done or recv.cancelled() or recv.exception() is not None:
+            return None
+        return recv.result()
+
+
+def b64decode(payload: Any) -> bytes:
+    try:
+        return base64.b64decode(payload or b"")
+    except (ValueError, TypeError):
+        return b""
+
+
+def b64encode(data: bytes) -> str:
+    return base64.b64encode(data).decode("ascii")
 
 
 class PlayoutTracker:
