@@ -133,8 +133,3 @@ async def events(
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
-
-
-@router.get("/ward", response_class=HTMLResponse)
-async def ward(request: Request) -> HTMLResponse:
-    return templates.TemplateResponse(request, "ward.html", {})
