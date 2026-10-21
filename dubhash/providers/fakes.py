@@ -52,6 +52,7 @@ class FakeSTTStream:
         self._partials: asyncio.Queue[str | None] = asyncio.Queue()
         self._closed = False
         self.pushed_frames = 0
+        self.detected_lang: str | None = None  # set by end(), as SarvamSTTStream does
         self._heard = 0  # bytes that count towards words (all, or voiced only)
         self._scripted_partials = owner._pop_partials()
 
@@ -89,6 +90,7 @@ class FakeSTTStream:
         else:
             scripted = self._owner._pop()
             final = scripted if scripted is not None else self._text(_word_count(ms))
+            self.detected_lang = self._owner._pop_detected()
         self._finish()
         return final
 
@@ -116,7 +118,9 @@ class FakeSTT:
     partials: optional per-utterance scripts (one list per open(), in order) of
     (audio_ms, text): text is emitted as a partial once audio_ms of audio has been pushed.
     A scripted utterance emits only those partials ([] = none). ignore_silence: only
-    voiced frames count towards words. final_delay_ms sleeps on `clock` when given."""
+    voiced frames count towards words. final_delay_ms sleeps on `clock` when given.
+    detected: the language reported on each final (stream.detected_lang), in order; None
+    entries and an exhausted script report None."""
 
     name = "fake"
 
@@ -128,8 +132,10 @@ class FakeSTT:
         partials: list[list[tuple[int, str]]] | None = None,
         ignore_silence: bool = False,
         clock: Any = None,
+        detected: list[str | None] | None = None,
     ) -> None:
         self._script: deque[str] = deque(script or [])
+        self._detected: deque[str | None] = deque(detected or [])
         self.final_delay_ms = final_delay_ms
         self._partial_script: deque[list[tuple[int, str]]] | None = (
             deque(partials) if partials is not None else None
@@ -144,6 +150,9 @@ class FakeSTT:
 
     def _pop(self) -> str | None:
         return self._script.popleft() if self._script else None
+
+    def _pop_detected(self) -> str | None:
+        return self._detected.popleft() if self._detected else None
 
     def _pop_partials(self) -> deque[tuple[int, str]] | None:
         if self._partial_script is None:
