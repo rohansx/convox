@@ -28,7 +28,7 @@ from dubhash.events import EventBus
 from dubhash.types import CallEvent
 
 ACTIVE_STATUSES = frozenset({"ringing", "active", "in_progress"})
-MARKER_KINDS = frozenset({"dtmf", "barge_in", "bypass", "gap", "provider_error"})
+MARKER_KINDS = frozenset({"dtmf", "barge_in", "bypass", "gap", "provider_error", "lang"})
 
 
 @runtime_checkable
@@ -115,7 +115,12 @@ class InMemoryCallRegistry:
             self._evict()
         elif ev.kind == "leg":
             call["legs"][p.get("side", "?")] = p.get("status")
-        if ev.kind == "bypass":
+        elif ev.kind == "lang" and p.get("lang"):
+            call.setdefault("langs", {})[p.get("side", "?")] = {
+                "lang": p["lang"],
+                "state": p.get("state"),
+            }
+        if ev.kind == "bypass" and "reason" not in p:  # a same_lang bridge is no escape
             call["escape_used"] = True
         if ev.kind in MARKER_KINDS:
             call["markers"].append({"kind": ev.kind, "ts_ms": ev.ts_ms, **p})

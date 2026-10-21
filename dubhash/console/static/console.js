@@ -126,9 +126,12 @@
     } else if (kind === "barge_in") {
       text = "⌁ barge-in" + (has(p.clipped_ms) ? ` · clipped ${p.clipped_ms} ms` : "");
     } else if (kind === "bypass") {
-      text = "escape pressed · interpretation off";
+      text = p.reason === "same_lang" ? "same language on both sides · bridged" : "escape pressed · interpretation off";
     } else if (kind === "gap") {
       text = `audio gap ${p.gap_ms} ms`;
+    } else if (kind === "lang") {
+      text = p.menu ? `${side}: language unsure, keypad menu`
+        : `${side}: ${p.lang} ${String(p.state || "").toLowerCase()} (${p.source} ${Number(p.confidence || 0).toFixed(2)})`;
     } else if (kind === "provider_error") {
       text = `${p.provider} ${p.stage} error` + (p.error ? `: ${p.error}` : "");
     }
@@ -201,7 +204,7 @@
       append(renderMarker("bypass", p));
     },
   };
-  for (const kind of ["dtmf", "barge_in", "gap", "provider_error"]) {
+  for (const kind of ["dtmf", "barge_in", "gap", "provider_error", "lang"]) {
     handlers[kind] = (p) => append(renderMarker(kind, p));
   }
 
