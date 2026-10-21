@@ -1,0 +1,239 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>dubhash loopback</title>
+<style>
+  :root {
+    --bg: #f6f5f2; --panel: #ffffff; --ink: #1d1d1f; --muted: #6b6b70;
+    --line: #e2e0da; --accent: #1f6feb; --live: #d1242f; --ok: #1a7f37;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #111214; --panel: #1b1c1f; --ink: #ececee; --muted: #9a9aa2;
+            --line: #2c2d31; --accent: #4c8dff; --live: #ff5c5c; --ok: #3fb950; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+         font: 15px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 420px; margin: 0 auto; padding: 32px 16px; }
+  h1 { font-size: 18px; margin: 0 0 4px; letter-spacing: .01em; }
+  .meta { color: var(--muted); font-size: 13px; margin-bottom: 20px; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 14px;
+          padding: 20px; display: grid; gap: 16px; }
+  .status { display: flex; align-items: center; gap: 8px; font-size: 14px; }
+  .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--muted); }
+  .dot.on { background: var(--ok); } .dot.err { background: var(--live); }
+  button { font: inherit; border: 1px solid var(--line); background: var(--panel);
+           color: var(--ink); border-radius: 10px; padding: 10px 14px; cursor: pointer; }
+  button:disabled { opacity: .45; cursor: default; }
+  #mic { width: 100%; padding: 16px; font-size: 16px; font-weight: 600;
+         background: var(--accent); border-color: var(--accent); color: #fff; }
+  #mic.live { background: var(--live); border-color: var(--live); }
+  .row { display: flex; gap: 10px; }
+  .row button { flex: 1; }
+  .meter { height: 6px; border-radius: 3px; background: var(--line); overflow: hidden; }
+  .meter > div { height: 100%; width: 0; background: var(--ok); transition: width 60ms linear; }
+  label { font-size: 13px; color: var(--muted); display: grid; gap: 6px; }
+  input { font: inherit; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--line);
+          background: var(--bg); color: var(--ink); width: 100%; }
+  #log { font: 12px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--muted);
+         max-height: 120px; overflow-y: auto; white-space: pre-wrap; margin: 0; }
+</style>
+</head>
+<body>
+<main>
+  <h1>dubhash loopback</h1>
+  <div class="meta" id="meta"></div>
+  <div class="card">
+    <div class="status"><span class="dot" id="dot"></span><span id="status">idle</span></div>
+    <label id="wsrow" hidden>Websocket URL <input id="wsurl" placeholder="ws://localhost:8000/ws/leg?call=c_1&amp;side=a"></label>
+    <button id="mic">Join and start mic</button>
+    <div class="meter"><div id="level"></div></div>
+    <div class="row">
+      <button class="dtmf" data-digit="1" disabled title="replay last translation">DTMF 1</button>
+      <button class="dtmf" data-digit="0" disabled title="bypass">DTMF 0</button>
+      <button id="hangup" disabled>Hang up</button>
+    </div>
+    <pre id="log"></pre>
+  </div>
+</main>
+
+<script id="capture-worklet" type="text/worklet">
+// Mic -> 16 kHz PCM16, 20 ms (320-sample) frames. Box-filter decimation from the context rate.
+class Capture extends AudioWorkletProcessor {
+  constructor() {
+    super();
+    this.ratio = sampleRate / 16000;
+    this.phase = 0; this.acc = 0; this.n = 0;
+    this.frame = new Int16Array(320); this.i = 0;
+    this.muted = false; this.peak = 0;
+    this.port.onmessage = (e) => { if (e.data.type === 'mute') this.muted = e.data.muted; };
+  }
+  process(inputs) {
+    const ch = inputs[0] && inputs[0][0];
+    if (!ch) return true;
+    for (let k = 0; k < ch.length; k++) {
+      this.acc += ch[k]; this.n++; this.phase += 1;
+      if (this.phase >= this.ratio) {
+        this.phase -= this.ratio;
+        let v = this.muted ? 0 : this.acc / this.n;
+        this.acc = 0; this.n = 0;
+        v = Math.max(-1, Math.min(1, v));
+        this.peak = Math.max(this.peak, Math.abs(v));
+        this.frame[this.i++] = v < 0 ? v * 0x8000 : v * 0x7fff;
+        if (this.i === 320) {
+          const out = this.frame.buffer;
+          this.port.postMessage({ type: 'frame', pcm: out, peak: this.peak }, [out]);
+          this.frame = new Int16Array(320); this.i = 0; this.peak = 0;
+        }
+      }
+    }
+    return true;
+  }
+}
+registerProcessor('capture', Capture);
+
+// Queue of 16 kHz chunks and marks, played at the context rate with linear interpolation.
+// A mark is acked when playout reaches it; clear drops audio and pending marks.
+class Player extends AudioWorkletProcessor {
+  constructor() {
+    super();
+    this.step = 16000 / sampleRate;
+    this.q = []; this.pos = 0;
+    this.port.onmessage = (e) => {
+      const m = e.data;
+      if (m.type === 'push') this.q.push({ s: new Float32Array(m.pcm) });
+      else if (m.type === 'mark') this.q.push({ mark: m.name });
+      else if (m.type === 'clear') { this.q = []; this.pos = 0; }
+    };
+  }
+  drainMarks() {
+    while (this.q.length && this.q[0].mark !== undefined) {
+      this.port.postMessage({ type: 'mark', name: this.q.shift().mark });
+    }
+  }
+  process(_inputs, outputs) {
+    const out = outputs[0][0];
+    for (let k = 0; k < out.length; k++) {
+      this.drainMarks();
+      const head = this.q[0];
+      if (!head) { out[k] = 0; continue; }
+      const s = head.s, i = Math.floor(this.pos), f = this.pos - i;
+      const a = s[i], b = i + 1 < s.length ? s[i + 1] : a;
+      out[k] = a + (b - a) * f;
+      this.pos += this.step;
+      if (this.pos >= s.length) { this.pos -= s.length; this.q.shift(); }
+    }
+    this.drainMarks();
+    for (let c = 1; c < outputs[0].length; c++) outputs[0][c].set(out);
+    return true;
+  }
+}
+registerProcessor('player', Player);
+</script>
+
+<script>
+(() => {
+  const qs = new URLSearchParams(location.search);
+  const side = qs.get('side') || 'a';
+  const lang = qs.get('lang') || '';
+  const $ = (id) => document.getElementById(id);
+  const micBtn = $('mic'), hangBtn = $('hangup'), dtmfBtns = [...document.querySelectorAll('.dtmf')];
+  let ws = null, ctx = null, capture = null, player = null, stream = null, muted = false;
+
+  $('meta').textContent = `side ${side}` + (lang ? ` · ${lang}` : '');
+  if (!qs.get('ws')) $('wsrow').hidden = false;
+
+  const log = (msg) => {
+    const el = $('log');
+    el.textContent += `${new Date().toLocaleTimeString()}  ${msg}\n`;
+    el.scrollTop = el.scrollHeight;
+  };
+  const setStatus = (text, state) => {
+    $('status').textContent = text;
+    $('dot').className = 'dot' + (state ? ' ' + state : '');
+  };
+  const sendJson = (obj) => { if (ws && ws.readyState === 1) ws.send(JSON.stringify(obj)); };
+
+  async function join() {
+    const url = qs.get('ws') || $('wsurl').value.trim();
+    if (!url) { log('no websocket URL: pass ?ws=wss://... or fill the field'); return; }
+    micBtn.disabled = true;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({
+        audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+      });
+      ctx = new AudioContext({ latencyHint: 'interactive' });
+      const src = document.getElementById('capture-worklet').textContent;
+      await ctx.audioWorklet.addModule(URL.createObjectURL(new Blob([src], { type: 'text/javascript' })));
+      capture = new AudioWorkletNode(ctx, 'capture', { numberOfInputs: 1, numberOfOutputs: 1 });
+      player = new AudioWorkletNode(ctx, 'player', { numberOfInputs: 0, outputChannelCount: [1] });
+      const sink = ctx.createGain();
+      sink.gain.value = 0; // keeps the capture node pulled by the graph in every browser
+      ctx.createMediaStreamSource(stream).connect(capture).connect(sink).connect(ctx.destination);
+      player.connect(ctx.destination);
+      await ctx.resume();
+    } catch (err) {
+      log('audio setup failed: ' + err); setStatus('mic unavailable', 'err');
+      micBtn.disabled = false; return;
+    }
+
+    ws = new WebSocket(url);
+    ws.binaryType = 'arraybuffer';
+    setStatus('connecting');
+    ws.onopen = () => {
+      setStatus(`connected (${ctx.sampleRate} Hz → 16 kHz)`, 'on');
+      log('connected ' + url);
+      sendJson({ type: 'hello', side, lang });
+      micBtn.disabled = false; micBtn.textContent = 'Mute mic'; micBtn.classList.add('live');
+      hangBtn.disabled = false; dtmfBtns.forEach((b) => (b.disabled = false));
+    };
+    ws.onmessage = (e) => {
+      if (typeof e.data !== 'string') {
+        const i16 = new Int16Array(e.data, 0, e.data.byteLength >> 1);
+        const f32 = new Float32Array(i16.length);
+        for (let k = 0; k < i16.length; k++) f32[k] = i16[k] / 32768;
+        player.port.postMessage({ type: 'push', pcm: f32.buffer }, [f32.buffer]);
+        return;
+      }
+      let m; try { m = JSON.parse(e.data); } catch { return; }
+      if (m.type === 'clear') { player.port.postMessage({ type: 'clear' }); log('clear'); }
+      else if (m.type === 'mark') player.port.postMessage({ type: 'mark', name: m.name });
+    };
+    ws.onclose = (e) => { log(`closed (${e.code})`); teardown('disconnected'); };
+    ws.onerror = () => setStatus('websocket error', 'err');
+
+    capture.port.onmessage = (e) => {
+      if (e.data.type !== 'frame') return;
+      $('level').style.width = Math.min(100, e.data.peak * 140) + '%';
+      if (ws && ws.readyState === 1) ws.send(e.data.pcm);
+    };
+    player.port.onmessage = (e) => { if (e.data.type === 'mark') sendJson({ type: 'mark', name: e.data.name }); };
+  }
+
+  function teardown(text) {
+    if (stream) stream.getTracks().forEach((t) => t.stop());
+    if (ctx) ctx.close();
+    stream = ctx = capture = player = null;
+    if (ws && ws.readyState <= 1) ws.close();
+    ws = null; muted = false;
+    setStatus(text || 'idle');
+    micBtn.disabled = false; micBtn.textContent = 'Join and start mic'; micBtn.classList.remove('live');
+    hangBtn.disabled = true; dtmfBtns.forEach((b) => (b.disabled = true));
+    $('level').style.width = '0';
+  }
+
+  micBtn.onclick = () => {
+    if (!ws) { join(); return; }
+    muted = !muted;
+    capture.port.postMessage({ type: 'mute', muted });
+    micBtn.textContent = muted ? 'Unmute mic' : 'Mute mic';
+    micBtn.classList.toggle('live', !muted);
+  };
+  hangBtn.onclick = () => teardown('hung up');
+  dtmfBtns.forEach((b) => (b.onclick = () => { sendJson({ type: 'dtmf', digit: b.dataset.digit }); log('dtmf ' + b.dataset.digit); }));
+})();
+</script>
+</body>
+</html>
