@@ -154,3 +154,32 @@ async def test_close_is_idempotent_and_closes_socket():
     assert client.peer is not None and client.peer.closed
     assert [f async for f in leg.frames()] == []
     await leg.send(b"\x00" * 640)  # no-op after close
+
+
+async def test_unknown_message_types_go_to_on_telemetry():
+    leg, client, task, _ = await running()
+    got: list[dict] = []
+    leg.on_telemetry(got.append)
+    msg = {"type": "telemetry", "kind": "play_start", "tag": "a:0", "client_ms": 1234.5}
+    await client.send_text(json.dumps(msg))
+    await client.send_text(json.dumps({"type": "dtmf", "digit": "1"}))
+    await client.send_text("not json")
+    await settle()
+    assert got == [msg]
+    await leg.close()
+    await asyncio.wait_for(task, 1)
+
+
+async def test_pings_carry_the_given_clock_until_close():
+    leg, client, task, clock = await running()
+    clock.advance(700)
+    sent: list[int] = []
+    leg.start_pings(clock.now_ms, interval_s=0.01, on_ping=sent.append)
+    await asyncio.sleep(0.035)
+    pings = [json.loads(m) for m in client.drain() if isinstance(m, str)]
+    assert len(pings) >= 2
+    assert pings[0] == {"type": "ping", "server_ms": 700} and sent[0] == 700
+    await leg.close()
+    await asyncio.wait_for(task, 1)
+    await asyncio.sleep(0.03)
+    assert not [m for m in client.drain() if isinstance(m, str) and "ping" in m]
