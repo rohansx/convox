@@ -61,6 +61,21 @@ mr-hi:
   spec_mt: false
   spec_after_ms: 200
 
+# Marathi <-> English (L4). The Marathi side's STT outputs English (sarvam-translate), which
+# is already the listener's language, so the pipeline skips MT (t_mt = t_stt_final). The
+# English side is Sarvam STT in en-IN, then en->mr MT. find_pair also serves en-IN on side a
+# (it swaps sides), so there is no en-mr entry.
+mr-en:
+  a: { lang: mr-IN, stt: sarvam-translate, mt_src: en-IN, tts: bulbul, voice_m: "bulbul:mr-male-1", voice_f: "bulbul:mr-female-1" }
+  b: { lang: en-IN, stt: sarvam, tts: bulbul, voice_m: "bulbul:en-male-1", voice_f: "bulbul:en-female-1" }
+  eou_ms: 550
+  backchannel_max_ms: 600
+  barge_in_min_ms: 1200
+  duck_db: -14
+  spec_mt: false
+  spec_after_ms: 200
+  early_final_ms: 200
+
 # all-fake pair for tests and the day-2 FakeLeg pipeline
 fake-fake:
   a: { lang: hi-IN, stt: fake, tts: fake, voice_m: "fake:m", voice_f: "fake:f" }

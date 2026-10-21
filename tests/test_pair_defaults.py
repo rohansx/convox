@@ -31,3 +31,23 @@ def test_ward_speaks_hindi_with_bulbul():
     assert p.b.tts == "bulbul" and p.b.voice_f.startswith("bulbul:")
     q = ward_pair("en-IN", "ta-IN", {})
     assert q.a.tts == "bulbul"
+
+
+def test_mr_en_marathi_side_speaks_english_straight_from_stt():
+    p = PAIRS["mr-en"]
+    assert (p.a.lang, p.b.lang) == ("mr-IN", "en-IN")
+    assert p.a.stt == "sarvam-translate" and p.a.mt_lang == "en-IN"  # == target: MT skipped
+    assert p.b.stt == "sarvam" and p.b.mt_lang == "en-IN"  # then en -> mr MT
+    assert p.b.tts == "bulbul" and p.b.voice_f.startswith("bulbul:en-")
+    assert p.a.tts == "bulbul" and p.a.voice_f.startswith("bulbul:mr-")
+
+
+def test_one_entry_per_language_pair():
+    """find_pair swaps orientation, so no pair is written twice (en-mr next to mr-en)."""
+    seen: dict[frozenset[str], str] = {}
+    for key, p in PAIRS.items():
+        if "fake" in key or key.endswith("-direct"):
+            continue
+        langs = frozenset((p.a.lang, p.b.lang))
+        assert langs not in seen, f"{key} duplicates {seen[langs]}"
+        seen[langs] = key
