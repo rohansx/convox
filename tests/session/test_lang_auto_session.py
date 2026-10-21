@@ -106,6 +106,23 @@ async def test_with_stt_auto_the_finals_language_and_confidence_resolve_the_side
     assert call.bus.kinds("lang")[0].payload["source"] == "stt_final"
 
 
+async def test_the_language_is_decided_at_the_final_not_after_tts():
+    """Live (c_zx7uu2n3n6) the decision waited for the translation's first TTS byte, ~1 s
+    after the final. It only needs the final and the end of the utterance."""
+    call = Call(
+        {"a": "auto", "b": "kn-IN"},
+        stt={"a": FakeSTT(["a one"], detected=[("ta-IN", 0.97)]), "b": FakeSTT()},
+        stt_open="auto",
+    )
+    call.tts["b"] = call.session.providers.tts["b"] = FakeTTS(ttfb_ms=800, clock=call.clock)
+    call.session.interpreters["a"].tts = call.tts["b"]
+    await call.run({"a": talk() + silence(3000)})
+    decided = call.bus.kinds("lang")[0].ts_ms
+    turn = call.session.turn_log.turns[0]
+    assert decided <= max(turn.t_stt_final, turn.t_eou) + 40
+    assert decided < turn.t_tts_ttfb
+
+
 async def test_a_hinted_side_is_confirmed_and_the_partner_hears_the_hint_until_then():
     """A (auto, hint mr-IN) and B (hi-IN). B speaks first: A hears Marathi (the hint).
     Two agreeing Marathi guesses from A confirm it."""

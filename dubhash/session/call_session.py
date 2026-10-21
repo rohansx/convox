@@ -369,6 +369,7 @@ class _Sink:
         if utt is not None:
             utt.t_eou = self._s.clock.now_ms()
             self.gate.utt_end(side, utt.t_eou)
+            self._s._lang_ready(side, utt)  # an early final's evidence is final now
             if utt.suspect:
                 return  # the floor never heard it start
         if self._ended_early[side]:
@@ -1057,9 +1058,16 @@ class CallSession:
         lid = self.providers.lid
         task = self._spawn_lang(lid.identify(audio, r.config.supported)) if lid else None
         utt.lang_ev = _LangEvidence(speech_ms, stt_lang, text or final, task, stt_confidence)
+        self._lang_ready(side, utt)
+
+    def _lang_ready(self, side: Side, utt: _Utt) -> None:
+        """Judge the utterance's evidence once it has both its final and its EOU (after
+        EOU no early-final restart can replace the final), without waiting for MT/TTS."""
+        if utt.t_eou is not None and utt.lang_ev is not None:
+            self._lang_utt_done(side, utt)
 
     def _lang_utt_done(self, side: Side, utt: _Utt) -> None:
-        """The utterance was delivered or discarded: judge its language evidence."""
+        """Judge the utterance's language evidence, if not judged yet."""
         ev, utt.lang_ev = utt.lang_ev, None
         if ev is not None and side in self.resolvers:
             self._spawn_lang(self._resolve(side, ev))
