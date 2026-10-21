@@ -30,13 +30,16 @@ Per pair (top-level key `{x}-{y}`, two-letter codes):
 | `backchannel_max_ms` | int, ms | `600` | utterances shorter than this with ≤ 2 words are tagged backchannel: not translated, never change floor state, never clear audio | endpoint, floor controller |
 | `barge_in_min_ms` | int, ms | `1200` | listener speech during playback longer than this is a real interruption: `clear()` the listener leg, mark the playing translation clipped, switch floor | floor controller |
 | `duck_db` | int, dB | `-14` | level of the speaker's original audio mixed under the TTS in the listener's stream | `audio/mixer.py` |
+| `early_final_ms` | int, ms | `200` | end the STT stream after this much silence, before EOU, so MT/TTS overlap the EOU wait. `0` = off (the default). On for `hi-kn`, `mr-hi`, `mr-en` ([L3, L4](../plan/open-questions.md#answer-log)) | `interp/pipeline.py` |
+| `spec_mt`, `spec_after_ms` | bool, int ms | `false`, `200` | speculative MT on STT partials during the EOU wait. Off everywhere ([L1a](../plan/open-questions.md#answer-log)) | `interp/speculate.py` |
 
 Per side (`a` / `b`):
 
 | Field | Type | Values | Meaning |
 |---|---|---|---|
 | `lang` | BCP-47 | `hi-IN`, `kn-IN`, `ta-IN`, `mr-IN`, … | the language **this side speaks and hears**. Used as the STT language code for this side's speech and as the MT source/target code (e.g. Sarvam translate `source=hi-IN target=kn-IN`) |
-| `stt` | enum | `sarvam` \| `deepgram` \| `fake` | STT engine for **this side's speech**. Sarvam streaming (Saarika/Saaras) for Indic. Deepgram Nova for English and Hinglish fallback. Selectable per leg |
+| `stt` | enum | `sarvam` \| `sarvam-translate` \| `deepgram` \| `fake` | STT engine for **this side's speech**. Sarvam streaming (Saaras) for Indic and `en-IN`. `sarvam-translate` is the same socket with `mode=translate`: the final is **English** (partials stay in the source language), the pivot route of [L1](../plan/open-questions.md#answer-log). Deepgram Nova for English and Hinglish fallback |
+| `mt_src` | BCP-47, optional | `en-IN` | the MT source language when the STT does not output `lang` (with `sarvam-translate`). Default: `lang`. When it equals the listener's `lang` (a `sarvam-translate` side towards an English side) the pipeline and ward mode **skip MT**: no vendor call, `t_mt = t_stt_final` |
 | `tts` | enum | `bulbul` \| `eleven` \| `fake` | TTS engine used to synthesize speech **in this side's language**, i.e. what this side hears |
 | `voice_m` | string `engine:voice-id` | `"bulbul:kn-male-1"` | voice used when the **other side's** speaker is detected male |
 | `voice_f` | string | `"bulbul:kn-female-1"` | voice used when the other side's speaker is detected female |
@@ -60,35 +63,27 @@ v1 uses a **fixed natural voice per target language and detected speaker gender*
 
 ### Pairs to ship
 
-| Pair | Status | Notes |
-|---|---|---|
-| `hi-kn` | spec example above | primary demo pair (CP1 pair) |
-| `hi-ta` | `{ ... }` in spec, values TBD | `ta-IN`, Bulbul for ta. Tamil speakers pause differently, so tune `eou_ms` separately |
-| `mr-hi` | `{ ... }` in spec, values TBD | `mr-IN`, Bulbul for mr, ElevenLabs for hi. Used for the ward-mode story |
+One entry per language pair: `find_pair` also serves the reversed orientation (below), so there is no `en-mr` next to `mr-en`. `*-direct` entries keep the measured alternative route, picked by key (`"pair"` on `POST /loopback/calls`, `--pair` in the tools).
 
-Proposed skeletons, with values to fill from the bench:
+| Pair | Route | Live first-audio heard, p50 / p95 | Notes |
+|---|---|---|---|
+| `hi-kn` | hi side pivot (`sarvam-translate`, `mt_src: en-IN`), `early_final_ms: 200` | 1377 / 1634 (A→B, [L3](../plan/open-questions.md#answer-log)) | primary demo pair. `hi-kn-direct`: plain STT + hi→kn MT |
+| `hi-ta` | plain | not measured | Tamil speakers pause differently, so tune `eou_ms` separately |
+| `mr-hi` | pivot on **both** sides (mr→en STT then en→hi; hi→en STT then en→mr), `early_final_ms: 200` | mr→hi 1500 / 1940, hi→mr 1540 / 1720 ([L4](../plan/open-questions.md#answer-log)) | ward-mode default. `mr-hi-direct`: plain STT + mr↔hi MT, 2480 / 3240 and 2500 / 2580 |
+| `mr-en` | mr side `sarvam-translate` (English straight from STT, MT skipped); en side Sarvam STT `en-IN` then en→mr | mr→en 820 / 1160, en→mr 1520 / 1880 (L4) | also serves `a: en-IN, b: mr-IN`. Bulbul speaks `en-IN` |
 
 ```yaml
-hi-ta:
-  a: { lang: hi-IN, stt: sarvam, tts: eleven, voice_m: "eleven:hi-male-1", voice_f: "eleven:hi-female-1" }
-  b: { lang: ta-IN, stt: sarvam, tts: bulbul, voice_m: "bulbul:ta-male-1", voice_f: "bulbul:ta-female-1" }
-  eou_ms: 550            # TBD after per-language bench
-  backchannel_max_ms: 600
-  barge_in_min_ms: 1200
-  duck_db: -14
-mr-hi:
-  a: { lang: mr-IN, stt: sarvam, tts: bulbul, voice_m: "bulbul:mr-male-1", voice_f: "bulbul:mr-female-1" }
-  b: { lang: hi-IN, stt: sarvam, tts: eleven, voice_m: "eleven:hi-male-1", voice_f: "eleven:hi-female-1" }
-  eou_ms: 550            # TBD
-  backchannel_max_ms: 600
-  barge_in_min_ms: 1200
-  duck_db: -14
+mr-en:
+  a: { lang: mr-IN, stt: sarvam-translate, mt_src: en-IN, tts: bulbul, voice_m: "bulbul:mr-male-1", voice_f: "bulbul:mr-female-1" }
+  b: { lang: en-IN, stt: sarvam, tts: bulbul, voice_m: "bulbul:en-male-1", voice_f: "bulbul:en-female-1" }
+  eou_ms: 550
+  early_final_ms: 200
 ```
 
 ### Loading and validation (proposed)
 
 - Load once at startup into frozen pydantic models. Reject unknown keys and unknown engines, and fail fast.
-- Pair lookup for `POST /v1/calls` with `a.lang=kn-IN, b.lang=hi-IN`: try `kn-hi`, then `hi-kn` with sides swapped. Unknown pair → `422 unsupported_pair` ([API](api.md#errors-proposed)). The v1 non-goal is any language whose STT we have not measured on PSTN, so only measured pairs go in the file.
+- Pair lookup (`find_pair`, used by `POST /v1/calls`, `POST /loopback/calls` and ward mode) with `a.lang=kn-IN, b.lang=hi-IN`: the first non-fake entry written as `kn-IN`/`hi-IN` wins; otherwise the first written the other way round (`hi-kn`) is returned **swapped** (`PairConfig.swapped()`: `a` and `b` exchanged, every other field and the key kept, so turn logs still name the `pairs.yaml` entry). A pair named by key is oriented the same way (`orient()`). Unknown pair → `422 unsupported_pair` ([API](api.md#errors-proposed)). The v1 non-goal is any language whose STT we have not measured on PSTN, so only measured pairs go in the file.
 - Every side's `voice_m`/`voice_f` prefix must match its `tts` engine (`bulbul:` with `bulbul`).
 - Hot reload is not needed in v1. Restart the container.
 
