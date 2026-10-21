@@ -70,7 +70,10 @@ class FloorController:
         line_check: Callable[[Side], AsyncIterator[bytes]] | None = None,
         on_played: Callable[[Translation], None] | None = None,
         on_bypass: Callable[[], None] | None = None,
+        bypass: bool = False,
     ) -> None:
+        """bypass=True starts in passthrough (bridge mode): forward() relays frames from
+        the first frame, with no bypass event and no on_bypass call."""
         self.call_id = call_id
         self._legs = legs
         self._clock = clock
@@ -92,7 +95,7 @@ class FloorController:
         self._state: State = "IDLE"
         self._queue: deque[Translation] = deque()
         self._pb: _Playback | None = None
-        self._bypass = False
+        self._bypass = bypass
         self._bg: set[asyncio.Task[Any]] = set()
         self._speaking: set[Side] = set()
         self._barge_since: int | None = None  # listener speech start during playback
@@ -310,6 +313,7 @@ class FloorController:
     def _start_line_check(self) -> None:
         if self._line_check is None:
             return
+        self._publish("line_check", {"sides": list(self._legs)})
         for side in self._legs:
             self._line_tasks[side] = self._spawn(self._send_line_check(side))
 
