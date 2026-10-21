@@ -14,6 +14,7 @@ from dubhash.providers.errors import ProviderError, ProviderUnavailable  # noqa:
 if TYPE_CHECKING:
     from dubhash.config.settings import Settings
     from dubhash.interp.contracts import MT, STT, TTS
+    from dubhash.interp.langid import LanguageID
 
 
 def _key(value: str, env: str, name: str) -> str:
@@ -72,3 +73,16 @@ def build_tts(name: str, settings: Settings) -> TTS:
 
         return ElevenTTS(_key(settings.elevenlabs_api_key, "ELEVENLABS_API_KEY", name))
     raise _unknown("tts", name, ("bulbul", "eleven", "fake"))
+
+
+def build_lid(name: str, settings: Settings) -> LanguageID:
+    """Spoken-language ID for lang "auto". A speech provider, so it follows STT_IMPL."""
+    if name == "fake" or settings.stt_impl == "fake" or settings.forces_fakes:
+        from dubhash.providers.fakes import FakeLID
+
+        return FakeLID()
+    if name == "sarvam":
+        from dubhash.providers.sarvam_lid import SarvamLID
+
+        return SarvamLID(_key(settings.sarvam_api_key, "SARVAM_API_KEY", name))
+    raise _unknown("lid", name, ("sarvam", "fake"))
