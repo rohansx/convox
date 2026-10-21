@@ -431,6 +431,8 @@ def _turn_warnings(
             )
         )
     wait = _diff(row["tts_ttfb"], row["play_start"])
+    if row.get("chunk"):  # a later chunk waits for the earlier ones by design (L9)
+        wait = None
     if wait is not None and wait > QUEUE_WAIT_MS:
         held = any(
             row["tts_ttfb"] < ack <= row["play_start"] + 50

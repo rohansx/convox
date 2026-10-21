@@ -77,6 +77,15 @@ def test_backchannels_and_unplayed_turns_do_not_count():
     assert utterances(turns) == []
 
 
+def test_a_later_chunk_waiting_behind_the_earlier_one_is_no_queue_warning():
+    turns = [
+        t("a", 0, 0, 3000, 4000, utterance_id=0, chunk=0, t_tts_ttfb=3900),
+        t("a", 1, 3400, 5000, 6400, utterance_id=0, chunk=1, t_tts_ttfb=5200),
+    ]
+    out = analyze([{"kind": "turn", "ms": 0, "payload": {"turn": x}} for x in turns], [])
+    assert [w["code"] for w in out["warnings"]] == []
+
+
 def test_analyze_reports_the_three_metrics_server_and_heard():
     turn = t("a", 0, 1000, 6000, 7400, utterance_id=0, chunk=0, t_utt_start=1000)
     events = [

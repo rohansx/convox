@@ -37,6 +37,11 @@ it. At STT end() the gate judges the whole utterance; cross-talk returns an empt
 without waiting for the vendor (the stream settles in the background, keeping its socket
 warm), so the interpreter discards it. On co-located calls a final whose detected language
 is the other side's is discarded too. Each decision is published as a "crosstalk" event.
+
+Chunked interpretation (L9): a chunk (final_chunk=False) does not end the sink's
+utterance; every chunk's STT stream binds to it, so the cross-talk judge sees the whole
+utterance so far (a cross-talk chunk gets an empty final and is never committed). Only the
+first chunk of an utterance is rendered with the earcon.
 """
 
 from __future__ import annotations
@@ -312,7 +317,7 @@ class _Sink:
         await self._s.floor.on_speech_end(side)
 
     async def on_translation(self, tr: Translation) -> None:
-        if self.utts[tr.side]:
+        if tr.final_chunk and self.utts[tr.side]:  # a chunk (L9): the utterance goes on
             self.utts[tr.side].popleft()
         await self._s.floor.on_translation(tr)
 
@@ -763,14 +768,18 @@ class CallSession:
 
     def _render(self, tr: Translation) -> AsyncIterator[bytes]:
         source = tr.source_audio if self.duck_original else b""
-        frames = self._render_partial(tr.audio, source_audio=source)
-        return self._echo_tap(other(tr.side), frames)
+        # a later chunk of an utterance (L9) continues the translation: no second earcon
+        earcon = EARCON if tr.chunk == 0 else None
+        frames = self._render_partial(tr.audio, source_audio=source, earcon=earcon)
+        return self._echo_tap(other(tr.side), frames, earcon=earcon is not None)
 
-    async def _echo_tap(self, listener: Side, frames: AsyncIterator[bytes]) -> AsyncIterator[bytes]:
+    async def _echo_tap(
+        self, listener: Side, frames: AsyncIterator[bytes], *, earcon: bool = True
+    ) -> AsyncIterator[bytes]:
         """The listener's outbound frames, as the echo guard's reference level (the
         translation's, so the earcon frames are left out)."""
         self.gate.playback_start(listener)
-        skip = len(EARCON) // FRAME_BYTES
+        skip = len(EARCON) // FRAME_BYTES if earcon else 0
         try:
             async for f in frames:
                 if skip:
