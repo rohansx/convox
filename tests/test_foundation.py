@@ -64,3 +64,39 @@ def test_relative_pairs_file_resolves_from_any_cwd(tmp_path, monkeypatch):
     for rel in ("config/pairs.yaml", "dubhash/config/pairs.yaml"):
         s = Settings(_env_file=None, pairs_file=rel)
         assert s.pairs_file.exists(), rel
+
+
+async def test_fake_clock_sleep_wakes_on_advance():
+    c = FakeClock()
+    woke: list[int] = []
+
+    async def sleeper(ms: int) -> None:
+        await c.sleep_ms(ms)
+        woke.append(c.now_ms())
+
+    tasks = [asyncio.create_task(sleeper(ms)) for ms in (300, 100)]
+    await asyncio.sleep(0)
+    c.advance(99)
+    await asyncio.sleep(0)
+    assert woke == []
+    c.advance(1)
+    await asyncio.sleep(0)
+    await asyncio.sleep(0)
+    assert woke == [100]
+    c.set(400)
+    await asyncio.gather(*tasks)
+    assert woke == [100, 400]
+
+
+async def test_fake_clock_sleep_cancel_is_clean():
+    c = FakeClock()
+    t = asyncio.create_task(c.sleep_ms(50))
+    await asyncio.sleep(0)
+    t.cancel()
+    await asyncio.gather(t, return_exceptions=True)
+    c.advance(100)  # must not raise on the cancelled waiter
+
+
+async def test_fake_clock_sleep_zero_returns():
+    c = FakeClock()
+    await c.sleep_ms(0)

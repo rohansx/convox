@@ -8,6 +8,7 @@ import asyncio
 import math
 from collections import deque
 from collections.abc import AsyncIterator
+from typing import Any
 
 import numpy as np
 
@@ -17,8 +18,28 @@ MS_PER_WORD = 300
 MIN_HEARD_MS = 100
 
 
+SILENCE_PEAK = 64  # ignore_silence: frames whose peak |sample| is below this are silence
+
+
 def _word_count(ms: int) -> int:
     return 0 if ms < MIN_HEARD_MS else max(1, ms // MS_PER_WORD)
+
+
+async def _sleep(clock: Any, ms: int) -> None:
+    """Sleep on `clock` (FakeClock time) when it can, else on the wall clock."""
+    if clock is not None and hasattr(clock, "sleep_ms"):
+        await clock.sleep_ms(ms)
+    else:
+        await asyncio.sleep(ms / 1000)
+
+
+def _is_silent(frame: bytes) -> bool:
+    n = len(frame) // 2
+    if n == 0:
+        return True
+    return int(np.max(np.abs(np.frombuffer(frame[: n * 2], dtype=np.int16).astype(np.int32)))) < (
+        SILENCE_PEAK
+    )
 
 
 class FakeSTTStream:
@@ -30,6 +51,8 @@ class FakeSTTStream:
         self._partials: asyncio.Queue[str | None] = asyncio.Queue()
         self._closed = False
         self.pushed_frames = 0
+        self._heard = 0  # bytes that count towards words (all, or voiced only)
+        self._scripted_partials = owner._pop_partials()
 
     def _text(self, n_words: int) -> str:
         scripted = self._owner._peek()
@@ -42,7 +65,14 @@ class FakeSTTStream:
             return
         self._bytes += len(frame)
         self.pushed_frames += 1
-        n = _word_count(bytes_to_ms(self._bytes))
+        if not (self._owner.ignore_silence and _is_silent(frame)):
+            self._heard += len(frame)
+        if self._scripted_partials is not None:
+            ms = bytes_to_ms(self._bytes)
+            while self._scripted_partials and self._scripted_partials[0][0] <= ms:
+                self._partials.put_nowait(self._scripted_partials.popleft()[1])
+            return
+        n = _word_count(bytes_to_ms(self._heard))
         if n > self._words:
             self._words = n
             text = self._text(n)
@@ -51,8 +81,8 @@ class FakeSTTStream:
 
     async def end(self) -> str:
         if self._owner.final_delay_ms > 0:
-            await asyncio.sleep(self._owner.final_delay_ms / 1000)
-        ms = bytes_to_ms(self._bytes)
+            await _sleep(self._owner.clock, self._owner.final_delay_ms)
+        ms = bytes_to_ms(self._heard)
         if ms < MIN_HEARD_MS:
             final = ""
         else:
@@ -80,13 +110,31 @@ class FakeSTTStream:
 class FakeSTT:
     """Each end() returns the next scripted transcript, else one word ("w1 w2 ...") per
     300 ms of audio pushed; "" under 100 ms of audio (a scripted entry is not consumed
-    then)."""
+    then).
+
+    partials: optional per-utterance scripts (one list per open(), in order) of
+    (audio_ms, text): text is emitted as a partial once audio_ms of audio has been pushed.
+    A scripted utterance emits only those partials ([] = none). ignore_silence: only
+    voiced frames count towards words. final_delay_ms sleeps on `clock` when given."""
 
     name = "fake"
 
-    def __init__(self, script: list[str] | None = None, final_delay_ms: int = 0) -> None:
+    def __init__(
+        self,
+        script: list[str] | None = None,
+        final_delay_ms: int = 0,
+        *,
+        partials: list[list[tuple[int, str]]] | None = None,
+        ignore_silence: bool = False,
+        clock: Any = None,
+    ) -> None:
         self._script: deque[str] = deque(script or [])
         self.final_delay_ms = final_delay_ms
+        self._partial_script: deque[list[tuple[int, str]]] | None = (
+            deque(partials) if partials is not None else None
+        )
+        self.ignore_silence = ignore_silence
+        self.clock = clock
         self.opened = 0
         self.langs: list[str] = []
 
@@ -96,6 +144,11 @@ class FakeSTT:
     def _pop(self) -> str | None:
         return self._script.popleft() if self._script else None
 
+    def _pop_partials(self) -> deque[tuple[int, str]] | None:
+        if self._partial_script is None:
+            return None
+        return deque(sorted(self._partial_script.popleft())) if self._partial_script else deque()
+
     async def open(self, lang: str) -> FakeSTTStream:
         self.opened += 1
         self.langs.append(lang)
@@ -103,23 +156,38 @@ class FakeSTT:
 
 
 class FakeMT:
-    """translate() returns f"[{tgt}] {text}", or the dictionary entry for text."""
+    """translate() returns f"[{tgt}] {text}", or the dictionary entry for text. delay_ms
+    sleeps on `clock` when given; `calls` counts every call, `cancelled` those cancelled
+    mid-delay, `texts` the inputs."""
 
     name = "fake"
 
     def __init__(
-        self, prefix: str = "[tgt] ", dictionary: dict[str, str] | None = None, delay_ms: int = 0
+        self,
+        prefix: str = "[tgt] ",
+        dictionary: dict[str, str] | None = None,
+        delay_ms: int = 0,
+        *,
+        clock: Any = None,
     ) -> None:
         # `prefix` is kept for signature compatibility; the target code replaces "tgt".
         self.prefix = prefix
         self.dictionary = dict(dictionary or {})
         self.delay_ms = delay_ms
+        self.clock = clock
         self.calls = 0
+        self.cancelled = 0
+        self.texts: list[str] = []
 
     async def translate(self, text: str, src: str, tgt: str) -> str:
         self.calls += 1
+        self.texts.append(text)
         if self.delay_ms > 0:
-            await asyncio.sleep(self.delay_ms / 1000)
+            try:
+                await _sleep(self.clock, self.delay_ms)
+            except asyncio.CancelledError:
+                self.cancelled += 1
+                raise
         if text in self.dictionary:
             return self.dictionary[text]
         return self.prefix.replace("tgt", tgt, 1) + text
@@ -127,19 +195,27 @@ class FakeMT:
 
 class FakeTTS:
     """Yields a quiet tone of len(text) * ms_per_char ms as PCM16@16k in chunk_ms chunks.
-    ttfb_ms > 0 sleeps before the first chunk; realtime sleeps chunk_ms between chunks."""
+    ttfb_ms > 0 sleeps before the first chunk (on `clock` when given); realtime sleeps
+    chunk_ms (wall clock) between chunks."""
 
     name = "fake"
     TONE_HZ = 330.0
     AMPLITUDE = 2000
 
     def __init__(
-        self, ms_per_char: int = 60, ttfb_ms: int = 0, chunk_ms: int = 100, realtime: bool = False
+        self,
+        ms_per_char: int = 60,
+        ttfb_ms: int = 0,
+        chunk_ms: int = 100,
+        realtime: bool = False,
+        *,
+        clock: Any = None,
     ) -> None:
         self.ms_per_char = ms_per_char
         self.ttfb_ms = ttfb_ms
         self.chunk_ms = chunk_ms
         self.realtime = realtime
+        self.clock = clock
         self.requests: list[tuple[str, str, str]] = []
 
     def _pcm(self, ms: int) -> bytes:
@@ -151,7 +227,7 @@ class FakeTTS:
         pcm = self._pcm(len(text) * self.ms_per_char)
         step = ms_to_bytes(self.chunk_ms)
         if self.ttfb_ms > 0:
-            await asyncio.sleep(self.ttfb_ms / 1000)
+            await _sleep(self.clock, self.ttfb_ms)
         for i in range(0, len(pcm), step):
             if i and self.realtime:
                 await asyncio.sleep(self.chunk_ms / 1000)
