@@ -143,6 +143,20 @@ def test_flags_wrong_language_text():
     assert ("wrong_language", "b", 0) in codes(analyze(latin, []))
 
 
+def test_code_mixed_translations_are_not_wrong_language():
+    # live mr-hi call c_gxzdvdm6hf: Mayura keeps English nouns in Latin script
+    mixed = [
+        "Hello, मैं Flat 302 से बोल रही हूँ, मेरा parcel कहाँ है?",
+        "OTP 4729 है।",
+        "Okay, मैं 6 o'clock पर घर पर रहूँगी।",
+    ]
+    for text in mixed:
+        events = [META, turn("a", 0, 1000, src_text="मला औषध हवे आहे", tgt_text=text)]
+        assert analyze(events, [])["warnings"] == [], text
+    english = [META, turn("a", 0, 1000, tgt_text="Hello, I am speaking from flat 302")]
+    assert ("wrong_language", "a", 0) in codes(analyze(english, []))
+
+
 def test_flags_opening_hold_delaying_a_turn():
     events = [
         META,

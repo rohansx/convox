@@ -36,6 +36,7 @@ LONG_UTTERANCE_MS = 8000
 OVERLAP_MS = 300  # speech overlapping another side's speech or playback by this much
 CLIENT_MATCH_EARLY_MS = 300  # a page play_start this much before the server's still counts
 PROMPT_TAGS = frozenset({"opening"})
+MIXED_MIN_SHARE = 0.2  # of an Indic text's letters in its own script
 
 # Unicode script per language (BCP-47 primary subtag)
 SCRIPT_OF_LANG = {
@@ -53,8 +54,8 @@ _MR_WORDS = frozenset("आहे आहेत नाही काय मला �
 _WORD = re.compile(r"[^\s.,!?;:।॥\"'()]+")
 
 
-def script_of(text: str | None) -> str | None:
-    """The dominant script of `text` ("deva", "latn", ...), None if it has no letters."""
+def script_counts(text: str | None) -> dict[str, int]:
+    """Letters per script ("deva", "latn", ...) in `text`."""
     counts: dict[str, int] = {}
     for ch in text or "":
         if not ch.isalpha():
@@ -67,20 +68,31 @@ def script_of(text: str | None) -> str | None:
                 break
         if name is not None:
             counts[name] = counts.get(name, 0) + 1
+    return counts
+
+
+def script_of(text: str | None) -> str | None:
+    """The dominant script of `text`, None if it has no letters."""
+    counts = script_counts(text)
     return max(counts, key=lambda k: counts[k]) if counts else None
 
 
 def language_mismatch(text: str | None, lang: str | None) -> str | None:
-    """Why `text` does not look like `lang` (None if it does or we cannot tell)."""
+    """Why `text` does not look like `lang` (None if it does or we cannot tell). Indian
+    translations keep English nouns in Latin script ("मेरा parcel कहाँ है?"), so an Indic
+    target only needs MIXED_MIN_SHARE of its letters in its own script."""
     if not text or not lang:
         return None
     short = lang.split("-")[0]
     want = SCRIPT_OF_LANG.get(short)
-    got = script_of(text)
-    if want is None or got is None:
+    counts = script_counts(text)
+    total = sum(counts.values())
+    if want is None or not total:
         return None
-    if got != want:
-        return f"{got} script, expected {want} for {lang}"
+    share = counts.get(want, 0) / total
+    if share < (0.5 if want == "latn" else MIXED_MIN_SHARE):
+        got = max(counts, key=lambda k: counts[k])
+        return f"{got} script ({share:.0%} {want}), expected {want} for {lang}"
     if short in ("hi", "mr"):
         words = _WORD.findall(text)
         hi = sum(w in _HI_WORDS for w in words)
