@@ -7,9 +7,12 @@ touching the leg, so no frame is sent after a clear().
 
 Prompts (play_prompt, the opening line): the session's own audio to one leg, sent here like
 everything else and followed by a mark. Until that mark comes back, or the prompt's length
-plus grace_ms has passed, the leg is "hearing its prompt": a translation for it waits at
-the head of the queue (it is not dropped), and starts once the hold ends and the usual
-rules allow. Playback to the other leg is not held.
+plus grace_ms has passed, the leg is "hearing its prompt". A translation for that leg does
+not wait for the prompt (L7: callers who spoke at once waited up to ~5 s): when the usual
+rules start it, the prompt is CUT. No more of it is sent, its mark is not sent (or no
+longer awaited), and the translation's playback clears the leg before its first frame, so
+whatever the phone still had queued of the prompt is dropped. Playback to the other leg
+is never affected.
 """
 
 from __future__ import annotations
@@ -60,6 +63,7 @@ class _Playback:
     audio: bytearray = field(default_factory=bytearray)  # what was sent, for DTMF replay
     failed: bool = False
     task: asyncio.Task[None] | None = None
+    clear_first: bool = False  # the listener was hearing a prompt: clear it before playing
 
 
 class FloorController:
@@ -120,6 +124,7 @@ class FloorController:
         self._replay_seq = 0
         # legs hearing a prompt: side -> (mark tag, deadline ms; _NEVER while sending)
         self._prompts: dict[Side, tuple[str, int]] = {}
+        self._prompt_sent: dict[Side, int] = {}  # bytes of the current prompt sent so far
 
     # --- public view ---------------------------------------------------------------------
 
@@ -178,23 +183,36 @@ class FloorController:
         grace_ms: int = PROMPT_GRACE_MS,
     ) -> int:
         """Send a session prompt (the opening line) to `side` as it is produced, then
-        mark it. Interpretation playback to that leg waits until the mark comes back, or
-        until the prompt's length plus grace_ms after its first byte was sent. Returns the
-        bytes sent. If `audio` fails, the hold ends at once and the error propagates."""
+        mark it. The leg counts as hearing it until the mark comes back, or until the
+        prompt's length plus grace_ms after its first byte was sent. A translation that
+        starts for this leg meanwhile cuts it: sending stops (the rest of `audio` is
+        closed unsent) and no mark is sent. Returns the bytes sent. If `audio` fails, the
+        hold ends at once and the error propagates."""
         leg = self._legs[side]
         async with self._lock:
             self._prompts[side] = (tag, _NEVER)
+            self._prompt_sent[side] = 0
         sent = 0
         t0: int | None = None
+
+        def live() -> bool:
+            return self._prompts.get(side, ("",))[0] == tag
+
         try:
             async for chunk in audio:
+                if not live():
+                    break  # cut by a translation
                 if not chunk:
                     continue
                 if t0 is None:
                     t0 = self._clock.now_ms()
                 await leg.send(chunk)
                 sent += len(chunk)
-            await leg.mark(tag)
+                self._prompt_sent[side] = sent
+            if live():
+                await leg.mark(tag)
+            else:
+                await _aclose_iter(audio)
         except BaseException:
             self._spawn(self._end_prompt(side, tag))
             aclose = getattr(audio, "aclose", None)
@@ -458,10 +476,11 @@ class FloorController:
         """Start the head of the queue if nothing is playing. True if something started."""
         if self._pb is not None or not self._queue:
             return False
-        if other(self._queue[0].side) in self._prompts:
-            return False  # its listener is still hearing a prompt
         tr = self._queue.popleft()
         pb = _Playback(tr, other(tr.side))
+        if pb.listener in self._prompts:  # still hearing a prompt: cut it (L7)
+            pb.clear_first = True
+            self._cut_prompt(pb.listener)
         self._pb = pb
         self._stop_line_check(pb.listener)
         # a listener already talking when playback starts is talking over it
@@ -470,12 +489,23 @@ class FloorController:
         pb.task = self._spawn(self._play(pb))
         return True
 
+    def _cut_prompt(self, side: Side) -> None:
+        """A translation is starting for `side`: end its prompt now. play_prompt stops
+        sending at its next chunk; the playback clears the leg before its first frame."""
+        tag, _ = self._prompts.pop(side)
+        sent_ms = bytes_to_ms(self._prompt_sent.get(side, 0))
+        log.info("floor.prompt_cut", extra={"side": side, "tag": tag, "sent_ms": sent_ms})
+        self._publish("prompt_cut", {"side": side, "tag": tag, "sent_ms": sent_ms})
+
     async def _play(self, pb: _Playback) -> None:
         tr = pb.tr
         leg = self._legs[pb.listener]
         # replays carry audio that was already rendered once
         stream = tr.audio if id(tr) in self._internal else self._render(tr)
         try:
+            if pb.clear_first:  # drop what the transport still holds of the cut prompt
+                with contextlib.suppress(Exception):
+                    await leg.clear()
             try:
                 async for chunk in stream:
                     if not chunk:
@@ -552,6 +582,13 @@ class FloorController:
 async def _frames(audio: bytes) -> AsyncIterator[bytes]:
     for i in range(0, len(audio), FRAME_BYTES):
         yield audio[i : i + FRAME_BYTES]
+
+
+async def _aclose_iter(it: Any) -> None:
+    aclose = getattr(it, "aclose", None)
+    if aclose is not None:
+        with contextlib.suppress(Exception):
+            await aclose()
 
 
 async def _close_audio(tr: Translation) -> None:

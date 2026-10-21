@@ -78,6 +78,7 @@ EventKind = Literal[
     "leg",  # {side, status}
     "call",  # {status}
     "line_check",  # {sides}: "aap line par hain?" played after 10 s silence
+    "prompt_cut",  # {side, tag, sent_ms}: a translation cut the opening line short (L7)
 ]
 
 
