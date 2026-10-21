@@ -91,3 +91,32 @@ async def test_ticker_behind_schedule_still_yields():
     await ticker.wait_ticks(3)
     task.cancel()
     assert progressed == 5 and ticker.max_late_ms > 0
+
+
+def test_stages_are_critical_path_when_early_final_finishes_before_eou():
+    # early final: STT final and MT land inside the 550 ms EOU wait
+    turn = dict(
+        t_speech_end=1000,
+        t_eou=1550,
+        t_stt_final=1190,
+        t_mt=1520,
+        t_tts_ttfb=1700,
+        t_play_start=1710,
+    )
+    st = ll.stages(turn)
+    assert st == {"eou": 550, "stt": 0, "mt": 0, "tts": 150, "queue": 10, "first_audio": 710}
+    assert st["eou"] + st["stt"] + st["mt"] + st["tts"] + st["queue"] == st["first_audio"]
+
+
+def test_stages_unchanged_for_sequential_pipeline():
+    turn = dict(
+        t_speech_end=0, t_eou=550, t_stt_final=840, t_mt=1540, t_tts_ttfb=1790, t_play_start=1800
+    )
+    assert ll.stages(turn) == {
+        "eou": 550,
+        "stt": 290,
+        "mt": 700,
+        "tts": 250,
+        "queue": 10,
+        "first_audio": 1800,
+    }

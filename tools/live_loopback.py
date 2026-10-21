@@ -304,13 +304,27 @@ STAGES = (
     ("queue", "t_tts_ttfb", "t_play_start"),
     ("first_audio", "t_speech_end", "t_play_start"),
 )
+_PATH = ("t_stt_final", "t_mt", "t_tts_ttfb", "t_play_start")
 
 
 def stages(turn: dict[str, Any]) -> dict[str, int | None]:
-    out: dict[str, int | None] = {}
-    for name, a, b in STAGES:
-        ta, tb = turn.get(a), turn.get(b)
-        out[name] = tb - ta if ta is not None and tb is not None else None
+    """Each stage's share of the critical path. With early final, STT/MT/TTS can finish
+    inside the EOU wait; work done before the cursor counts 0, so eou + stt + mt + tts +
+    queue == first_audio either way."""
+    get = turn.get
+    out: dict[str, int | None] = {name: None for name, _, _ in STAGES}
+    if get("t_speech_end") is not None and get("t_eou") is not None:
+        out["eou"] = get("t_eou") - get("t_speech_end")
+    if get("t_speech_end") is not None and get("t_play_start") is not None:
+        out["first_audio"] = get("t_play_start") - get("t_speech_end")
+    cursor = get("t_eou")
+    for (name, _, _), key in zip(STAGES[1:5], _PATH, strict=True):
+        t = get(key)
+        if cursor is None or t is None:
+            cursor = None
+            continue
+        out[name] = max(0, t - cursor)
+        cursor = max(cursor, t)
     return out
 
 
