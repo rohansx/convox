@@ -184,6 +184,53 @@ def test_stage_means_over_turns():
     assert st["tts"] == 400 and st["eou_wait"] == 550 and st["first_audio"] == 1350
 
 
+AUTO_META = {
+    "kind": "rec.meta",
+    "ms": 0,
+    "payload": {
+        "pair": "auto-kn",
+        "mode": "interpret",
+        "sides": {
+            "a": {"lang": "hi-IN", "stt_lang": "en-IN", "auto": True},
+            "b": {"lang": "kn-IN", "stt_lang": "kn-IN"},
+        },
+    },
+}
+
+
+def lang_ev(ms: int, side: str, lang: str | None, state: str, **kw: Any) -> dict[str, Any]:
+    return ev("lang", ms, side=side, lang=lang, state=state, confidence=0.95, source="lid", **kw)
+
+
+def test_lang_events_are_listed():
+    events = [
+        AUTO_META,
+        lang_ev(500, "a", None, "UNKNOWN", menu=True),
+        lang_ev(900, "a", "ta-IN", "CONFIRMED"),
+    ]
+    out = analyze(events, [])
+    assert out["langs"] == [
+        {"ms": 500, "side": "a", "lang": None, "state": "UNKNOWN", "confidence": 0.95,
+         "source": "lid", "menu": True},
+        {"ms": 900, "side": "a", "lang": "ta-IN", "state": "CONFIRMED", "confidence": 0.95,
+         "source": "lid", "menu": False},
+    ]  # fmt: skip
+    assert analyze([META], [])["langs"] == []
+
+
+def test_wrong_language_uses_the_language_detected_by_then():
+    """A was auto (started in Hindi) and turned out to speak Tamil: B's later translation
+    in Tamil script is right, one before the detection is checked against Hindi."""
+    tamil = "நான் வீட்டில் இருக்கிறேன்"
+    events = [
+        AUTO_META,
+        turn("b", 0, 1000, src_text="ನಾನು ಮನೆಯಲ್ಲಿದ್ದೇನೆ", tgt_text=tamil),  # before: wrong
+        lang_ev(5000, "a", "ta-IN", "CONFIRMED"),
+        turn("b", 1, 10_000, src_text="ನಾನು ಮನೆಯಲ್ಲಿದ್ದೇನೆ", tgt_text=tamil),
+    ]
+    assert codes(analyze(events, [])) == [("wrong_language", "b", 0)]
+
+
 def test_script_of():
     assert script_of("मुझे दवा") == "deva"
     assert script_of("મને દવા") == "gujr"

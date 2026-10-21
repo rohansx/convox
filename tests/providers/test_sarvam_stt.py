@@ -356,3 +356,63 @@ async def test_final_language_code_is_kept_as_detected_lang():
             await stream.aclose()
         await stt.aclose()
     assert langs == ["mr-IN", None]
+
+
+async def test_auto_language_reports_detected_lang_and_confidence_on_the_final():
+    """language_code=auto (measured live 21 Oct): finals carry `language` and
+    `language_confidence`; partials carry `language` too but it is unreliable (en-IN while
+    Marathi is spoken), so only the final sets detected_lang."""
+
+    async def handler(conn: Conn) -> None:
+        await conn.recv_until(lambda m: m.get("event") == "speech_start")
+        await conn.send(
+            {"event": "transcript.partial", "utterance_idx": 0, "text": "Mala", "language": "en-IN"}
+        )
+        await conn.recv_until(lambda m: m.get("event") == "speech_end")
+        await conn.send(
+            {
+                "event": "transcript.final",
+                "utterance_idx": 0,
+                "text": "मला उद्या",
+                "language": "mr-IN",
+                "language_confidence": 0.98,
+            }
+        )
+        await conn.ws.wait_closed()
+
+    async with ws_server(handler) as srv:
+        stt = _stt(srv)
+        stream = await stt.open("auto")
+        assert stream.detected_lang is None and stream.detected_confidence is None
+        await stream.push(F1)
+        await asyncio.sleep(0.05)
+        assert stream.detected_lang is None  # a partial's language is ignored
+        assert await stream.end() == "मला उद्या"
+        assert stream.detected_lang == "mr-IN"
+        assert stream.detected_confidence == 0.98
+        await stream.aclose()
+        await stt.aclose()
+    assert parse_qs(urlparse(srv.conns[0].path).query)["language_code"] == ["auto"]
+
+
+async def test_auto_language_normalises_odia_to_od_in():
+    async def handler(conn: Conn) -> None:
+        await conn.recv_until(lambda m: m.get("event") == "speech_end")
+        await conn.send(
+            {
+                "event": "transcript.final",
+                "text": "x",
+                "language": "or-IN",
+                "language_confidence": 0.9,
+            }
+        )
+        await conn.ws.wait_closed()
+
+    async with ws_server(handler) as srv:
+        stt = _stt(srv)
+        stream = await stt.open("auto")
+        await stream.push(F1)
+        await stream.end()
+        assert stream.detected_lang == "od-IN"
+        await stream.aclose()
+        await stt.aclose()

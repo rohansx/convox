@@ -7,12 +7,13 @@ from __future__ import annotations
 import asyncio
 import math
 from collections import deque
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Sequence
 from typing import Any
 
 import numpy as np
 
 from dubhash.audio.frames import SAMPLE_RATE, SAMPLE_WIDTH, bytes_to_ms, ms_to_bytes
+from dubhash.interp.langid import LangGuess
 
 MS_PER_WORD = 300
 MIN_HEARD_MS = 100
@@ -51,6 +52,8 @@ class FakeSTTStream:
         self._partials: asyncio.Queue[str | None] = asyncio.Queue()
         self._closed = False
         self.pushed_frames = 0
+        self.detected_lang: str | None = None  # set by end(), as SarvamSTTStream does
+        self.detected_confidence: float | None = None
         self._heard = 0  # bytes that count towards words (all, or voiced only)
         self._scripted_partials = owner._pop_partials()
 
@@ -88,6 +91,12 @@ class FakeSTTStream:
         else:
             scripted = self._owner._pop()
             final = scripted if scripted is not None else self._text(_word_count(ms))
+            if self._owner._detected:  # else leave whatever the test set
+                entry = self._owner._pop_detected()
+                if isinstance(entry, tuple):
+                    self.detected_lang, self.detected_confidence = entry
+                else:
+                    self.detected_lang = entry
         self._finish()
         return final
 
@@ -115,7 +124,10 @@ class FakeSTT:
     partials: optional per-utterance scripts (one list per open(), in order) of
     (audio_ms, text): text is emitted as a partial once audio_ms of audio has been pushed.
     A scripted utterance emits only those partials ([] = none). ignore_silence: only
-    voiced frames count towards words. final_delay_ms sleeps on `clock` when given."""
+    voiced frames count towards words. final_delay_ms sleeps on `clock` when given.
+    detected: the language reported on each final (stream.detected_lang), in order, or a
+    (lang, confidence) pair (also sets detected_confidence); None entries and an exhausted
+    script report None."""
 
     name = "fake"
 
@@ -127,8 +139,10 @@ class FakeSTT:
         partials: list[list[tuple[int, str]]] | None = None,
         ignore_silence: bool = False,
         clock: Any = None,
+        detected: list[str | tuple[str, float] | None] | None = None,
     ) -> None:
         self._script: deque[str] = deque(script or [])
+        self._detected: deque[str | tuple[str, float] | None] = deque(detected or [])
         self.final_delay_ms = final_delay_ms
         self._partial_script: deque[list[tuple[int, str]]] | None = (
             deque(partials) if partials is not None else None
@@ -143,6 +157,9 @@ class FakeSTT:
 
     def _pop(self) -> str | None:
         return self._script.popleft() if self._script else None
+
+    def _pop_detected(self) -> str | tuple[str, float] | None:
+        return self._detected.popleft() if self._detected else None
 
     def _pop_partials(self) -> deque[tuple[int, str]] | None:
         if self._partial_script is None:
@@ -232,6 +249,37 @@ class FakeTTS:
             if i and self.realtime:
                 await asyncio.sleep(self.chunk_ms / 1000)
             yield pcm[i : i + step]
+
+
+class FakeLID:
+    """identify() returns the next scripted LangGuess, else `default` (lang None). A
+    scripted language outside the call's candidates comes back as None, as the real engine
+    would. `calls` records (pcm bytes, candidates); delay_ms sleeps on `clock` when given."""
+
+    name = "fake"
+
+    def __init__(
+        self,
+        script: list[LangGuess] | None = None,
+        *,
+        default: LangGuess | None = None,
+        delay_ms: int = 0,
+        clock: Any = None,
+    ) -> None:
+        self._script: deque[LangGuess] = deque(script or [])
+        self.default = default or LangGuess(None, 0.0, "lid")
+        self.delay_ms = delay_ms
+        self.clock = clock
+        self.calls: list[tuple[int, tuple[str, ...]]] = []
+
+    async def identify(self, pcm16_16k: bytes, candidates: Sequence[str]) -> LangGuess:
+        self.calls.append((len(pcm16_16k), tuple(candidates)))
+        if self.delay_ms > 0:
+            await _sleep(self.clock, self.delay_ms)
+        g = self._script.popleft() if self._script else self.default
+        if g.lang is not None and g.lang not in candidates:
+            return LangGuess(None, g.confidence, g.source)
+        return g
 
 
 class EnergyVAD:

@@ -66,9 +66,11 @@ Content-Type: application/json
 | Field | Type | Required | Default | Meaning |
 |---|---|---|---|---|
 | `a.number` | string, E.164 | yes | — | leg A phone number (by convention the caller, e.g. the rider) |
-| `a.lang` | string, BCP-47 (`hi-IN`) | yes for platform calls | — | leg A spoken language. Selects STT language and the target for B→A |
+| `a.lang` | string, BCP-47 (`hi-IN`) or `"auto"` | yes for platform calls | — | leg A spoken language. Selects STT language and the target for B→A. `"auto"`: detected on the call, see below |
+| `a.lang_hint` | string, BCP-47 | no | none | for `lang: "auto"` only: a prior, e.g. the platform's profile language. Ignored for a fixed `lang`, and ignored (never claimed) when it is not a supported language |
 | `b.number` | string, E.164 | yes | — | leg B phone number |
-| `b.lang` | string | yes for platform calls | — | leg B spoken language |
+| `b.lang` | string, BCP-47 or `"auto"` | yes for platform calls | — | leg B spoken language |
+| `b.lang_hint` | string, BCP-47 | no | none | as `a.lang_hint` |
 | `provider` | `"exotel"` \| `"plivo"` | no | `exotel` (proposed default) | which `LegTransport` dials the legs |
 | `caller_id` | string, E.164 | yes | — | ExoPhone / Plivo number shown to both parties (masking preserved) |
 | `mode` | `"interpret"` \| `"bridge"` | no | `interpret` | `bridge` passes audio through with interpreters off (same as DTMF bypass from t=0) |
@@ -77,6 +79,15 @@ Content-Type: application/json
 | `record` | boolean | no | `false` | if `true`, `src_text`/`tgt_text` are retained. Otherwise they are nulled after metrics are computed. See [data model](data-model.md#text-retention) |
 
 The language pair `{a.lang[:2]}-{b.lang[:2]}` (e.g. `hi-kn`) must exist in `config/pairs.yaml`, in either orientation. See [configuration](configuration.md).
+
+**`lang: "auto"`** (either side or both; [language detection](language-detection.md)). On a real phone call we often do not know a caller's language. An auto side is detected from its own speech during the call, among the supported languages only: `hi-IN`, `mr-IN`, `gu-IN`, `kn-IN`, `ta-IN`, `en-IN`. A fixed `lang` next to an auto side must be one of these (else `422 unsupported_pair`). An auto side's speech goes through the English pivot (Sarvam speech → English), so it is translated before its language is known. Until it is known, translations *to* it are in its `lang_hint`, else Hindi. If two utterances leave it unsure or unsupported, its leg hears a keypad menu ("Hindi ke liye 1 … English 6"), and the digit decides. When both sides turn out to speak one language, the call becomes a plain bridge (`bypass` event with `reason: "same_lang"`; `escape_used` stays false).
+
+```json
+{ "a": { "number": "+919812345678", "lang": "auto", "lang_hint": "mr-IN" },
+  "b": { "number": "+919876543210", "lang": "hi-IN" }, "...": "..." }
+```
+
+Validation: `lang` must match `^[a-z]{2,3}-[A-Z]{2}$` or be exactly `auto`; `lang_hint` must match the BCP-47 pattern. Either failing is `400 invalid_body`.
 
 ### Response
 
@@ -180,6 +191,8 @@ Status, legs and latency summary. The response maps to the `calls` and `legs` ta
   "interpreted_s": null
 }
 ```
+
+For a call with an auto side each leg also carries `detected`, what the call has resolved so far: `{"lang": "ta-IN" | null, "state": "UNKNOWN" | "PROVISIONAL" | "CONFIRMED", "auto": true}` (a fixed side reads `{"lang": "kn-IN", "state": "CONFIRMED", "auto": false}`). `legs.a.lang` stays `"auto"`.
 
 `floor` is present only while the call is live. Its `state` is one of the five code states (`IDLE`, `A_SPEAKING`, `B_SPEAKING`, `PLAYING_AB`, `PLAYING_BA`). See [floor controller](floor-controller.md). Phone numbers are not echoed back (proposed, to limit PII spread).
 

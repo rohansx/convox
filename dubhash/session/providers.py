@@ -25,9 +25,12 @@ from typing import Any
 from dubhash.config.pairs import PairConfig
 from dubhash.config.settings import Settings
 from dubhash.interp.contracts import MT, STT, TTS, VAD
+from dubhash.interp.langid import LanguageID
 from dubhash.interp.mt_cache import CachedMT
 from dubhash.interp.vad import NoiseFloorGate, SileroVAD
+from dubhash.providers.errors import ProviderUnavailable
 from dubhash.providers.fakes import EnergyVAD
+from dubhash.providers.registry import build_lid as registry_build_lid
 from dubhash.providers.registry import build_mt, build_stt, build_tts
 from dubhash.types import Side
 
@@ -42,6 +45,7 @@ class Providers:
     mt: MT
     tts: dict[Side, TTS]  # keyed by the side whose language it speaks (the TARGET side)
     vad_factory: Callable[[], VAD]
+    lid: LanguageID | None = None  # language ID for lang "auto" sides (interp/langid.py)
 
 
 def _all_fake(pair: PairConfig) -> bool:
@@ -60,16 +64,19 @@ def _vad_factory() -> Callable[[], VAD]:
     return lambda: NoiseFloorGate(inner())
 
 
-async def prewarm(providers: Providers, pair: PairConfig) -> None:
+async def prewarm(
+    providers: Providers, pair: PairConfig, stt_langs: dict[Side, str] | None = None
+) -> None:
     """Open every provider connection the call will need before anyone speaks (L7): the
-    STT socket per source side (in that side's language), the TTS socket per target side,
-    and the MT HTTPS connection. Providers without a prewarm() are skipped; failures are
-    logged and never raised (the first utterance then connects as before)."""
+    STT socket per source side (in that side's language, or stt_langs[side]: "auto" for a
+    lang-auto side), the TTS socket per target side, and the MT HTTPS connection.
+    Providers without a prewarm() are skipped; failures are logged and never raised (the
+    first utterance then connects as before)."""
     jobs: list[tuple[str, Any]] = []
     for s in SIDES:
         cfg = pair.side(s)
         if (fn := getattr(providers.stt[s], "prewarm", None)) is not None:
-            jobs.append((f"stt:{s}", fn(cfg.lang)))
+            jobs.append((f"stt:{s}", fn((stt_langs or {}).get(s, cfg.lang))))
         if (fn := getattr(providers.tts[s], "prewarm", None)) is not None:
             jobs.append((f"tts:{s}", fn(cfg.voice_f)))
     mt = getattr(providers.mt, "inner", providers.mt)
@@ -92,11 +99,24 @@ async def prewarm(providers: Providers, pair: PairConfig) -> None:
     )
 
 
-def build_providers(pair: PairConfig, settings: Settings) -> Providers:
+def build_lid(settings: Settings) -> LanguageID | None:
+    """The call's LanguageID (providers.registry.build_lid: FakeLID under fake STT or
+    DUBHASH_ENV=test, else SarvamLID). Without a key there is none: an auto side then
+    resolves from STT finals' languages, else the keypad menu."""
+    try:
+        return registry_build_lid("sarvam", settings)
+    except ProviderUnavailable as e:
+        log.warning("lid.unavailable", extra={"provider": "sarvam", "error": str(e)})
+        return None
+
+
+def build_providers(pair: PairConfig, settings: Settings, *, lid: bool = False) -> Providers:
+    """lid: the call has lang "auto" sides, so it needs a LanguageID."""
     mt_name = "fake" if _all_fake(pair) else "sarvam"
     return Providers(
         stt={s: build_stt(pair.side(s).stt, settings) for s in SIDES},
         mt=CachedMT(build_mt(mt_name, settings)),
         tts={s: build_tts(pair.side(s).tts, settings) for s in SIDES},
         vad_factory=_vad_factory(),
+        lid=build_lid(settings) if lid else None,
     )

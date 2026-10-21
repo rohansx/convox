@@ -7,6 +7,7 @@ A speaks, B must receive the earcon + translated audio; then B speaks and A rece
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import socket
 import threading
@@ -30,14 +31,16 @@ def _free_port() -> int:
         return s.getsockname()[1]
 
 
-@pytest.fixture
-def server():
+@contextlib.contextmanager
+def serve(**settings_kw):
+    """The app on a free port in a uvicorn thread; yields "host:port"."""
     port = _free_port()
     settings = Settings(
         _env_file=None,
         dubhash_env="test",
         public_base_url=f"http://127.0.0.1:{port}",
         edge_wss_base=f"ws://127.0.0.1:{port}",
+        **settings_kw,
     )
     app = create_app(settings)
     config = uvicorn.Config(app, host="127.0.0.1", port=port, log_level="warning", lifespan="on")
@@ -48,9 +51,17 @@ def server():
     while not srv.started:
         assert time.monotonic() < deadline, "server did not start"
         time.sleep(0.05)
-    yield f"127.0.0.1:{port}"
-    srv.should_exit = True
-    t.join(timeout=10)
+    try:
+        yield f"127.0.0.1:{port}"
+    finally:
+        srv.should_exit = True
+        t.join(timeout=10)
+
+
+@pytest.fixture
+def server():
+    with serve() as host:
+        yield host
 
 
 async def _speak(ws, pcm: bytes) -> None:

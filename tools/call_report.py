@@ -152,6 +152,18 @@ def render(doc: dict[str, Any]) -> str:
                 f"         {(r.get('src_text') or '')[:60]!r} -> {(r.get('tgt_text') or '')[:60]!r}"
             )
     out.append("")
+    langs = doc.get("langs") or []
+    if langs:
+        out.append(f"LANGUAGE ({len(langs)})  lang auto: what each side was taken to speak")
+        for ev in langs:
+            what = (
+                "keypad menu requested"
+                if ev.get("menu")
+                else f"{ev.get('state')}  {ev.get('source')} {ev.get('confidence') or 0:.2f}"
+            )
+            lang = ev.get("lang") or "?"
+            out.append(f"  {_s(ev.get('ms'))}  {ev.get('side')}  {lang:<6} {what}")
+        out.append("")
     warnings = doc["warnings"]
     out.append(f"WARNINGS ({len(warnings)})")
     if not warnings:

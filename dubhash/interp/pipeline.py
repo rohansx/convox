@@ -194,6 +194,17 @@ class Interpreter:
         self.early_used = 0  # delivered translations that came from an early final
         self._bg: set[asyncio.Task[Any]] = set()
 
+    def retarget(self, pair: PairConfig, *, stt_lang: str | None = None) -> None:
+        """Use `pair`'s sides from the next MT/TTS step on (lang "auto": a side's language
+        was detected). stt_lang, when given, is the language later STT streams open in.
+        Pair-level knobs (eou_ms, early_final_ms, ...) are the ones the call started with:
+        the endpointer is not rebuilt."""
+        self.pair = pair
+        self.tgt = pair.side(other(self.side))
+        self.mt_skip = pair.side(self.side).mt_lang == self.tgt.lang
+        if stt_lang is not None:
+            self.src_lang = stt_lang
+
     # -- frame loop ---------------------------------------------------------------
 
     async def run(self, frames: AsyncIterator[bytes]) -> None:

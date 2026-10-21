@@ -164,10 +164,19 @@ def analyze(
     turns: list[dict[str, Any]] = []
     marks: dict[str, list[dict[str, Any]]] = {"a": [], "b": []}
     acks: dict[str, list[dict[str, Any]]] = {"a": [], "b": []}
+    langs: list[dict[str, Any]] = []  # lang "auto" decisions (session/language.py)
     for e in events:
         kind, p, ms = e.get("kind"), e.get("payload") or {}, e.get("ms")
         if kind == "rec.meta":
             meta = p
+        elif kind == "lang":
+            langs.append(
+                {
+                    "ms": ms,
+                    **{k: p.get(k) for k in ("side", "lang", "state", "confidence", "source")},
+                    "menu": bool(p.get("menu")),
+                }
+            )
         elif kind == "turn":
             t = p.get("turn", p)
             if isinstance(t, dict):
@@ -245,7 +254,10 @@ def analyze(
         row["first_audio_ms"] = _diff(row["speech_end"], ps)
         row["heard_ms"] = _diff(row["speech_end"], row["client_play_start"])
         rows.append(row)
-        warnings.extend(_turn_warnings(row, rows, played_to, prompt_acks, sides))
+        at = t.get("t_mt") or t.get("t_speech_start") or 0
+        warnings.extend(
+            _turn_warnings(row, rows, played_to, prompt_acks, _sides_at(sides, langs, at))
+        )
 
     spoken = [r for r in rows if not r["backchannel"]]
     fa = [r["first_audio_ms"] for r in spoken if r["first_audio_ms"] is not None]
@@ -257,6 +269,7 @@ def analyze(
     stages["heard"] = _mean(heard)
     return {
         "meta": meta,
+        "langs": langs,
         "turns": rows,
         "warnings": warnings,
         "stages": stages,
@@ -264,6 +277,16 @@ def analyze(
         "heard": {"n": len(heard), "p50": percentile(heard, 50), "p95": percentile(heard, 95)},
         "clock": offsets,
     }
+
+
+def _sides_at(sides: dict[str, Any], langs: list[dict[str, Any]], ms: int) -> dict[str, Any]:
+    """`sides` with each auto side's language as detected by `ms` (its last lang event
+    with a language, at or before then)."""
+    out = dict(sides)
+    for ev in langs:
+        if ev["lang"] and (ev["ms"] or 0) <= ms and ev["side"] in out:
+            out[ev["side"]] = {**(out[ev["side"]] or {}), "lang": ev["lang"]}
+    return out
 
 
 def _claim_client_play(plays: list[dict[str, Any]], row: dict[str, Any]) -> int | None:

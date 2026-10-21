@@ -56,3 +56,31 @@ async def test_model_is_configurable():
         await stt.aclose()
     q = parse_qs(urlparse(srv.conns[0].path).query)
     assert q["model"] == ["saaras:v4"] and q["mode"] == ["translate"]
+
+
+async def test_translate_with_auto_language_reports_the_source_language():
+    """Measured live: mode=translate + language_code=auto returns the English final and
+    the detected *source* language (mr-IN, 0.98) on it."""
+
+    async def handler(conn: Conn) -> None:
+        await conn.recv_until(lambda m: m.get("event") == "speech_end")
+        await conn.send(
+            {
+                "event": "transcript.final",
+                "text": "I have to go to the doctor tomorrow.",
+                "language": "mr-IN",
+                "language_confidence": 0.98,
+            }
+        )
+        await conn.ws.wait_closed()
+
+    async with ws_server(handler) as srv:
+        stt = SarvamSTTTranslate(api_key="sk-test", base_url=srv.url, final_timeout_s=1.0)
+        stream = await stt.open("auto")
+        await stream.push(F1)
+        assert await stream.end() == "I have to go to the doctor tomorrow."
+        assert (stream.detected_lang, stream.detected_confidence) == ("mr-IN", 0.98)
+        await stream.aclose()
+        await stt.aclose()
+    q = parse_qs(urlparse(srv.conns[0].path).query)
+    assert q["language_code"] == ["auto"] and q["mode"] == ["translate"]
