@@ -116,7 +116,8 @@ class LangUpdate:
         return out
 
 
-def _indic_share(text: str | None) -> float:
+def indic_share(text: str | None) -> float:
+    """Share of `text`'s letters in an Indic script (0 without letters)."""
     letters = [c for c in text or "" if c.isalpha()]
     if not letters:
         return 0.0
@@ -144,8 +145,14 @@ def combine(
         evidence.append((code, conf, "stt_final"))
     if lid is not None and (code := normalise(lid.lang)) is not None:
         evidence.append((code, float(lid.confidence), lid.source or "lid"))
-    if current is not None and current != ENGLISH and _indic_share(text) >= MIXED_MIN_SHARE:
+    if current is not None and current != ENGLISH and indic_share(text) >= MIXED_MIN_SHARE:
         evidence = [e for e in evidence if e[0] != ENGLISH]  # code-mixed loanwords
+    en_need = config.lang_confident.get(ENGLISH, config.confident)
+    if any(
+        lang != ENGLISH and lang in config.supported and conf >= config.confident
+        for lang, conf, _ in evidence
+    ):  # Indian speech with English words is heard as English; a sure Indic guess wins
+        evidence = [e for e in evidence if e[0] != ENGLISH or e[1] >= en_need]
     supported = [e for e in evidence if e[0] in config.supported]
     unsupported = bool(evidence) and not supported
     if not supported:

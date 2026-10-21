@@ -288,6 +288,19 @@ def test_english_needs_more_confidence_than_an_indic_language():
     assert ResolverConfig().lang_confident == {"en-IN": 0.95}
 
 
+def test_an_indic_guess_beats_a_weaker_english_one_in_the_same_utterance():
+    """Live c_lrbuuv2fwv: Hindi with English words ("please tell me the OTP"); one engine
+    says en-IN, the other hi-IN. English loses unless it is sure enough on its own."""
+    r = LanguageResolver("a")
+    up = r.observe(speech_ms=LONG, stt_lang="en-IN", stt_confidence=0.9, lid=lid("hi-IN", 0.85))
+    assert (up.state, up.lang) == (P, "hi-IN")
+    sure_en = LanguageResolver("a")
+    up = sure_en.observe(
+        speech_ms=LONG, stt_lang="en-IN", stt_confidence=0.99, lid=lid("hi-IN", 0.75)
+    )
+    assert up is None  # a real disagreement stays unsure
+
+
 def test_lang_is_a_call_event_kind():
     from typing import get_args
 
