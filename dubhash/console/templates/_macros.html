@@ -1,0 +1,46 @@
+{# Keep in sync with renderTurn/renderMarker in static/console.js. #}
+{% macro turn(t) -%}
+{% if t.backchannel %}
+<div class="row" data-seq="{{ t.seq }}">
+  <article class="item turn bc col-{{ t.side }}" data-seq="{{ t.seq }}">
+    <span class="src">{{ t.src_text or '—' }}</span> · backchannel · not translated
+  </article>
+</div>
+{% else %}
+<div class="row" data-seq="{{ t.seq }}">
+  <article class="item turn col-{{ t.side }}{{ ' clipped' if t.clipped_ms is not none }}" data-seq="{{ t.seq }}">
+    <header>
+      <span class="seq">#{{ t.seq }}</span>
+      {% if t.clipped_ms is not none %}<span class="tag tag-warn">clipped at {{ t.clipped_ms }} ms</span>{% endif %}
+    </header>
+    <p class="src">{{ t.src_text or '—' }}</p>
+    <p class="tgt"><span class="arrow">→</span> {{ t.tgt_text or '—' }}</p>
+    {% if t.stages or t.first_audio_ms is not none %}
+    <div class="lat">
+      {% for name, ms in t.stages %}<span class="stage"><em>{{ name }}</em> {{ ms }}</span>{% endfor %}
+      {% if t.first_audio_ms is not none %}<b class="total lat-{{ t.grade }}">{{ t.first_audio_ms | secs }}</b>{% endif %}
+    </div>
+    {% endif %}
+    {% if t.stt_provider or t.mt_provider or t.tts_provider or t.voice %}
+    <details class="prov">
+      <summary>providers</summary>
+      stt {{ t.stt_provider or '—' }} · mt {{ t.mt_provider or '—' }} · tts {{ t.tts_provider or '—' }} · voice {{ t.voice or '—' }}
+    </details>
+    {% endif %}
+  </article>
+</div>
+{% endif %}
+{%- endmacro %}
+
+{% macro marker(m) -%}
+<div class="row">
+  <div class="item marker col-{{ m.side or m.listener or 'a' }} marker-{{ m.kind }}">
+    {% if m.kind == 'dtmf' %}DTMF {{ m.digit }}{% if m.digit == '1' %} · replay{% elif m.digit == '0' %} · bypass{% endif %}
+    {% elif m.kind == 'barge_in' %}⌁ barge-in{% if m.clipped_ms is not none %} · clipped {{ m.clipped_ms }} ms{% endif %}
+    {% elif m.kind == 'bypass' %}escape pressed · interpretation off
+    {% elif m.kind == 'gap' %}audio gap {{ m.gap_ms }} ms
+    {% elif m.kind == 'provider_error' %}{{ m.provider }} {{ m.stage }} error{% if m.error %}: {{ m.error }}{% endif %}
+    {% else %}{{ m.kind }}{% endif %}
+  </div>
+</div>
+{%- endmacro %}

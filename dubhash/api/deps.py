@@ -10,6 +10,7 @@ import base64
 import binascii
 import copy
 import dataclasses
+import math
 import secrets
 from collections import OrderedDict
 from typing import Any, Protocol, runtime_checkable
@@ -101,7 +102,10 @@ class InMemoryCallRegistry:
                 turns.append(turn)
                 del turns[: -self._max_turns]
         elif ev.kind == "call":
-            call.update({k: v for k, v in p.items() if k != "call_id"})
+            fields = {k: v for k, v in p.items() if k != "call_id"}
+            if "turns" in fields:  # end-of-call summary count; keep the turn list intact
+                fields["turns_total"] = fields.pop("turns")
+            call.update(fields)
             self._evict()
         elif ev.kind == "leg":
             call["legs"][p.get("side", "?")] = p.get("status")
@@ -115,6 +119,14 @@ class InMemoryCallRegistry:
         out = {k: v for k, v in call.items() if k not in ("turns", "markers")}
         spoken = [t for t in call["turns"] if not t.get("backchannel")]
         out["n_turns"] = len(spoken)
+        if out.get("p50_first_audio_ms") is None:
+            fa = sorted(
+                t["t_play_start"] - t["t_speech_end"]
+                for t in spoken
+                if t.get("t_play_start") is not None and t.get("t_speech_end") is not None
+            )
+            if fa:
+                out["p50_first_audio_ms"] = fa[max(1, math.ceil(len(fa) / 2)) - 1]
         return out
 
     def _evict(self) -> None:
