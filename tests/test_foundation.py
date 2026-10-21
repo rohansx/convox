@@ -35,6 +35,14 @@ def test_pairs_load():
     assert find_pair(pairs, "hi-IN", "kn-IN") is hk
 
 
+def test_all_bulbul_test_pair_for_live_bench():
+    pairs = load_pairs(Settings().pairs_file)
+    p = pairs["hi-kn-bulbul"]
+    assert (p.a.lang, p.b.lang) == ("hi-IN", "kn-IN")
+    assert p.a.tts == p.b.tts == "bulbul"
+    assert find_pair(pairs, "hi-IN", "kn-IN") is pairs["hi-kn"]
+
+
 def test_settings_keys_optional():
     s = Settings(_env_file=None)
     assert s.deepgram_api_key == ""

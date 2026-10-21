@@ -100,8 +100,18 @@ def test_spec_flag_shown_in_help():
     for flag in (
         "--spec",
         "--no-spec",
+        "--spec-after-ms",
         "--fake-mt-ms",
         "--fake-stt-final-ms",
         "--fake-tts-ttfb-ms",
     ):
         assert flag in out
+
+
+def test_spec_after_ms_overrides_pair(tmp_path, monkeypatch):
+    monkeypatch.setenv("DUBHASH_ENV", "dev")
+    late = _bench(tmp_path, "c_late", "--spec", "--spec-after-ms", "200")
+    early = _bench(tmp_path, "c_early", "--spec", "--spec-after-ms", "40")
+    assert late["spec"]["after_ms"] == 200 and early["spec"]["after_ms"] == 40
+    fa = early["stages"]["first_audio"]["p50"]
+    assert fa <= late["stages"]["first_audio"]["p50"] - 140

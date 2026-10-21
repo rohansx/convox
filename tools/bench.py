@@ -36,7 +36,7 @@ import numpy as np
 from dubhash.audio.frames import FRAME_BYTES, FRAME_MS, SAMPLE_RATE
 from dubhash.audio.wav import read_wav, write_wav
 from dubhash.clock import Clock, FakeClock, MonotonicClock
-from dubhash.config.pairs import load_pairs
+from dubhash.config.pairs import PairConfig, load_pairs
 from dubhash.config.settings import Settings
 from dubhash.events import EventBus
 from dubhash.interp.mt_cache import CachedMT
@@ -184,6 +184,9 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         default=None,
         help="speculative MT on STT partials during the EOU wait (default: the pair's spec_mt)",
     )
+    p.add_argument(
+        "--spec-after-ms", type=int, default=None, help="override the pair's spec_after_ms"
+    )
     p.add_argument("--fake-mt-ms", type=int, default=0, help="fake MT delay")
     p.add_argument("--fake-stt-final-ms", type=int, default=0, help="fake STT final delay")
     p.add_argument("--fake-tts-ttfb-ms", type=int, default=0, help="fake TTS first-byte delay")
@@ -203,9 +206,9 @@ def _use_fakes(providers: Providers, args: argparse.Namespace, clock: Clock) -> 
         providers.tts = {s: FakeTTS(ttfb_ms=args.fake_tts_ttfb_ms, clock=clock) for s in ("a", "b")}
 
 
-def spec_stats(session: CallSession, enabled: bool) -> dict[str, Any]:
+def spec_stats(session: CallSession, pair: PairConfig) -> dict[str, Any]:
     interps = list(session.interpreters.values())
-    out: dict[str, Any] = {"enabled": enabled}
+    out: dict[str, Any] = {"enabled": pair.spec_mt, "after_ms": pair.spec_after_ms}
     for k in ("eligible", "started", "cancelled", "hits", "used"):
         out[k] = sum(getattr(i, f"spec_{k}") for i in interps)
     out["hit_rate"] = round(out["hits"] / out["eligible"], 3) if out["eligible"] else None
@@ -220,6 +223,8 @@ async def run_bench(args: argparse.Namespace) -> dict[str, Any]:
     pair = pairs[args.pair]
     if args.spec is not None:
         pair = dataclasses.replace(pair, spec_mt=args.spec)
+    if args.spec_after_ms is not None:
+        pair = dataclasses.replace(pair, spec_after_ms=args.spec_after_ms)
     providers = build_providers(pair, settings)
 
     inbound = synthetic_inbound()
@@ -273,7 +278,7 @@ async def run_bench(args: argparse.Namespace) -> dict[str, Any]:
             "tts": {s: providers.tts[s].name for s in ("a", "b")},
         },
         "stages": stage_stats(turns),
-        "spec": spec_stats(session, pair.spec_mt),
+        "spec": spec_stats(session, pair),
         "summary": session.summary(),
         "turns": [dataclasses.asdict(t) for t in turns],
         "audio_s": {s: round(len(inbound[s]) / (2 * SAMPLE_RATE), 2) for s in ("a", "b")},
@@ -295,7 +300,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     sp = report["spec"]
     if sp["enabled"]:
         print(
-            f"  spec         hits={sp['hits']}/{sp['eligible']} used={sp['used']} "
+            f"  spec         after={sp['after_ms']}ms hits={sp['hits']}/{sp['eligible']} "
+            f"used={sp['used']} "
             f"started={sp['started']} cancelled={sp['cancelled']}"
         )
     else:

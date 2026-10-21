@@ -40,6 +40,18 @@ mr-hi:
   spec_mt: true
   spec_after_ms: 200
 
+# hi->kn with Bulbul on both targets (Bulbul speaks hi-IN too): for live benches without an
+# ElevenLabs key. Listed after hi-kn so find_pair still picks hi-kn.
+hi-kn-bulbul:
+  a: { lang: hi-IN, stt: sarvam, tts: bulbul, voice_m: "bulbul:hi-male-1", voice_f: "bulbul:hi-female-1" }
+  b: { lang: kn-IN, stt: sarvam, tts: bulbul, voice_m: "bulbul:kn-male-1", voice_f: "bulbul:kn-female-1" }
+  eou_ms: 550
+  backchannel_max_ms: 600
+  barge_in_min_ms: 1200
+  duck_db: -14
+  spec_mt: true
+  spec_after_ms: 200
+
 # all-fake pair for tests and the day-2 FakeLeg pipeline
 fake-fake:
   a: { lang: hi-IN, stt: fake, tts: fake, voice_m: "fake:m", voice_f: "fake:f" }
