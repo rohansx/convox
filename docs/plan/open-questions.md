@@ -89,11 +89,12 @@ Neither PDF answers these. Each row names the doc that holds the current propose
 | # | Answer | Date | Evidence |
 |---|---|---|---|
 | Q1 | TBD | | |
-| Q2 | TBD | | |
-| Q3 | TBD | | |
-| Q4 | TBD | | |
+| Q2 | Partly answered. Sarvam's realtime STT emits `vad.speech_end` about **1021 ms** after speech stops, slower than our Silero EOU at 550 ms. Keep Silero as the primary endpoint and treat Sarvam's signal as a backup. STT final arrives about **290 ms** after end-of-stream. | 21 Oct | `make smoke --eou`, bulbul kn sentences, from Bengaluru |
+| Q3 | Partly answered. Bulbul kn TTS first byte is 215–367 ms (total 0.8–0.9 s). ElevenLabs is not measured yet (no key). The listening test is still open. | 21 Oct | `make smoke` |
+| Q4 | Not measured. Run `tools/smoke.py --idle 5,30,70`. | | |
 | Q5 | TBD | | |
 | Q6 | TBD | | |
+| L1 (new) | **Translation latency is the bottleneck.** Sarvam hi→kn takes **about 1.2 s** at p50, whatever the model or mode (`mayura:v1` modern-colloquial and formal, `sarvam-translate:v1`). en→kn takes about 630 ms and network RTT is about 60 ms, so hi→kn is probably two hops inside Sarvam. Claude streaming was also tried: `claude-haiku-4-5` gave first token at 933 ms and finished at 1.7 s; `claude-opus-5-5` at low effort finished at 2.0 s. Neither is faster. The direct pair works (no English pivot fallback needed). Mayura modern-colloquial keeps English loanwords in Latin script ("gate number 2"), and Bulbul reads them fine. Estimated first-audio is 550 EOU + 290 STT + 1200 MT + 250 TTS + 200 playout = **about 2.5 s**, above the 2.0 s p95 target. Mitigations being built: speculative MT on stable STT partials during the EOU wait, and a trial of Sarvam speech→English plus en→kn. | 21 Oct | `/private/tmp` probe scripts, 6 calls each, warm client |
 
 ## Related
 
