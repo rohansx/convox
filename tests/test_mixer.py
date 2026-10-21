@@ -1,9 +1,12 @@
+import asyncio
+from collections.abc import AsyncIterator
+
 import numpy as np
 import pytest
 
 from dubhash.audio.earcon import EARCON
 from dubhash.audio.frames import FRAME_BYTES
-from dubhash.audio.mixer import db_to_gain, mix, passthrough_gain
+from dubhash.audio.mixer import RenderStats, db_to_gain, mix, passthrough_gain, render_playback
 
 
 def _const(value: int, samples: int) -> bytes:
@@ -78,3 +81,96 @@ def test_earcon_is_six_frames_soft_and_faded():
     peak = np.abs(x).max()
     assert 0.1 < peak <= 10 ** (-12 / 20) + 1e-3  # about -12 dBFS peak
     assert abs(x[0]) < 0.01 and abs(x[-1]) < 0.01  # fades in and out
+
+
+# --- render_playback ----------------------------------------------------------
+
+
+async def _chunks(*chunks: bytes) -> AsyncIterator[bytes]:
+    for c in chunks:
+        yield c
+
+
+async def _collect(it: AsyncIterator[bytes]) -> list[bytes]:
+    return [f async for f in it]
+
+
+async def test_render_earcon_first_then_tts_reframed():
+    tts = _const(500, 1000)  # 2000 bytes: 3 full frames + 80-byte tail
+    frames = await _collect(render_playback(_chunks(tts[:700], tts[700:])))
+    assert all(len(f) == FRAME_BYTES for f in frames)
+    assert b"".join(frames[:6]) == EARCON
+    body = b"".join(frames[6:])
+    assert len(frames) == 6 + 4
+    assert body[: len(tts)] == tts
+    assert body[len(tts) :] == b"\x00" * (4 * FRAME_BYTES - len(tts))  # last frame zero-padded
+
+
+async def test_render_without_earcon():
+    frames = await _collect(render_playback(_chunks(_const(7, 320)), earcon=None))
+    assert frames == [_const(7, 320)]
+
+
+async def test_render_ducks_source_under_tts_and_stops_with_tts():
+    tts = _const(1000, 640)  # 2 frames
+    source = _const(10000, 320 * 5)  # longer than tts: cut at tts end
+    stats = RenderStats()
+    frames = await _collect(
+        render_playback(_chunks(tts), source_audio=source, earcon=None, stats=stats)
+    )
+    assert len(frames) == 2
+    expected = 1000 + round(10000 * db_to_gain(-14.0))
+    assert all(np.all(_arr(f) == expected) for f in frames)
+    assert stats == RenderStats(frames=2, clipped=False)
+
+
+async def test_render_source_shorter_than_tts_only_overlaps_start():
+    tts = _const(1000, 640)
+    source = _const(10000, 100)
+    frames = await _collect(render_playback(_chunks(tts), source_audio=source, earcon=None))
+    a = _arr(b"".join(frames))
+    assert np.all(a[:100] != 1000) and np.all(a[100:] == 1000)
+
+
+async def test_render_source_aligned_to_tts_not_earcon():
+    source = _const(10000, 320)
+    frames = await _collect(render_playback(_chunks(_const(0, 320)), source_audio=source))
+    assert b"".join(frames[:6]) == EARCON
+    assert np.all(_arr(frames[6]) == round(10000 * db_to_gain(-14.0)))
+
+
+async def test_render_records_clipping_and_frame_count():
+    stats = RenderStats()
+    frames = await _collect(
+        render_playback(
+            _chunks(_const(32767, 320)),
+            source_audio=_const(32767, 320),
+            duck_db=0.0,
+            stats=stats,
+        )
+    )
+    assert np.all(_arr(frames[-1]) == 32767)
+    assert stats.clipped is True
+    assert stats.frames == 7  # earcon frames count too
+
+
+async def test_render_empty_tts_yields_only_earcon():
+    frames = await _collect(render_playback(_chunks(), source_audio=_const(5, 320)))
+    assert b"".join(frames) == EARCON
+
+
+async def test_render_streams_before_tts_finishes():
+    release = asyncio.Event()
+
+    async def gated() -> AsyncIterator[bytes]:
+        yield _const(1, 320)
+        await release.wait()
+        yield _const(2, 320)
+
+    it = render_playback(gated(), earcon=None)
+    first = await asyncio.wait_for(anext(it), timeout=0.05)
+    assert first == _const(1, 320)
+    assert not release.is_set()
+    release.set()
+    rest = [f async for f in it]
+    assert rest == [_const(2, 320)]

@@ -7,11 +7,21 @@ Decisions (open questions in docs/tech-spec/audio.md section 6):
   aligned to the first TTS sample, not the speaker's live frames.
 
 All sums are done in int32 and saturated to int16; nothing ever wraps.
+
+Clipping is reported through a caller-owned `RenderStats` passed as `stats=` to
+`render_playback`; it is updated in place as frames are yielded, so it is valid even if the
+playback is cut short (barge-in) and the generator is closed early.
 """
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
+from dataclasses import dataclass
+
 import numpy as np
+
+from dubhash.audio.earcon import EARCON
+from dubhash.audio.frames import FRAME_BYTES, Reframer
 
 _I16_MIN = -32768
 _I16_MAX = 32767
@@ -44,3 +54,55 @@ def passthrough_gain(frame: bytes, db: float = 0.0) -> bytes:
         return frame
     x = np.frombuffer(frame, dtype=np.int16).astype(np.float32) * db_to_gain(db)
     return _saturate(np.rint(x).astype(np.int32))[0]
+
+
+@dataclass(slots=True)
+class RenderStats:
+    frames: int = 0  # frames yielded, earcon included
+    clipped: bool = False
+
+
+async def render_playback(
+    tts: AsyncIterator[bytes],
+    *,
+    source_audio: bytes = b"",
+    duck_db: float = -14.0,
+    earcon: bytes | None = EARCON,
+    stats: RenderStats | None = None,
+) -> AsyncIterator[bytes]:
+    """Yield 640-byte frames: earcon, then TTS reframed, with source_audio mixed underneath at
+    duck_db from the first TTS sample until either runs out. Ends when the TTS ends; the last
+    partial frame is zero-padded (source is not mixed into the padding). Streams: each frame
+    is yielded as soon as the TTS bytes for it arrive."""
+    st = stats if stats is not None else RenderStats()
+    if earcon:
+        framer = Reframer()
+        pieces = framer.push(earcon)
+        tail = framer.flush()
+        for f in pieces + ([tail] if tail else []):
+            st.frames += 1
+            yield f
+
+    offset = 0  # bytes of TTS (and so of source) consumed
+
+    def _duck(chunk: bytes) -> bytes:
+        nonlocal offset
+        overlay = source_audio[offset : offset + len(chunk)]
+        offset += len(chunk)
+        if not overlay:
+            return chunk
+        out, clipped = mix(chunk, overlay, duck_db)
+        st.clipped |= clipped
+        return out
+
+    framer = Reframer()
+    async for chunk in tts:
+        for f in framer.push(chunk):
+            out = _duck(f)
+            st.frames += 1
+            yield out
+    rest = framer.flush(pad=False)
+    if rest:
+        out = _duck(rest).ljust(FRAME_BYTES, b"\x00")
+        st.frames += 1
+        yield out
