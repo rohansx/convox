@@ -1111,7 +1111,7 @@ class CallSession:
         try:
             async with asyncio.timeout(MENU_TIMEOUT_S):
                 chunks = self._prompt_chunks("menu", side, language_menu_text(), lang=MENU_LANG)
-                await self.floor.play_prompt(side, chunks, tag="menu")
+                await self.floor.play_prompt(side, chunks, tag="menu", cuttable=False)
         except Exception as e:
             log.warning(
                 "session.menu_error",

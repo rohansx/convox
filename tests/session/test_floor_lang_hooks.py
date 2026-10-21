@@ -4,6 +4,8 @@ language on both sides)."""
 
 from __future__ import annotations
 
+import asyncio
+
 from tests.floor_helpers import Rig
 
 
@@ -39,6 +41,26 @@ async def test_enter_bypass_from_the_session_publishes_its_reason():
     assert rig.bus.kinds("bypass")[-1].payload == {"side": "a", "reason": "same_lang"}
     await fc.enter_bypass("a", reason="same_lang")  # idempotent
     assert rig.bypassed == 1
+
+
+async def test_an_uncuttable_prompt_holds_translations_until_its_mark():
+    """The keypad menu must be heard whole: a translation for that leg waits for it."""
+    from tests.floor_helpers import frames_of, settle, tts
+
+    rig = Rig()
+    fc = rig.fc
+    await fc.start()
+    task = asyncio.create_task(
+        fc.play_prompt("a", tts(frames_of(0xEC, 5)), tag="menu", cuttable=False)
+    )
+    await settle()
+    await rig.hand(rig.tr("b", 0))  # B's translation, for A
+    assert fc.playing is None and fc.prompt_playing("a")
+    assert rig.bus.kinds("prompt_cut") == []
+    await task
+    rig.legs["a"].fire_mark("menu")
+    await settle()
+    assert fc.playing is not None or rig.played  # started once the menu was heard
 
 
 async def test_enter_bypass_ends_queued_translations_as_clipped():
