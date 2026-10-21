@@ -116,6 +116,7 @@ class Interpreter:
         self._jobs: set[_Job] = set()
         self._closed = False
         # speculative MT counters, summed over finished utterances (for bench/metrics)
+        self.spec_eligible = 0  # utterances that reached MT with speculation enabled
         self.spec_started = 0
         self.spec_cancelled = 0
         self.spec_hits = 0
@@ -247,6 +248,7 @@ class Interpreter:
                 else:
                     tgt_text = await self._translate(final)
                 t_mt = self.clock.now_ms()
+                self.spec_eligible += job.spec is not None
                 self.spec_hits += spec.hit
                 self.spec_used += spec.text is not None
 
