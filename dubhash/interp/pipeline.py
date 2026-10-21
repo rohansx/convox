@@ -43,12 +43,27 @@ translation always covers the complete utterance.
 - timings gain early_final_used (0/1), early_final_restarts (count) and, when used,
   t_early_final (when end() was sent; t_stt_final may then precede t_eou). With
   early_final_ms = 0 the timings are exactly as before.
+
+Chunked interpretation (pair.chunking, interp/chunker.py, L9): the early final is also how
+an utterance is cut into chunks. The STT stream is ended after min(early_final_ms,
+chunk_pause_ms) of silence; when the pause reaches chunk_pause_ms and the chunk has
+chunk_min_ms of speech, the frame loop queues a _Commit. If speech then resumes and the
+early final's text passes chunk_text_ok, it is COMMITTED: translated, synthesised and
+delivered (final_chunk=False) as soon as it is ready, while the speaker goes on, and the
+rest of the utterance continues in a fresh stream fed only from the pause on (200 ms of
+it as pre-roll), never the committed audio. Otherwise it is discarded and restarted as
+above. The last chunk is delivered at EOU as before (final_chunk=True). Every chunk has
+its own seq; all chunks of an utterance share utterance_id, and deliveries keep order
+through a per-utterance chain. A chunk's t_speech_start/t_speech_end are its own speech,
+t_eou is its commit time, and t_utt_start is the utterance's start (also set unchunked).
+The backchannel rule only ever applies to whole utterances (a chunk has >= 4 words).
 """
 
 from __future__ import annotations
 
 import asyncio
 import contextlib
+import dataclasses
 import inspect
 import logging
 from collections.abc import AsyncIterator, Awaitable
@@ -57,6 +72,7 @@ from typing import Any, Literal, Protocol, runtime_checkable
 
 from dubhash.clock import Clock
 from dubhash.config.pairs import PairConfig
+from dubhash.interp.chunker import chunk_text_ok, pause_commits
 from dubhash.interp.contracts import MT, STT, TTS, VAD, STTStream
 from dubhash.interp.endpoint import Discard, Endpointer, EndpointEvent, SpeechStart, Utterance
 from dubhash.interp.gender import detect_gender
@@ -98,14 +114,28 @@ class _EarlyFinal:
     """Queue marker: silence reached early_final_ms; end the STT stream now."""
 
     speech_ms: int  # speech span so far (for the backchannel rule)
+    t_last: int = 0  # the last speech frame before this silence
+    t_commit: int = 0  # chunking: when this pause asked for a commit (0 = not yet)
 
 
+@dataclass(frozen=True, slots=True)
+class _Commit:
+    """Queue marker (chunking): the pause reached chunk_pause_ms with chunk_min_ms of
+    speech; commit the pending early final as a chunk if its text passes the guards."""
+
+    t: int
+
+
+@dataclass(frozen=True, slots=True)
 class _Resume:
-    """Queue marker: speech resumed after an early final; discard it and restart STT."""
+    """Queue marker: speech resumed after an early final; discard it and restart STT
+    (or, if it was committed as a chunk, deliver it and go on without a replay)."""
+
+    t: int = 0  # the first speech frame after the pause
 
 
-_RESUME = _Resume()
-_Item = bytes | _EarlyFinal | _Resume | None
+_Item = bytes | _EarlyFinal | _Commit | _Resume | None
+PREROLL_FRAMES = 10  # 200 ms of the pause lead a new chunk's STT stream
 
 
 @dataclass(slots=True)
@@ -141,6 +171,10 @@ class _Job:
     task: asyncio.Task[None] | None = None
     spec: Speculator | None = None
     early_pending: bool = False  # an early final was requested and speech has not resumed
+    utterance_id: int = 0
+    chunk_t0: int = 0  # start of the current chunk (utterance start, or after a commit)
+    commit_pending: bool = False  # a _Commit was queued for this pause
+    chain: asyncio.Event | None = None  # set when this utterance's last delivery is done
 
 
 class Interpreter:
@@ -192,7 +226,13 @@ class Interpreter:
         self.early_started = 0  # early end() calls
         self.early_restarts = 0  # early finals discarded because speech resumed
         self.early_used = 0  # delivered translations that came from an early final
+        self.chunks_committed = 0  # chunks delivered before their utterance's EOU (L9)
         self._bg: set[asyncio.Task[Any]] = set()
+        self._utterances = 0
+        # silence before the STT stream is ended inside an utterance: early_final_ms, or
+        # chunk_pause_ms when chunking cuts earlier (or early final is off)
+        cuts = [pair.early_final_ms] + ([pair.chunk_pause_ms] if pair.chunking else [])
+        self._cut_ms = min((c for c in cuts if c > 0), default=0)
 
     # -- frame loop ---------------------------------------------------------------
 
@@ -213,23 +253,40 @@ class Interpreter:
             if job is not None and not any(isinstance(e, SpeechStart) for e in events):
                 ep = self.endpointer
                 if job.early_pending and ep.in_speech and prob > ep.speech_threshold:
-                    job.early_pending = False  # speech resumed: restart before this frame
-                    job.queue.put_nowait(_RESUME)
+                    job.early_pending = job.commit_pending = False  # speech resumed
+                    job.queue.put_nowait(_Resume(now))  # restart before this frame
                 job.queue.put_nowait(frame)
                 self._early_final(job, now)
+                self._chunk_commit(job, now)
             await self._handle(events, frame)
             self._speculate(now)
         await self.force_eou()
 
     def _early_final(self, job: _Job, now: int) -> None:
         ep = self.endpointer
-        after = self.pair.early_final_ms
+        after = self._cut_ms
         if after <= 0 or job.early_pending or not ep.in_speech:
             return
         if now - ep.t_last_speech < after or ep.speech_ms < ep.min_utterance_ms:
             return
         job.early_pending = True
-        job.queue.put_nowait(_EarlyFinal(ep.speech_ms))
+        job.queue.put_nowait(_EarlyFinal(ep.speech_ms, ep.t_last_speech))
+
+    def _chunk_commit(self, job: _Job, now: int) -> None:
+        """Chunking (L9): ask the worker to commit this pause's early final as a chunk."""
+        p, ep = self.pair, self.endpointer
+        if not p.chunking or not job.early_pending or job.commit_pending or not ep.in_speech:
+            return
+        if not pause_commits(
+            now=now,
+            t_last_speech=ep.t_last_speech,
+            chunk_t0=job.chunk_t0,
+            pause_ms=p.chunk_pause_ms,
+            min_ms=p.chunk_min_ms,
+        ):
+            return
+        job.commit_pending = True
+        job.queue.put_nowait(_Commit(now))
 
     def _speculate(self, now: int) -> None:
         job = self._current
@@ -267,6 +324,8 @@ class Interpreter:
         for ev in events:
             if isinstance(ev, SpeechStart):
                 job = _Job(t_speech_start=ev.t, prev=self._last_done)
+                job.utterance_id, job.chunk_t0, job.chain = self._utterances, ev.t, job.prev
+                self._utterances += 1
                 if self.pair.spec_mt and not self.mt_skip:
                     job.spec = Speculator(
                         self._translate,
@@ -309,9 +368,16 @@ class Interpreter:
         early: asyncio.Task[_Ready] | None = None
         t_early = 0
         restarts = 0
-        audio: list[bytes] = []  # everything pushed for this utterance, for a restart
-        early_on = self.pair.early_final_ms > 0
+        # everything pushed for this chunk (the whole utterance unless a chunk was
+        # committed), for a restart
+        audio: list[bytes] = []
+        early_on = self._cut_ms > 0
         tr: Translation | None = None
+        commit: asyncio.Task[bool] | None = None  # chunking: does the early final pass?
+        mark = _EarlyFinal(0)
+        early_audio = b""
+        early_stage = stage
+        chunk, chunk_start = 0, job.t_speech_start
         try:
             try:
                 stream = await self.stt.open(self.src_lang)
@@ -327,15 +393,34 @@ class Interpreter:
                             continue
                         self.early_started += 1
                         t_early = self.clock.now_ms()  # when end() is sent
+                        mark, early_audio = item, b"".join(audio)
+                        early_stage = _Stage("stt", self.stt.name)
                         ending, stream = self._end_in_background(stream), None
                         early = asyncio.create_task(
-                            self._early(ending, item.speech_ms, b"".join(audio), job, stage)
+                            self._early(ending, item.speech_ms, early_audio, job, early_stage)
                         )
+                        if self.pair.chunking:
+                            commit = asyncio.create_task(self._chunk_ok(ending))
+                            self._keep(commit)
+                    elif isinstance(item, _Commit):
+                        if early is not None and commit is not None:
+                            mark = dataclasses.replace(mark, t_commit=item.t)
                     elif early is not None:  # _Resume: speech after the early final
-                        self._discard(early)
+                        ok = False
+                        if commit is not None and mark.t_commit:
+                            ok = await asyncio.shield(commit)
+                        commit = None
+                        if ok:  # chunking: deliver it, go on without a replay
+                            self._deliver_chunk(job, early, chunk, chunk_start, mark, early_audio)
+                            self.chunks_committed += 1
+                            chunk, chunk_start = chunk + 1, item.t
+                            job.chunk_t0 = item.t
+                            audio = audio[-PREROLL_FRAMES:]
+                        else:
+                            self._discard(early)
+                            restarts += 1
+                            self.early_restarts += 1
                         early = None
-                        restarts += 1
-                        self.early_restarts += 1
                         stage.name, stage.provider = "stt", self.stt.name
                         if pump is not None:
                             pump.cancel()
@@ -349,7 +434,7 @@ class Interpreter:
                     raise _Discarded
                 from_early = early is not None
                 if early is not None:
-                    task, early = early, None
+                    task, early, stage = early, None, early_stage
                     ready = await task
                 else:
                     assert stream is not None
@@ -361,7 +446,7 @@ class Interpreter:
                 self.spec_hits += ready.spec.hit
                 self.spec_used += ready.spec.text is not None
                 timings = {
-                    "t_speech_start": u.t_start,
+                    "t_speech_start": chunk_start if chunk else u.t_start,
                     "t_speech_end": u.t_end,
                     "t_eou": u.t_eou,
                     "t_stt_final": ready.t_stt_final,
@@ -369,6 +454,7 @@ class Interpreter:
                     "t_tts_ttfb": ready.t_tts_ttfb,
                     "spec_hit": int(ready.spec.hit),
                     "spec_used": int(ready.spec.text is not None),
+                    "t_utt_start": u.t_start,
                 }
                 if early_on:
                     if from_early:
@@ -384,7 +470,9 @@ class Interpreter:
                     audio=_prepend(ready.first, ready.rest),
                     voice=ready.voice,
                     timings=timings,
-                    source_audio=u.audio,
+                    source_audio=b"".join(audio) if chunk else u.audio,
+                    utterance_id=job.utterance_id,
+                    chunk=chunk,
                 )
             except _Discarded:
                 tr = None
@@ -407,6 +495,8 @@ class Interpreter:
             finally:
                 if early is not None:
                     self._discard(early)
+                if commit is not None:
+                    commit.cancel()
                 if pump is not None:
                     pump.cancel()
                 if job.spec is not None:
@@ -417,8 +507,8 @@ class Interpreter:
                     with contextlib.suppress(Exception):
                         await stream.aclose()
 
-            if job.prev is not None:
-                await job.prev.wait()
+            if job.chain is not None:  # the previous utterance, then this one's chunks
+                await job.chain.wait()
             if tr is None:
                 await _maybe_await(self.sink.on_utterance_discarded(self.side))
             else:
@@ -428,6 +518,87 @@ class Interpreter:
         finally:
             job.done.set()
             self._jobs.discard(job)
+
+    async def _chunk_ok(self, ending: asyncio.Task[str]) -> bool:
+        """Chunking: may this early final be committed as a chunk (chunker guards)?"""
+        try:
+            return chunk_text_ok(await asyncio.shield(ending))
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            return False
+
+    def _deliver_chunk(
+        self,
+        job: _Job,
+        early: asyncio.Task[_Ready],
+        chunk: int,
+        t_start: int,
+        mark: _EarlyFinal,
+        audio: bytes,
+    ) -> None:
+        """Hand a committed chunk to the sink once it is ready, in order: after the previous
+        utterance and this utterance's earlier chunks (job.chain), before what follows."""
+        prev, done = job.chain, asyncio.Event()
+        job.chain = done
+
+        async def deliver() -> None:
+            try:
+                ready: _Ready | None = None
+                try:
+                    ready = await early
+                except _Discarded:
+                    pass
+                except Exception as e:
+                    log.warning(
+                        "provider.error",
+                        extra={
+                            "call_id": self.call_id,
+                            "side": self.side,
+                            "provider": self.mt.name,
+                            "stage": "chunk",
+                            "error": repr(e),
+                            "reconnecting": False,
+                        },
+                    )
+                if prev is not None:
+                    await prev.wait()
+                if ready is None:
+                    return
+                self.spec_eligible += ready.spec_eligible
+                self.spec_hits += ready.spec.hit
+                self.spec_used += ready.spec.text is not None
+                self.early_used += 1
+                tr = Translation(
+                    side=self.side,
+                    seq=self._seq,
+                    src_text=ready.final,
+                    tgt_text=ready.tgt_text,
+                    audio=_prepend(ready.first, ready.rest),
+                    voice=ready.voice,
+                    timings={
+                        "t_speech_start": t_start,
+                        "t_speech_end": mark.t_last,
+                        "t_eou": mark.t_commit,  # the chunk's cut, not the utterance's EOU
+                        "t_stt_final": ready.t_stt_final,
+                        "t_mt": ready.t_mt,
+                        "t_tts_ttfb": ready.t_tts_ttfb,
+                        "spec_hit": int(ready.spec.hit),
+                        "spec_used": int(ready.spec.text is not None),
+                        "t_utt_start": job.t_speech_start,
+                        "early_final_used": 1,
+                    },
+                    source_audio=audio,
+                    utterance_id=job.utterance_id,
+                    chunk=chunk,
+                    final_chunk=False,
+                )
+                self._seq += 1
+                await _maybe_await(self.sink.on_translation(tr))
+            finally:
+                done.set()
+
+        self._keep(asyncio.create_task(deliver(), name=f"interp-chunk-{self.side}"))
 
     def _log_final(self, latency_ms: int) -> None:
         log.info(

@@ -110,7 +110,8 @@ async def test_timings_present_and_monotonic():
     await interp.run(feed(pcm, clock))
     (tr,) = sink.translations
     keys = ["t_speech_start", "t_speech_end", "t_eou", "t_stt_final", "t_mt", "t_tts_ttfb"]
-    assert list(tr.timings) == [*keys, "spec_hit", "spec_used"]
+    assert list(tr.timings) == [*keys, "spec_hit", "spec_used", "t_utt_start"]
+    assert tr.timings["t_utt_start"] == tr.timings["t_speech_start"]  # unchunked (L9)
     assert tr.timings["spec_hit"] in (0, 1) and tr.timings["spec_used"] in (0, 1)
     values = [tr.timings[k] for k in keys]
     assert values == sorted(values)
