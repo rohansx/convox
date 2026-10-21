@@ -90,7 +90,8 @@ class FakeSTTStream:
         else:
             scripted = self._owner._pop()
             final = scripted if scripted is not None else self._text(_word_count(ms))
-            self.detected_lang = self._owner._pop_detected()
+            if self._owner._detected:  # else leave whatever the test set
+                self.detected_lang = self._owner._pop_detected()
         self._finish()
         return final
 
