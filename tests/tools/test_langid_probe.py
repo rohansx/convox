@@ -10,6 +10,7 @@ from tools.langid_probe import (
     summarise,
     sweep,
     trim_lead,
+    vote_rows,
     window,
 )
 
@@ -49,6 +50,43 @@ def test_join_pairs_makes_long_utterances_from_consecutive_sentences():
     clips = {("hi-IN", 0, "male"): a, ("hi-IN", 1, "male"): b, ("hi-IN", 2, "male"): c}
     out = join_pairs(clips, gap_ms=10)
     assert out == {("hi-IN", 100, "male"): a + b"\x00" * 320 + b}
+
+
+def test_vote_rows_apply_the_engine_decision_to_two_models():
+    def row(model, raw, conf, idx=0):
+        return {"engine": "rest", "model": model, "lang": "mr-IN", "idx": idx, "voice": "male",
+                "cond": "pstn", "window_ms": 2000, "raw": raw, "conf": conf, "ms": 200}  # fmt: skip
+
+    rows = [
+        row("saaras:v3", "mr-IN", 0.4), row("saaras:v4", "mr-IN", 1.0),
+        row("saaras:v3", "mr-IN", 0.4, 1), row("saaras:v4", "hi-IN", 1.0, 1),
+    ]  # fmt: skip
+    out = vote_rows(rows, "saaras:v3", "saaras:v4")
+    assert [(r["engine"], r["raw"], r["idx"]) for r in out] == [
+        ("vote", "mr-IN", 0),
+        ("vote", None, 1),
+    ]
+
+
+def test_replay_merges_saved_runs_and_adds_the_vote(tmp_path, monkeypatch):
+    import json
+
+    import tools.langid_probe as probe
+
+    monkeypatch.setattr(probe, "OUT", tmp_path)
+
+    def row(model, raw, conf):
+        return {"engine": "rest", "model": model, "lang": "hi-IN", "idx": 0, "voice": "male",
+                "cond": "pstn", "window_ms": 2000, "raw": raw, "conf": conf, "ms": 150}  # fmt: skip
+
+    (tmp_path / "a.json").write_text(json.dumps({"rows": [row("saaras:v3", "hi-IN", 0.5)]}))
+    (tmp_path / "b.json").write_text(json.dumps({"rows": [row("saaras:v4", "hi-IN", 1.0)]}))
+    paths = [str(tmp_path / "a.json"), str(tmp_path / "b.json")]
+    assert probe.replay(paths, ["saaras:v3", "saaras:v4"], "all") == 0
+    out = json.loads((tmp_path / "results-all.json").read_text())
+    vote = out["analysis"]["vote|saaras:v3+saaras:v4|short|pstn|2.0s"]
+    assert vote["n"] == 1 and vote["accuracy"] == 1.0
+    assert (tmp_path / "summary-all.md").exists()
 
 
 def test_confusion_counts_truth_by_prediction_with_none_as_reject():
