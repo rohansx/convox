@@ -1,0 +1,672 @@
+"""FloorController: the doc's test-case table (floor-controller.md §4) and worked traces
+(§6). Every step goes through the Rig, which asserts the invariants over the leg log."""
+
+from __future__ import annotations
+
+import asyncio
+
+from dubhash.audio.frames import FRAME_BYTES
+from tests.floor_helpers import (
+    LINE_CHECK_MARKER,
+    FeedAudio,
+    Rig,
+    check_all_ended,
+    failing_tts,
+    frames_of,
+    settle,
+)
+
+# --- basic flow ------------------------------------------------------------------------
+
+
+async def test_a_speaks_translation_plays_mark_returns_idle():
+    rig = Rig()
+    fc = rig.fc
+    assert fc.state == "IDLE"
+    await fc.on_speech_start("a")
+    assert fc.state == "A_SPEAKING"
+    rig.clock.advance(1500)
+    await fc.on_speech_end("a")
+    a1 = rig.tr("a", 1, n_frames=4)
+    await rig.hand(a1)
+    assert fc.state == "PLAYING_AB"
+    assert fc.playing is a1
+    b = rig.legs["b"]
+    assert len(b.entries("send")) == 4 and all(
+        len(e.data) == FRAME_BYTES for e in b.entries("send")
+    )
+    assert [e.tag for e in b.entries("mark")] == ["a:1"]
+    assert rig.legs["a"].entries() == []
+    rig.clock.advance(80)
+    await rig.finish()
+    assert fc.state == "IDLE" and fc.playing is None
+    assert rig.played == [a1] and a1.clipped_ms is None
+    assert a1.timings["t_play_start"] == 1500 and a1.timings["t_play_end"] == 1580
+    check_all_ended(rig)
+    states = [(e.payload["from"], e.payload["to"]) for e in rig.bus.kinds("state")]
+    assert states == [("IDLE", "A_SPEAKING"), ("A_SPEAKING", "PLAYING_AB"), ("PLAYING_AB", "IDLE")]
+
+
+async def test_translation_while_listener_holds_floor_is_queued():
+    rig = Rig()
+    fc = rig.fc
+    await fc.on_speech_start("b")
+    a1 = rig.tr("a", 1)
+    await rig.hand(a1)
+    assert fc.state == "B_SPEAKING" and list(fc.queue) == [a1]
+    assert rig.legs["b"].entries() == []
+    assert rig.bus.kinds("state")[-1].payload["queue_depth"] == 1
+
+
+async def test_discarded_utterance_returns_idle_and_drains_queue():
+    rig = Rig()
+    fc = rig.fc
+    await fc.on_speech_start("b")
+    a1 = rig.tr("a", 1)
+    await rig.hand(a1)
+    await fc.on_speech_end("b")
+    await fc.on_utterance_discarded("b")
+    await rig.step()
+    assert fc.state == "PLAYING_AB" and fc.playing is a1
+    await rig.finish()
+    assert fc.state == "IDLE"
+    check_all_ended(rig)
+
+
+async def test_discard_from_non_holder_changes_nothing():
+    rig = Rig()
+    fc = rig.fc
+    await fc.on_speech_start("a")
+    await fc.on_utterance_discarded("b")
+    assert fc.state == "A_SPEAKING"
+
+
+async def test_underrun_is_not_the_end_only_mark_is():
+    rig = Rig()
+    fc = rig.fc
+    feed = FeedAudio()
+    a1 = rig.tr("a", 1, audio=feed)
+    feed.push(*frames_of(1, 2))
+    await rig.hand(a1)
+    assert fc.state == "PLAYING_AB"
+    assert len(rig.legs["b"].entries("send")) == 2
+    assert rig.legs["b"].entries("mark") == []
+    await rig.advance(2000)  # TTS stalls for 2 s
+    assert fc.state == "PLAYING_AB" and fc.playing is a1
+    feed.push(*frames_of(1, 3))
+    feed.end()
+    await rig.step()
+    assert len(rig.legs["b"].entries("send")) == 5
+    assert [e.tag for e in rig.legs["b"].entries("mark")] == ["a:1"]
+    assert fc.state == "PLAYING_AB"  # the mark has been requested, not fired
+    await rig.finish()
+    assert fc.state == "IDLE"
+
+
+async def test_mark_with_wrong_tag_or_wrong_leg_is_ignored():
+    rig = Rig()
+    fc = rig.fc
+    a1 = rig.tr("a", 1)
+    await rig.hand(a1)
+    await fc.on_mark("b", "a:99")
+    await fc.on_mark("a", "a:1")  # the speaker's leg cannot end a→b playback
+    await rig.step()
+    assert fc.state == "PLAYING_AB" and fc.playing is a1
+
+
+async def test_start_registers_leg_callbacks():
+    rig = Rig()
+    fc = rig.fc
+    await fc.start()
+    assert len(rig.legs["a"].mark_cbs) == 1 and len(rig.legs["b"].dtmf_cbs) == 1
+    a1 = rig.tr("a", 1)
+    await rig.hand(a1)
+    await rig.finish()  # fires through the registered callback
+    assert fc.state == "IDLE"
+    rig.legs["a"].fire_dtmf("5")
+    await settle()
+    assert rig.bus.kinds("dtmf")[-1].payload == {"side": "a", "digit": "5"}
+    await fc.aclose()
+
+
+async def test_render_hook_shapes_listener_audio():
+    rig = Rig()
+
+    async def render(tr):
+        yield b"\x00" * FRAME_BYTES  # an "earcon" frame
+        async for c in tr.audio:
+            yield c
+
+    rig.fc = rig.make(render=render)
+    a1 = rig.tr("a", 1, n_frames=2)
+    await rig.hand(a1)
+    sends = rig.legs["b"].entries("send")
+    assert [e.data[0] for e in sends] == [0, 1, 1]
+
+
+# --- overlap, backchannel, barge-in, order ---------------------------------------------
+
+
+async def test_speaker_talks_900ms_during_playing_ba_no_clear_and_is_queued():
+    rig = Rig()
+    fc = rig.fc
+    b1 = rig.tr("b", 1)
+    await rig.hand(b1)
+    assert fc.state == "PLAYING_BA"
+    await fc.on_speech_start("a")
+    await rig.advance(900)
+    await fc.on_speech_end("a")
+    await rig.advance(300)
+    assert fc.state == "PLAYING_BA"
+    assert rig.legs["a"].entries("clear") == [] and rig.bus.kinds("barge_in") == []
+    a1 = rig.tr("a", 1)
+    await rig.hand(a1)
+    assert list(fc.queue) == [a1] and fc.state == "PLAYING_BA"
+    await rig.finish()  # mark(a) for b1
+    assert fc.state == "PLAYING_AB" and fc.playing is a1
+    assert rig.sent_tags("b") == ["a:1"]
+    await rig.finish()
+    assert fc.state == "IDLE" and b1.clipped_ms is None and a1.clipped_ms is None
+    check_all_ended(rig)
+
+
+async def test_listener_backchannel_400ms_changes_nothing():
+    rig = Rig()
+    fc = rig.fc
+    a1 = rig.tr("a", 1)
+    await rig.hand(a1)
+    n_events = len(rig.bus.events)
+    await fc.on_speech_start("b")
+    await rig.advance(400)
+    await fc.on_speech_end("b")
+    await rig.advance(2000)
+    assert fc.state == "PLAYING_AB" and fc.playing is a1 and not fc.queue
+    assert rig.legs["b"].entries("clear") == []
+    assert len(rig.bus.events) == n_events  # no state change, no barge-in
+    await rig.finish()
+    assert a1.clipped_ms is None
+
+
+async def test_listener_speaks_1500ms_barge_in_at_1200():
+    rig = Rig()
+    fc = rig.fc
+    feed = FeedAudio()
+    a1 = rig.tr("a", 1, audio=feed)
+    feed.push(*frames_of(1, 15))  # 300 ms reach the leg before B cuts in
+    await rig.hand(a1)
+    await fc.on_speech_start("b")
+    await rig.advance(1150)
+    assert fc.state == "PLAYING_AB" and rig.legs["b"].entries("clear") == []
+    await rig.advance(50)  # 1200 ms of continuous listener speech
+    assert fc.state == "B_SPEAKING" and fc.playing is None
+    assert [e.op for e in rig.legs["b"].entries() if e.op != "send"] == ["clear"]
+    assert a1.clipped_ms == 300 and rig.played == [a1]
+    assert a1.timings["t_play_end"] == 1200
+    (ev,) = rig.bus.kinds("barge_in")
+    assert ev.payload == {"side": "b", "listener": "b", "clipped_seq": 1, "clipped_ms": 300}
+    feed.push(*frames_of(1, 5))
+    await rig.advance(300)
+    await fc.on_speech_end("b")
+    assert len(rig.legs["b"].entries("send")) == 15  # nothing sent after the clear
+    assert fc.state == "B_SPEAKING"
+    check_all_ended(rig)
+
+
+async def test_barge_in_from_speaker_side_is_ignored():
+    rig = Rig()
+    fc = rig.fc
+    a1 = rig.tr("a", 1)
+    await rig.hand(a1)
+    await fc.on_speech_start("a")  # speaker keeps talking: no timer (§2.1 rule 3)
+    await rig.advance(3000)
+    await fc.on_barge_in("a")
+    await rig.step()
+    assert fc.state == "PLAYING_AB" and rig.legs["b"].entries("clear") == []
+
+
+async def test_stale_mark_after_clear_is_ignored():
+    rig = Rig()
+    fc = rig.fc
+    a1 = rig.tr("a", 1)
+    await rig.hand(a1)
+    await fc.on_speech_start("b")
+    await rig.advance(1200)
+    assert fc.state == "B_SPEAKING"
+    b1 = rig.tr("b", 1)
+    await rig.hand(b1)
+    assert fc.playing is b1
+    await fc.on_mark("b", "a:1")  # the transport reports the cleared item late
+    await rig.step()
+    assert fc.state == "PLAYING_BA" and fc.playing is b1
+    assert rig.played == [a1]
+
+
+async def test_order_a1_b1_a2_arrive_while_busy():
+    rig = Rig()
+    fc = rig.fc
+    await fc.on_speech_start("b")  # B holds the floor, so a1 queues
+    a1, b1, a2 = rig.tr("a", 1), rig.tr("b", 1), rig.tr("a", 2)
+    await rig.hand(a1)
+    await rig.hand(b1)  # src holds the floor, but a1 arrived first
+    assert fc.playing is a1, "cross-direction order is arrival order"
+    await rig.hand(a2)
+    assert list(fc.queue) == [b1, a2]
+    await rig.finish()
+    assert fc.playing is b1
+    await rig.finish()
+    assert fc.playing is a2
+    await rig.finish()
+    assert [t.tag for t in rig.played] == ["a:1", "b:1", "a:2"]
+    assert fc.state == "IDLE"
+    check_all_ended(rig)
+
+
+async def test_trace_6_2_real_barge_in():
+    rig = Rig()
+    fc = rig.fc
+    feed = FeedAudio()
+    a1 = rig.tr("a", 1, audio=feed)
+    feed.push(*frames_of(1, 10))
+    await rig.hand(a1)  # 1
+    assert fc.state == "PLAYING_AB"
+    await fc.on_speech_start("b")  # 2
+    await rig.advance(1200)  # 3
+    assert fc.state == "B_SPEAKING" and a1.clipped_ms == 200
+    assert rig.legs["b"].entries("clear") and rig.bus.kinds("barge_in")
+    await fc.on_speech_end("b")
+    b1 = rig.tr("b", 1)
+    await rig.hand(b1)  # 4
+    assert fc.state == "PLAYING_BA" and rig.sent_tags("a") == ["b:1"]
+    await rig.finish()  # 5
+    assert fc.state == "IDLE"
+    check_all_ended(rig)
+
+
+async def test_trace_6_3_cross_direction_queueing_and_order():
+    rig = Rig()
+    fc = rig.fc
+    a1, b1, a2 = rig.tr("a", 1), rig.tr("b", 1), rig.tr("a", 2)
+    await rig.hand(a1)
+    assert (fc.state, list(fc.queue)) == ("PLAYING_AB", [])
+    await fc.on_speech_start("b")
+    await rig.advance(800)
+    await fc.on_speech_end("b")
+    await rig.hand(b1)
+    assert (fc.state, list(fc.queue)) == ("PLAYING_AB", [b1])
+    await rig.hand(a2)
+    assert (fc.state, list(fc.queue)) == ("PLAYING_AB", [b1, a2])
+    await rig.finish()
+    assert (fc.state, list(fc.queue)) == ("PLAYING_BA", [a2])
+    await rig.finish()
+    assert (fc.state, list(fc.queue)) == ("PLAYING_AB", [])
+    await rig.finish()
+    assert (fc.state, list(fc.queue)) == ("IDLE", [])
+    assert rig.legs["a"].entries("clear") == [] and rig.legs["b"].entries("clear") == []
+    check_all_ended(rig)
+
+
+# --- silence ticks ----------------------------------------------------------------------
+
+
+def line_checks(rig: Rig, side: str) -> int:
+    return sum(1 for e in rig.legs[side].entries("send") if e.marker == LINE_CHECK_MARKER)
+
+
+async def test_queue_non_empty_both_silent_4s_force_plays_head():
+    rig = Rig()
+    fc = rig.fc
+    await fc.on_speech_start("b")
+    a1 = rig.tr("a", 1)
+    await rig.hand(a1)
+    await rig.advance(500)
+    await fc.on_speech_end("b")
+    await rig.advance(3950)
+    assert fc.state == "B_SPEAKING" and list(fc.queue) == [a1]
+    await rig.advance(50)
+    assert fc.state == "PLAYING_AB" and fc.playing is a1
+    await rig.finish()
+    check_all_ended(rig)
+
+
+async def test_no_force_play_while_anyone_speaks():
+    rig = Rig()
+    fc = rig.fc
+    await fc.on_speech_start("b")
+    a1 = rig.tr("a", 1)
+    await rig.hand(a1)
+    await rig.advance(6000)  # B is still talking
+    assert fc.state == "B_SPEAKING" and list(fc.queue) == [a1]
+    await fc.on_speech_start("a")
+    await fc.on_speech_end("b")
+    await rig.advance(6000)  # A is talking now
+    assert list(fc.queue) == [a1]
+    await fc.on_speech_end("a")
+    await rig.advance(4000)
+    assert fc.playing is a1
+
+
+async def test_10s_total_silence_plays_line_check_to_both_legs_once():
+    rig = Rig()
+    fc = rig.fc
+    await rig.advance(9950)
+    assert line_checks(rig, "a") == 0 and line_checks(rig, "b") == 0
+    await rig.advance(50)
+    assert line_checks(rig, "a") == 3 and line_checks(rig, "b") == 3
+    assert fc.state == "IDLE"
+    await rig.advance(25000)  # same silence period: once only
+    assert line_checks(rig, "a") == 3
+    await fc.on_speech_start("a")
+    await rig.advance(500)
+    await fc.on_speech_end("a")
+    await fc.on_utterance_discarded("a")
+    await rig.advance(10000)
+    assert line_checks(rig, "a") == 6 and line_checks(rig, "b") == 6
+
+
+async def test_no_line_check_while_playing_or_queued():
+    rig = Rig()
+    feed = FeedAudio()
+    a1 = rig.tr("a", 1, audio=feed)
+    feed.push(*frames_of(1, 2))
+    await rig.hand(a1)
+    await rig.advance(12000)  # TTS stalled: still playing
+    assert line_checks(rig, "a") == 0 and line_checks(rig, "b") == 0
+    feed.end()
+    await rig.step()
+    rig.clock.advance(100)
+    await rig.finish()
+    await rig.advance(9900)
+    assert line_checks(rig, "b") == 0  # silence is counted from the end of playback
+    await rig.advance(100)
+    assert line_checks(rig, "b") == 3
+
+
+async def test_no_line_check_without_a_prompt_source():
+    rig = Rig()
+    rig.fc = rig.make(line_check=None)
+    await rig.advance(11000)
+    assert rig.log == []
+
+
+async def test_trace_6_4_held_floor_rescued_by_4s_tick():
+    rig = Rig()
+    fc = rig.fc
+    await fc.on_speech_start("b")
+    a1 = rig.tr("a", 1)
+    await rig.hand(a1)  # 1: the listener holds the floor
+    assert (fc.state, list(fc.queue)) == ("B_SPEAKING", [a1])
+    await rig.advance(700)
+    await fc.on_speech_end("b")  # 2: the discard event never comes
+    assert (fc.state, list(fc.queue)) == ("B_SPEAKING", [a1])
+    await rig.advance(4000)  # 3
+    assert (fc.state, list(fc.queue)) == ("PLAYING_AB", [])
+    await rig.finish()
+    check_all_ended(rig)
+
+
+# --- DTMF -------------------------------------------------------------------------------
+
+
+async def earcon_render(tr):
+    yield b"\x00" * FRAME_BYTES
+    async for c in tr.audio:
+        yield c
+
+
+async def test_dtmf_1_mid_playing_ab_queues_replay_of_what_a_last_heard():
+    rig = Rig()
+    fc = rig.fc = rig.make(render=earcon_render)
+    b1 = rig.tr("b", 1, n_frames=3)
+    await rig.hand(b1)
+    heard = b"".join(e.data for e in rig.legs["a"].entries("send"))
+    await rig.finish()
+    a1 = rig.tr("a", 1)
+    await rig.hand(a1)
+    await fc.on_dtmf("a", "1")
+    await rig.step()
+    assert rig.bus.kinds("dtmf")[-1].payload == {"side": "a", "digit": "1"}
+    assert fc.playing is a1 and len(fc.queue) == 1
+    replay = fc.queue[0]
+    assert replay.side == "b" and replay.seq < 0 and replay.tgt_text == b1.tgt_text
+    n_before = len(rig.legs["a"].entries("send"))
+    await rig.finish()  # a1 ends, the replay plays to A after it
+    assert fc.playing is replay and fc.state == "PLAYING_BA"
+    again = b"".join(e.data for e in rig.legs["a"].entries("send")[n_before:])
+    assert again == heard  # the rendered audio, not rendered a second time
+    await rig.finish()
+    assert fc.state == "IDLE"
+    assert rig.played == [b1, a1]  # replays are not turns
+    check_all_ended(rig)
+
+
+async def test_dtmf_1_when_idle_plays_at_once_and_nothing_heard_is_a_no_op():
+    rig = Rig()
+    fc = rig.fc
+    await fc.on_dtmf("b", "1")
+    await rig.step()
+    assert fc.state == "IDLE" and not fc.queue
+    a1 = rig.tr("a", 1)
+    await rig.hand(a1)
+    await rig.finish()
+    await fc.on_dtmf("b", "1")
+    await rig.step()
+    assert fc.state == "PLAYING_AB" and fc.playing is not None and fc.playing.seq < 0
+    await rig.finish()
+    assert fc.state == "IDLE"
+
+
+async def test_dtmf_1_replays_a_clipped_item_up_to_the_cut():
+    rig = Rig()
+    fc = rig.fc
+    feed = FeedAudio()
+    a1 = rig.tr("a", 1, audio=feed)
+    feed.push(*frames_of(1, 4))
+    await rig.hand(a1)
+    await fc.on_speech_start("b")
+    await rig.advance(1200)
+    await fc.on_speech_end("b")
+    await fc.on_utterance_discarded("b")
+    await fc.on_dtmf("b", "1")
+    await rig.step()
+    assert fc.playing is not None and fc.playing.seq < 0
+    assert len(rig.legs["b"].entries("send")) == 8
+
+
+async def test_dtmf_0_while_playing_with_2_queued_enters_bypass():
+    rig = Rig()
+    fc = rig.fc
+    feed = FeedAudio()
+    b1 = rig.tr("b", 1, audio=feed)
+    feed.push(*frames_of(1, 10))
+    await rig.hand(b1)
+    a1, b2 = rig.tr("a", 1), rig.tr("b", 2)
+    await rig.hand(a1)
+    await rig.hand(b2)
+    assert len(fc.queue) == 2
+    await fc.on_dtmf("b", "0")
+    await rig.step()
+    assert fc.bypass and rig.bypassed == 1
+    assert fc.playing is None and not fc.queue
+    assert b1.clipped_ms == 200 and a1.clipped_ms == 0 and b2.clipped_ms == 0
+    assert rig.played == [b1, a1, b2]
+    assert [e.op for e in rig.legs["a"].entries() if e.op != "send"] == ["clear"]
+    assert rig.bus.kinds("bypass")[-1].payload == {"side": "b", "digit": "0"}
+    check_all_ended(rig)
+    # plain mixer: each leg's frames go to the other at 0 dB
+    n = len(rig.log)
+    await fc.forward("a", b"\xf1\x02" * 320)
+    await fc.forward("b", b"\xf3\x04" * 320)
+    fwd = rig.log[n:]
+    assert [(e.side, e.data[:2]) for e in fwd] == [("b", b"\xf1\x02"), ("a", b"\xf3\x04")]
+    # the state machine is gone for good
+    await fc.on_speech_start("a")
+    await rig.advance(15000)
+    await fc.on_dtmf("a", "1")
+    late = rig.tr("a", 9)
+    await rig.hand(late)
+    assert late.clipped_ms == 0 and late in rig.played
+    assert rig.log[n + 2 :] == []
+    assert rig.bypassed == 1
+    check_all_ended(rig)
+
+
+async def test_forward_is_a_no_op_until_bypass():
+    rig = Rig()
+    await rig.fc.forward("a", b"\x01" * FRAME_BYTES)
+    assert rig.log == []
+
+
+async def test_escape_digit_is_configurable():
+    rig = Rig()
+    fc = rig.fc = rig.make(escape_dtmf="9")
+    await fc.on_dtmf("a", "0")
+    assert not fc.bypass
+    await fc.on_dtmf("a", "9")
+    assert fc.bypass
+
+
+async def test_trace_6_5_escape():
+    rig = Rig()
+    fc = rig.fc
+    b1 = rig.tr("b", 1)
+    await rig.hand(b1)
+    a3 = rig.tr("a", 3)
+    await rig.hand(a3)
+    assert (fc.state, list(fc.queue)) == ("PLAYING_BA", [a3])  # 1
+    await fc.on_dtmf("a", "0")  # 2
+    await rig.step()
+    assert rig.legs["a"].entries("clear")
+    assert b1.clipped_ms is not None and a3.clipped_ms == 0
+    assert rig.bus.kinds("bypass") and rig.bypassed == 1
+    await fc.forward("a", b"\x05" * FRAME_BYTES)
+    assert rig.legs["b"].entries("send")[-1].data[0] == 5
+    check_all_ended(rig)
+
+
+# --- chaos, concurrency, shutdown -------------------------------------------------------
+
+
+async def test_provider_socket_killed_mid_utterance_does_not_deadlock():
+    rig = Rig()
+    fc = rig.fc
+    a1 = rig.tr("a", 1, audio=failing_tts(frames_of(1, 3)))
+    await rig.hand(a1)
+    assert [e.tag for e in rig.legs["b"].entries("mark")] == ["a:1"]
+    b1 = rig.tr("b", 1)
+    await rig.hand(b1)
+    assert list(fc.queue) == [b1]
+    await rig.finish()
+    assert a1.clipped_ms == 60  # ended, but cut short by the provider
+    assert fc.playing is b1
+    await rig.finish()
+    assert fc.state == "IDLE" and b1.clipped_ms is None
+    check_all_ended(rig)
+
+
+async def test_leg_send_failure_does_not_deadlock():
+    rig = Rig()
+    fc = rig.fc
+    leg = rig.legs["b"]
+    real_send, real_mark = leg.send, leg.mark
+
+    async def broken(*_: object) -> None:
+        raise ConnectionError("leg gone")
+
+    leg.send = broken  # type: ignore[method-assign]
+    leg.mark = broken  # type: ignore[method-assign]
+    a1 = rig.tr("a", 1)
+    a2 = rig.tr("a", 2)
+    await rig.hand(a1)
+    await rig.hand(a2)
+    assert a1 in rig.played and a1.clipped_ms == 0
+    leg.send, leg.mark = real_send, real_mark  # type: ignore[method-assign]
+    await rig.step()
+    # a2 started while the leg was still broken, so it is abandoned too; a3 plays
+    a3 = rig.tr("a", 3)
+    await rig.hand(a3)
+    assert fc.playing is a3
+    await rig.finish()
+    assert fc.state == "IDLE"
+    check_all_ended(rig)
+
+
+async def test_handlers_from_many_tasks_never_interleave():
+    rig = Rig()
+    fc = rig.fc
+    trs = [rig.tr("a" if i % 2 else "b", i) for i in range(1, 11)]
+    rig.handed.extend(trs)
+    await asyncio.gather(
+        *(fc.on_translation(t) for t in trs),
+        *(fc.on_speech_start(s) for s in "abab"),
+        *(fc.on_speech_end(s) for s in "abab"),
+        fc.tick(),
+        fc.tick(),
+    )
+    await rig.step()
+    while fc.playing is not None:
+        await rig.finish()
+    assert [t.tag for t in rig.played] == [t.tag for t in trs]
+    check_all_ended(rig)
+
+
+async def test_aclose_ends_playing_and_queued_as_clipped():
+    rig = Rig()
+    fc = rig.fc
+    feed = FeedAudio()
+    a1 = rig.tr("a", 1, audio=feed)
+    feed.push(*frames_of(1, 5))
+    await rig.hand(a1)
+    b1 = rig.tr("b", 1)
+    await rig.hand(b1)
+    await fc.start()
+    await fc.aclose()
+    assert a1.clipped_ms == 100 and b1.clipped_ms == 0
+    check_all_ended(rig)
+
+
+async def test_trace_6_1_delivery_call_simplified():
+    rig = Rig()
+    fc = rig.fc
+    clock = rig.clock
+    clock.set(5000)
+    await fc.on_speech_start("a")
+    assert fc.state == "A_SPEAKING"
+    await rig.advance(1000)
+    await fc.on_speech_end("a")
+    await rig.advance(600)  # 6.6 s
+    a1 = rig.tr("a", 1)
+    await rig.hand(a1)
+    assert fc.state == "PLAYING_AB"
+    await rig.advance(1000)
+    await rig.finish()
+    assert fc.state == "IDLE"
+    clock.set(8200)
+    await fc.on_speech_start("b")
+    assert fc.state == "B_SPEAKING"
+    await rig.advance(800)
+    await fc.on_speech_end("b")
+    await rig.advance(700)  # 9.7 s
+    b1 = rig.tr("b", 1)
+    await rig.hand(b1)
+    assert fc.state == "PLAYING_BA"
+    await rig.advance(1300)  # 11.0 s: A says "theek hai, 2 minute" over b1
+    await fc.on_speech_start("a")
+    await rig.advance(900)
+    await fc.on_speech_end("a")
+    assert fc.state == "PLAYING_BA" and rig.legs["a"].entries("clear") == []
+    a2 = rig.tr("a", 2)
+    await rig.hand(a2)  # arrives before the mark: queued
+    assert list(fc.queue) == [a2]
+    await rig.finish()  # mark(a) for b1, a2 dequeued
+    assert fc.state == "PLAYING_AB" and fc.playing is a2
+    await rig.advance(700)  # 13.0 s: B backchannels "sari"
+    await fc.on_speech_start("b")
+    await rig.advance(400)
+    await fc.on_speech_end("b")
+    assert fc.state == "PLAYING_AB" and rig.legs["b"].entries("clear") == []
+    await rig.finish()
+    assert fc.state == "IDLE"
+    assert [t.tag for t in rig.played] == ["a:1", "b:1", "a:2"]
+    assert all(t.clipped_ms is None for t in rig.played)  # 0 clips
+    assert rig.bus.kinds("barge_in") == [] and not fc.bypass
+    check_all_ended(rig)
