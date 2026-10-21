@@ -27,6 +27,16 @@ Decisions where the spec is open:
   barge_in_min_ms - eou_ms (650 ms) would clear playback. The sink therefore watches the
   VAD and tells the floor speech ended after SPEECH_END_HANGOVER_MS of silence (and
   started again if speech resumes before EOU); the EOU speech-end is then not repeated.
+
+Cross-talk and echo (session/crosstalk.py): every mic frame goes through the gate in the
+VAD wrapper. Echo of a leg's own playback, and on co-located calls the other speaker's
+voice picked up at a distance, is fed to the endpointer as silence, so it never starts an
+utterance. An utterance that starts while the other side is already talking is "suspect":
+its speech is not reported to the floor (no barge-in, no floor grab) until the gate clears
+it. At STT end() the gate judges the whole utterance; cross-talk returns an empty final
+without waiting for the vendor (the stream settles in the background, keeping its socket
+warm), so the interpreter discards it. On co-located calls a final whose detected language
+is the other side's is discarded too. Each decision is published as a "crosstalk" event.
 """
 
 from __future__ import annotations
@@ -37,9 +47,9 @@ import functools
 import inspect
 import logging
 from collections import deque
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass
-from typing import Any, Literal
+from typing import Any, Literal, Protocol
 
 from dubhash.audio.frames import FRAME_BYTES, bytes_to_ms
 from dubhash.audio.mixer import render_playback
@@ -49,6 +59,7 @@ from dubhash.events import EventBus
 from dubhash.interp.contracts import STT, VAD, STTStream
 from dubhash.interp.pipeline import BACKCHANNEL_MAX_WORDS, Interpreter
 from dubhash.legs.base import LegTransport
+from dubhash.session.crosstalk import CrosstalkGate, Verdict
 from dubhash.session.floor import FloorController
 from dubhash.session.prompts import line_check_text, opening_text
 from dubhash.session.providers import SIDES, Providers
@@ -64,6 +75,11 @@ PROMPT_TIMEOUT_S = 10.0
 SPEECH_END_HANGOVER_MS = 200  # silence after which the floor hears "speech ended"
 SPEECH_THRESHOLD = 0.5  # same as the Endpointer's
 PROMPT_CHUNK = FRAME_BYTES * 5  # 100 ms
+# One "crosstalk" event per run of gated voiced frames, once the run is GATED_EVENT_FRAMES
+# long (a genuine onset ramp can lose a frame or two; the preroll keeps that audio). A
+# pause over GATED_EVENT_GAP_MS starts a new run.
+GATED_EVENT_FRAMES = 3
+GATED_EVENT_GAP_MS = 1000
 
 
 class _Stop(Exception):
@@ -79,40 +95,72 @@ class _Utt:
     stream: bool = False  # an STT stream was opened for it
     final: str | None = None
     t_stt_final: int | None = None
+    suspect: bool = False  # started while the other side talked; not told to the floor yet
+    crosstalk: str | None = None  # why it was discarded as cross-talk ("level" | "lang")
+
+
+class _Judge(Protocol):
+    """The session's cross-talk verdicts for one side's utterances, at STT end()."""
+
+    def before_final(self, utt: _Utt) -> str | None: ...
+
+    def after_final(self, utt: _Utt, lang: str | None) -> str | None: ...
+
+    def settle(self, stream: STTStream) -> None: ...
 
 
 class _TrackedStream:
-    def __init__(self, inner: STTStream, utt: _Utt | None, clock: Clock) -> None:
+    def __init__(
+        self, inner: STTStream, utt: _Utt | None, clock: Clock, judge: _Judge | None = None
+    ) -> None:
         self._inner = inner
         self._utt = utt
         self._clock = clock
+        self._judge = judge
+        self._settling = False
 
     async def push(self, frame: bytes) -> None:
         await self._inner.push(frame)
 
     async def end(self) -> str:
+        utt, judge = self._utt, self._judge
+        if utt is not None and judge is not None:
+            utt.crosstalk = judge.before_final(utt)
+            if utt.crosstalk is not None:  # no need to wait for the vendor's final
+                self._settling = True
+                judge.settle(self._inner)
+                utt.final, utt.t_stt_final = "", self._clock.now_ms()
+                return ""
         final = await self._inner.end()
-        if self._utt is not None:
-            self._utt.final = final
-            self._utt.t_stt_final = self._clock.now_ms()
+        if utt is not None and judge is not None:
+            utt.crosstalk = judge.after_final(utt, getattr(self._inner, "detected_lang", None))
+            if utt.crosstalk is not None:
+                final = ""
+        if utt is not None:
+            utt.final = final
+            utt.t_stt_final = self._clock.now_ms()
         return final
 
     def partials(self) -> AsyncIterator[str]:
         return self._inner.partials()
 
     async def aclose(self) -> None:
-        await self._inner.aclose()
+        if not self._settling:  # else the settle task closes it after end()
+            await self._inner.aclose()
 
 
 class _TrackedSTT:
     """Wraps a side's STT so the session sees each utterance's final transcript (to log
     backchannels, which the interpreter discards without saying why)."""
 
-    def __init__(self, inner: STT, utts: deque[_Utt], clock: Clock) -> None:
+    def __init__(
+        self, inner: STT, utts: deque[_Utt], clock: Clock, judge: _Judge | None = None
+    ) -> None:
         self.inner = inner
         self.name = inner.name
         self._utts = utts
         self._clock = clock
+        self._judge = judge
 
     async def open(self, lang: str) -> STTStream:
         # Workers open their stream first thing, in utterance order: bind to the oldest
@@ -123,21 +171,52 @@ class _TrackedSTT:
         elif self._utts and self._utts[-1].t_eou is None:
             # an early-final restart (L3): a second stream for the utterance still open
             utt = self._utts[-1]
-        return _TrackedStream(await self.inner.open(lang), utt, self._clock)
+        return _TrackedStream(await self.inner.open(lang), utt, self._clock, self._judge)
 
 
 class _TrackedVAD:
-    """Wraps a side's VAD to remember when that side last had a voiced frame."""
+    """Wraps a side's VAD to remember when that side last had a voiced frame, and to feed
+    frames the cross-talk gate rejects (echo, the other speaker) as silence."""
 
-    def __init__(self, inner: VAD, clock: Clock) -> None:
+    def __init__(
+        self,
+        inner: VAD,
+        clock: Clock,
+        side: Side | None = None,
+        gate: CrosstalkGate | None = None,
+        in_utterance: Callable[[], bool] | None = None,
+        on_gated: Callable[[Side, Verdict], None] | None = None,
+    ) -> None:
         self.inner = inner
         self._clock = clock
+        self._side = side
+        self._gate = gate
+        self._in_utterance = in_utterance
+        self._on_gated = on_gated  # once per run of gated frames
+        self._run: tuple[Verdict, int, int] | None = None  # verdict, frames, last ms
         self.voiced = False
         self.last_voiced = clock.now_ms()
 
     def speech_prob(self, frame: bytes) -> float:
-        p = self.inner.speech_prob(frame)
-        self.voiced = p > SPEECH_THRESHOLD
+        p = self.inner.speech_prob(frame)  # always: the inner VAD may keep state
+        voiced = p > SPEECH_THRESHOLD
+        if self._gate is not None and self._side is not None:
+            now = self._clock.now_ms()
+            db = self._gate.on_frame(self._side, frame, now, voiced)
+            if voiced:
+                in_utt = self._in_utterance() if self._in_utterance is not None else False
+                verdict = self._gate.frame_verdict(self._side, now, db, in_utterance=in_utt)
+                if verdict is None:
+                    self._run = None
+                else:
+                    p, voiced = 0.0, False
+                    run = self._run
+                    if run is None or run[0] != verdict or now - run[2] > GATED_EVENT_GAP_MS:
+                        run = (verdict, 0, now)
+                    self._run = run = (verdict, run[1] + 1, now)
+                    if run[1] == GATED_EVENT_FRAMES and self._on_gated is not None:
+                        self._on_gated(self._side, verdict)
+        self.voiced = voiced
         if self.voiced:
             self.last_voiced = self._clock.now_ms()
         return p
@@ -155,6 +234,15 @@ class _Sink:
         self.utts: dict[Side, deque[_Utt]] = {s: deque() for s in SIDES}
         self.vads: dict[Side, _TrackedVAD] = {}
         self._ended_early: dict[Side, bool] = {s: False for s in SIDES}
+        self.judges: dict[Side, _SideJudge] = {s: _SideJudge(self, s) for s in SIDES}
+        self.settling: set[asyncio.Task[Any]] = set()
+
+    @property
+    def gate(self) -> CrosstalkGate:
+        return self._s.gate
+
+    def open_utt(self, side: Side) -> _Utt | None:
+        return next((u for u in self.utts[side] if u.t_eou is None), None)
 
     async def voice_check(self, side: Side) -> None:
         """Called between frames: end speech for the floor after a short silence, and
@@ -162,7 +250,17 @@ class _Sink:
         vad = self.vads.get(side)
         if vad is None:
             return
-        if not any(u.t_eou is None for u in self.utts[side]):
+        utt = self.open_utt(side)
+        if utt is not None and utt.suspect:
+            if not self.gate.provisional(side, utt.t_start, self._s.clock.now_ms()):
+                return
+            utt.suspect = False  # genuine after all: the floor hears it from now
+            self._ended_early[side] = not vad.voiced
+            await self._s.floor.on_speech_start(side)
+            if not vad.voiced:
+                await self._s.floor.on_speech_end(side)
+            return
+        if utt is None:
             self._ended_early[side] = False
             return
         if self._ended_early[side]:
@@ -178,14 +276,21 @@ class _Sink:
         return sum(len(q) for q in self.utts.values())
 
     async def on_speech_start(self, side: Side) -> None:
-        self.utts[side].append(_Utt(t_start=self._s.clock.now_ms()))
+        now = self._s.clock.now_ms()
+        utt = _Utt(t_start=now, suspect=self.gate.other_talking_first(side, now))
+        self.utts[side].append(utt)
+        self.gate.utt_start(side, now)
         self._ended_early[side] = False
-        await self._s.floor.on_speech_start(side)
+        if not utt.suspect:
+            await self._s.floor.on_speech_start(side)
 
     async def on_speech_end(self, side: Side) -> None:
-        utt = next((u for u in self.utts[side] if u.t_eou is None), None)
+        utt = self.open_utt(side)
         if utt is not None:
             utt.t_eou = self._s.clock.now_ms()
+            self.gate.utt_end(side, utt.t_eou)
+            if utt.suspect:
+                return  # the floor never heard it start
         if self._ended_early[side]:
             self._ended_early[side] = False  # the floor already heard it
             return
@@ -198,7 +303,10 @@ class _Sink:
 
     async def on_utterance_discarded(self, side: Side) -> None:
         utt = self.utts[side].popleft() if self.utts[side] else None
-        if utt is not None and self._is_backchannel(utt):
+        if utt is not None and utt.crosstalk is not None:
+            self.gate.forget(side, utt.t_start)
+            self._s._crosstalk(side, utt.crosstalk, "eou", t_speech_start=utt.t_start)
+        elif utt is not None and self._is_backchannel(utt):
             t_end = max(utt.t_start, (utt.t_eou or utt.t_start) - self._s.pair.eou_ms)
             self._s.turn_log.on_backchannel(
                 side,
@@ -208,6 +316,8 @@ class _Sink:
                 t_eou=utt.t_eou,
                 t_stt_final=utt.t_stt_final,
             )
+        if utt is not None and utt.suspect:
+            return  # the floor never heard it
         await self._s.floor.on_utterance_discarded(side)
 
     async def on_partial(self, side: Side, text: str) -> None:
@@ -219,6 +329,45 @@ class _Sink:
             return False
         speech_ms = utt.t_eou - self._s.pair.eou_ms - utt.t_start + 20
         return speech_ms < self._s.pair.backchannel_max_ms
+
+
+class _SideJudge:
+    """_Judge for one side: the gate's verdict on a whole utterance, and the language
+    check on its final."""
+
+    def __init__(self, sink: _Sink, side: Side) -> None:
+        self._sink = sink
+        self._side = side
+
+    def before_final(self, utt: _Utt) -> str | None:
+        s = self._sink._s
+        o = s.gate.utterance_verdict(self._side, utt.t_start, s.clock.now_ms())
+        return None if o is None else "level"
+
+    def after_final(self, utt: _Utt, lang: str | None) -> str | None:
+        s = self._sink._s
+        if not s.co_located or not lang:
+            return None
+        base = lang.split("-")[0].lower()
+        mine = s.pair.side(self._side).lang.split("-")[0].lower()
+        theirs = s.pair.side(other(self._side)).lang.split("-")[0].lower()
+        return "lang" if base == theirs and base != mine else None
+
+    def settle(self, stream: STTStream) -> None:
+        """end() then aclose() a cross-talk stream in the background: a socket that
+        settles goes back to the warm pool."""
+
+        async def run() -> None:
+            try:
+                with contextlib.suppress(Exception):
+                    await stream.end()
+            finally:
+                with contextlib.suppress(Exception):
+                    await stream.aclose()
+
+        task = asyncio.create_task(run(), name=f"stt-settle-{self._side}")
+        self._sink.settling.add(task)
+        task.add_done_callback(self._sink.settling.discard)
 
 
 class CallSession:
@@ -261,6 +410,7 @@ class CallSession:
         self.escape_used = False
         self.end_reason: str | None = None
 
+        self.gate = CrosstalkGate(co_located=co_located)
         self.turn_log = TurnLog(
             call_id, providers=providers, clock=self.clock, bus=bus, writer=writer, record=record
         )
@@ -277,7 +427,7 @@ class CallSession:
             render=self._render,
             events=bus,
             line_check=self._line_check_audio,
-            on_played=self.turn_log.on_played,
+            on_played=self._on_played,
             on_bypass=self._on_bypass,
             bypass=mode == "bridge",
         )
@@ -285,12 +435,21 @@ class CallSession:
         self.interpreters: dict[Side, Interpreter] = {}
         if mode == "interpret":
             for s in SIDES:
-                self._sink.vads[s] = _TrackedVAD(providers.vad_factory(), self.clock)
+                self._sink.vads[s] = _TrackedVAD(
+                    providers.vad_factory(),
+                    self.clock,
+                    s,
+                    self.gate,
+                    functools.partial(self._in_utterance, s),
+                    self._on_gated,
+                )
                 self.interpreters[s] = Interpreter(
                     call_id,
                     s,
                     pair,
-                    _TrackedSTT(providers.stt[s], self._sink.utts[s], self.clock),  # type: ignore[arg-type]
+                    _TrackedSTT(  # type: ignore[arg-type]
+                        providers.stt[s], self._sink.utts[s], self.clock, self._sink.judges[s]
+                    ),
                     providers.mt,
                     providers.tts[other(s)],  # synthesise in the TARGET side's language
                     self._sink.vads[s],  # type: ignore[arg-type]
@@ -497,6 +656,8 @@ class CallSession:
         for t in list(self._interp_tasks.values()):
             t.cancel()
         self._interp_tasks.clear()
+        for t in list(self._sink.settling):
+            t.cancel()
         try:
             await self.floor.aclose()
         except Exception as e:
@@ -565,7 +726,38 @@ class CallSession:
 
     def _render(self, tr: Translation) -> AsyncIterator[bytes]:
         source = tr.source_audio if self.duck_original else b""
-        return self._render_partial(tr.audio, source_audio=source)
+        frames = self._render_partial(tr.audio, source_audio=source)
+        return self._echo_tap(other(tr.side), frames)
+
+    async def _echo_tap(self, listener: Side, frames: AsyncIterator[bytes]) -> AsyncIterator[bytes]:
+        """The listener's outbound frames, as the echo guard's reference level."""
+        self.gate.playback_start(listener)
+        try:
+            async for f in frames:
+                self.gate.playback_frame(listener, f)
+                yield f
+        finally:
+            aclose = getattr(frames, "aclose", None)
+            if aclose is not None:
+                with contextlib.suppress(Exception):
+                    await aclose()
+
+    def _on_played(self, tr: Translation) -> None:
+        self.gate.playback_end(other(tr.side), self.clock.now_ms())
+        self.turn_log.on_played(tr)
+
+    def _in_utterance(self, side: Side) -> bool:
+        return self._sink.open_utt(side) is not None
+
+    def _on_gated(self, side: Side, verdict: Verdict) -> None:
+        self._crosstalk(side, "echo" if verdict == "echo" else "level", "frame")
+
+    def _crosstalk(self, side: Side, reason: str, stage: str, **extra: Any) -> None:
+        """Speech dropped by the cross-talk/echo gate: reason "level" | "lang" | "echo",
+        stage "frame" (never became an utterance) | "eou" (an utterance, no turn)."""
+        payload = {"side": side, "reason": reason, "stage": stage, **extra}
+        log.info("crosstalk.drop", extra={"call_id": self.call_id, **payload})
+        self._publish("crosstalk", payload)
 
     async def _prompt_chunks(self, kind: str, side: Side, text: str) -> AsyncIterator[bytes]:
         """A prompt's audio in the side's female voice, chunk by chunk as the TTS produces

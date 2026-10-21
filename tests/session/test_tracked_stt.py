@@ -38,3 +38,31 @@ async def test_next_utterance_still_binds_to_its_own_entry():
     await s1.end()
     await s2.end()
     assert second.stream and second.final == "four five six"
+
+
+class _CrosstalkJudge:
+    def __init__(self) -> None:
+        self.settled: list[object] = []
+
+    def before_final(self, utt: _Utt) -> str | None:
+        return "level"
+
+    def after_final(self, utt: _Utt, lang: str | None) -> str | None:
+        return None
+
+    def settle(self, stream: object) -> None:
+        self.settled.append(stream)
+
+
+async def test_cross_talk_returns_an_empty_final_and_hands_the_stream_to_settle():
+    clock = FakeClock()
+    utt = _Utt(t_start=0)
+    judge = _CrosstalkJudge()
+    stt = _TrackedSTT(FakeSTT(script=["ek do"]), deque([utt]), clock, judge)
+    s = await stt.open("hi-IN")
+    await s.push(b"\x01\x00" * 3200)
+    assert await s.end() == ""
+    assert utt.final == "" and utt.crosstalk == "level"
+    (inner,) = judge.settled
+    await s.aclose()  # the settle task owns the inner stream now
+    assert not inner._closed  # type: ignore[attr-defined]

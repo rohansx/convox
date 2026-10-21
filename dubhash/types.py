@@ -78,6 +78,7 @@ EventKind = Literal[
     "leg",  # {side, status}
     "call",  # {status}
     "line_check",  # {sides}: "aap line par hain?" played after 10 s silence
+    "crosstalk",  # {side, reason: level|lang|echo, stage: frame|eou}: speech dropped
 ]
 
 
