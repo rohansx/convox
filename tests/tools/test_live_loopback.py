@@ -120,3 +120,30 @@ def test_stages_unchanged_for_sequential_pipeline():
         "queue": 10,
         "first_audio": 1800,
     }
+
+
+def test_scripts_cover_the_marathi_pairs():
+    assert ll.SCRIPT == ll.SCRIPTS["delivery-hi-kn"].lines
+    for key, langs in {
+        "delivery-hi-kn": ("hi-IN", "kn-IN"),
+        "delivery-mr-hi": ("mr-IN", "hi-IN"),
+        "clinic-mr-en": ("mr-IN", "en-IN"),
+    }.items():
+        sc = ll.SCRIPTS[key]
+        assert (sc.a_lang, sc.b_lang) == langs
+        assert {ln.side for ln in sc.lines} == {"a", "b"}
+        assert set(sc.voices) == {"a", "b"}
+        assert ll.script_for(*langs) == key
+    # the Marathi lines are ours: flagged for a native speaker
+    for key in ("delivery-mr-hi", "clinic-mr-en"):
+        assert all(ln.review for ln in ll.SCRIPTS[key].lines if ln.side == "a")
+    assert ll.script_for("ta-IN", "hi-IN") is None
+
+
+def test_number_check_against_the_scripted_line():
+    row = ll.TurnRow(0, "a", "ओटीपी 4729 आहे, फ्लॅट 302.", n_start=0, n_voice_end=1)
+    row.server = [{"src_text": "OTP is 4729, flat 302.", "tgt_text": "ओटीपी 4729 है, फ्लैट 32."}]
+    assert ll.numbers_check(row) == "numbers differ: 302 missing in translation"
+    row.server[0]["tgt_text"] = "ओटीपी 4729 है, फ्लैट 302."
+    assert ll.numbers_check(row) is None
+    assert ll.numbers_check(ll.TurnRow(1, "b", "x", n_start=0, n_voice_end=1)) is None
