@@ -218,3 +218,35 @@ async def test_render_trims_near_silent_lead_in_too():
     lead[:40] = np.tile([1, -1, 3, -5], 10)
     frames = await _collect(render_playback(_chunks(lead.tobytes() + voice), earcon=None))
     assert b"".join(frames) == voice
+
+
+# --- duck_ms: the original only as a short "a real person spoke" cue -----------------------
+
+
+async def test_render_duck_ms_limits_the_source_to_the_first_ms_of_tts():
+    tts = _const(1000, 16 * 1000)  # 1 s
+    source = _const(10000, 16 * 2000)  # longer than the TTS
+    frames = await _collect(
+        render_playback(_chunks(tts), source_audio=source, duck_db=-20.0, duck_ms=600, earcon=None)
+    )
+    a = _arr(b"".join(frames))
+    ducked = 1000 + round(10000 * db_to_gain(-20.0))
+    assert np.all(a[: 16 * 600] == ducked)
+    assert np.all(a[16 * 600 :] == 1000)
+
+
+async def test_render_duck_ms_none_keeps_the_source_under_the_whole_tts():
+    tts = _const(1000, 16 * 1000)
+    source = _const(10000, 16 * 2000)
+    frames = await _collect(
+        render_playback(_chunks(tts), source_audio=source, duck_ms=None, earcon=None)
+    )
+    assert np.all(_arr(b"".join(frames)) == 1000 + round(10000 * db_to_gain(-14.0)))
+
+
+async def test_render_duck_ms_zero_plays_no_source():
+    tts = _const(1000, 640)
+    frames = await _collect(
+        render_playback(_chunks(tts), source_audio=_const(10000, 640), duck_ms=0, earcon=None)
+    )
+    assert b"".join(frames) == tts
