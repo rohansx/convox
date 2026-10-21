@@ -201,6 +201,28 @@ async def test_opening_line_streams_to_the_leg_while_it_is_synthesised():
     await session.hangup()
 
 
+async def test_line_check_silence_counts_from_the_end_of_the_opening_line():
+    """Live: the 10 s line check fired at ~10 s into the call, over the rider's first
+    sentence, because the 7-9 s the callers spent hearing the opening counted as silence."""
+    tts = {"a": FakeTTS(), "b": FakeTTS()}  # 60 ms per char: openings of ~4-5 s
+    session, legs, clock, bus = make(prov=providers(tts=tts), opening_line=True)
+    await attach_both(session, legs)
+    await drive_lockstep(session, legs, clock, {"a": conversation([("silence", 10500)])})
+    assert min(len(t.requests[0][0]) * 60 for t in tts.values()) > 3000  # opening ms
+    assert bus.kinds("line_check") == []  # 10.5 s from the start, but < 10 s since the end
+    await session.wait_closed()
+
+
+async def test_line_check_silence_counts_from_activation_not_creation():
+    """A loopback call is created long before its tabs connect."""
+    session, legs, clock, bus = make()
+    clock.advance(30_000)
+    await attach_both(session, legs)
+    await drive_lockstep(session, legs, clock, {"a": conversation([("silence", 2000)])})
+    await session.wait_closed()
+    assert bus.kinds("line_check") == []
+
+
 async def test_partials_are_published():
     session, legs, clock, bus = make()
     await attach_both(session, legs)

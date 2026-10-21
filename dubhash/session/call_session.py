@@ -40,7 +40,7 @@ from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from typing import Any, Literal
 
-from dubhash.audio.frames import FRAME_BYTES
+from dubhash.audio.frames import FRAME_BYTES, bytes_to_ms
 from dubhash.audio.mixer import render_playback
 from dubhash.clock import Clock, MonotonicClock
 from dubhash.config.pairs import PairConfig
@@ -372,6 +372,7 @@ class CallSession:
             async with asyncio.TaskGroup() as tg:
                 self._tg = tg
                 tg.create_task(self._watch_stop(), name=f"{self.call_id}-stop")
+                self.floor.quiet_from(self._t_active)  # not from when the call was created
                 await self.floor.start()
                 for s in SIDES:
                     tg.create_task(self._pump(s), name=f"{self.call_id}-pump-{s}")
@@ -581,8 +582,11 @@ class CallSession:
             text = opening_text(
                 self.pair.side(side).lang, self.pair.side(other(side)).lang, record=self.record
             )
-            await self._prompt("opening", side, text, self.legs[side])
+            audio = await self._prompt("opening", side, text, self.legs[side])
+            # the callers hear it until about t0 + its length: that is not silence
+            self.floor.quiet_from(t0 + bytes_to_ms(len(audio)))
 
+        t0 = self.clock.now_ms()
         results = await asyncio.gather(*(one(s) for s in SIDES), return_exceptions=True)
         for side, res in zip(SIDES, results, strict=True):
             if isinstance(res, BaseException):
