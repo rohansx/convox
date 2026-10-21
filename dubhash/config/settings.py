@@ -63,10 +63,11 @@ class Settings(BaseSettings):
     loopback_opening_line: Literal["short", "full", "off"] = "short"  # /loopback and /join
     pstn_opening_line: Literal["short", "full", "off"] = "full"  # POST /v1/calls
     # lang "auto" (docs/tech-spec/language-detection.md): how an auto side's STT opens
-    # ("auto": Sarvam's language_code=auto, finals report the language; "guess": its best
-    # language so far) and the shortest utterance decided on (L8 tunes it).
-    auto_stt_open: Literal["auto", "guess"] = "auto"
-    lang_min_speech_ms: int = 1500
+    # ("guess": its best language so far; "auto": Sarvam's language_code=auto, whose finals
+    # report a language, unreliable on short lines, L8) and the shortest utterance decided
+    # on (L8: 2.0 s).
+    auto_stt_open: Literal["guess", "auto"] = "guess"
+    lang_min_speech_ms: int = 2000
 
     # Per-call recording for diagnosis (dubhash/store/recorder.py): mic and playout wavs,
     # every CallEvent, client telemetry and a summary under call_recording_dir. Dev and

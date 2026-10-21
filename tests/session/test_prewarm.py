@@ -88,7 +88,7 @@ async def test_an_auto_session_prewarms_its_auto_side_with_auto():
         auto_pair(pairs, {"a": "auto", "b": "kn-IN"}, {}),
         p,
         bus=RecordingBus(),
-        auto=AutoLang(hints={"a": None}, sides=language_sides(pairs)),
+        auto=AutoLang(hints={"a": None}, sides=language_sides(pairs), stt_open="auto"),
     )
     session.start_prewarm()
     await spin()

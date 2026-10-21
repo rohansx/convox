@@ -13,7 +13,7 @@ from dubhash.session.language import (
     combine,
 )
 
-LONG = 2000  # ms of speech: over min_speech_ms
+LONG = 2400  # ms of speech: over min_speech_ms
 U, P, C = LangState.UNKNOWN, LangState.PROVISIONAL, LangState.CONFIRMED
 
 
@@ -77,9 +77,9 @@ def test_a_disagreeing_second_guess_stays_provisional_in_the_new_language():
 
 def test_short_utterances_are_never_decided_on():
     r = LanguageResolver("a")
-    assert observe(r, "kn-IN", 0.99, speech_ms=1499) is None
+    assert observe(r, "kn-IN", 0.99, speech_ms=1999) is None
     assert r.state == U
-    assert observe(r, "kn-IN", 0.99, speech_ms=1500) is not None
+    assert observe(r, "kn-IN", 0.99, speech_ms=2000) is not None
 
 
 def test_min_speech_ms_is_configurable():
@@ -269,13 +269,25 @@ def test_update_payload_is_the_lang_event():
     assert observe(menu, None, 0.1).payload()["menu"] is True
 
 
-def test_the_stt_finals_own_confidence_is_used_when_it_has_one():
-    """Sarvam realtime with language_code=auto reports language_confidence on finals."""
-    sure = LanguageResolver("a")
-    up = sure.observe(speech_ms=LONG, stt_lang="mr-IN", stt_confidence=0.97)
-    assert (up.state, up.confidence) == (C, pytest.approx(0.97))
+def test_the_stt_finals_own_confidence_is_capped():
+    """Sarvam realtime with language_code=auto reports language_confidence on finals, but
+    it is wrong at 1.0 (L8: Marathi as Hindi 3/10): alone it is never more than
+    provisional; with an agreeing LID guess it confirms."""
+    alone = LanguageResolver("a")
+    up = alone.observe(speech_ms=LONG, stt_lang="mr-IN", stt_confidence=1.0)
+    assert (up.state, up.confidence) == (P, pytest.approx(0.7))
+    up = alone.observe(speech_ms=LONG, stt_lang="mr-IN", stt_confidence=1.0)
+    assert up.state == C  # two agreeing utterances
     unsure = LanguageResolver("a")
     assert unsure.observe(speech_ms=LONG, stt_lang="mr-IN", stt_confidence=0.4) is None
+    both = LanguageResolver("a")
+    up = both.observe(speech_ms=LONG, stt_lang="mr-IN", stt_confidence=0.99, lid=lid("mr-IN", 0.8))
+    assert up.state == C
+
+
+def test_min_speech_ms_defaults_to_two_seconds():
+    """L8: decide from 2.0 s of speech, never from 1.0 s."""
+    assert ResolverConfig().min_speech_ms == 2000
 
 
 def test_english_needs_more_confidence_than_an_indic_language():

@@ -57,13 +57,15 @@ class LangState(StrEnum):
 
 @dataclass(frozen=True, slots=True)
 class ResolverConfig:
-    min_speech_ms: int = 1500  # utterances shorter than this are not decided on (L8 tunes)
+    min_speech_ms: int = 2000  # shorter utterances are not decided on (L8: 2.0 s, never 1.0)
     confident: float = 0.6  # a combined guess at least this sure counts
     very_confident: float = 0.9  # confirms on its own
     confirm_after: int = 2  # consecutive agreeing confident utterances to confirm
     switch_after: int = 2  # consecutive confident utterances to move a confirmed side
     menu_after: int = 2  # consecutive unsure/unsupported utterances before the menu
-    stt_confidence: float = 0.7  # weight of an STT final's language code without a score
+    # weight of an STT final's language code, and the cap on its own score: Sarvam realtime
+    # (language_code=auto) is wrong at 1.0 (L8), so alone it is at most PROVISIONAL
+    stt_confidence: float = 0.7
     hint_prior: float = 0.15  # lift for a language that matches the hint
     supported: tuple[str, ...] = SUPPORTED_LANGS
     # languages that need more than `confident`: loanword-only Indic utterances ("Flat
@@ -71,12 +73,13 @@ class ResolverConfig:
     lang_confident: dict[str, float] = field(default_factory=lambda: {"en-IN": 0.95})
 
 
-# How an auto side's STT stream opens. "auto": Sarvam realtime's language_code=auto, whose
-# finals carry the detected language and its confidence, in translate mode too (engine
-# probe, 21 Oct; "unknown" is rejected). "guess": in the side's best language so far (its
-# resolved language, else its hint, else Hindi), reopened when that changes; translate-mode
-# English came out the same whichever Indic code the socket opened with (7/7 languages).
-SttOpen = Literal["auto", "guess"]
+# How an auto side's STT stream opens. "guess" (default): in the side's best language so
+# far (its resolved language, else its hint, else Hindi), reopened when that changes;
+# translate-mode English came out the same whichever Indic code the socket opened with
+# (7/7 languages, 21 Oct). "auto": Sarvam realtime's language_code=auto, whose finals carry
+# the detected language and a confidence, in translate mode too ("unknown" is rejected);
+# L8 found it en-IN on every short clip and wrong at 1.0, so it only adds evidence.
+SttOpen = Literal["guess", "auto"]
 STT_AUTO = "auto"
 MENU_WINDOW_MS = 15000  # after the menu finishes playing, digits mean language this long
 
@@ -88,7 +91,7 @@ class AutoLang:
     hints: dict[Side, str | None]  # the sides whose lang is "auto", with their hints
     sides: dict[str, SideConfig]  # per-language side defaults (config.pairs.language_sides)
     config: ResolverConfig = field(default_factory=lambda: ResolverConfig())
-    stt_open: SttOpen = "auto"
+    stt_open: SttOpen = "guess"
     menu_window_ms: int = MENU_WINDOW_MS
 
 
@@ -141,7 +144,9 @@ def combine(
     config = config or ResolverConfig()
     evidence: list[tuple[str, float, str]] = []
     if (code := normalise(stt_lang)) is not None:
-        conf = config.stt_confidence if stt_confidence is None else stt_confidence
+        conf = config.stt_confidence
+        if stt_confidence is not None:
+            conf = min(stt_confidence, conf)
         evidence.append((code, conf, "stt_final"))
     if lid is not None and (code := normalise(lid.lang)) is not None:
         evidence.append((code, float(lid.confidence), lid.source or "lid"))

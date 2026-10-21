@@ -26,7 +26,7 @@ def lid(lang: str | None, conf: float) -> LangGuess:
     return LangGuess(lang, conf, "lid")
 
 
-def talk(ms: int = 2000, f0: float = 140.0) -> bytes:
+def talk(ms: int = 2400, f0: float = 140.0) -> bytes:
     """One utterance with ms of speech (over min_speech_ms by default) and a pause."""
     return speech(ms, f0=f0) + silence(1500)
 
@@ -92,18 +92,27 @@ class Call:
 PROMPTS = ("Namaste", "Please speak", "Hindi ke liye", "हिंदी.", "English.")
 
 
-async def test_with_stt_auto_the_finals_language_and_confidence_resolve_the_side():
-    """The default: the auto side's STT opens with language_code=auto, whose finals report
-    the language and its confidence; one sure final confirms without any LID guess."""
+async def test_with_stt_auto_the_finals_language_counts_with_the_lid():
+    """AUTO_STT_OPEN=auto: the auto side's STT opens with language_code=auto, whose finals
+    report the language; with the LID agreeing one utterance confirms."""
     call = Call(
         {"a": "auto", "b": "kn-IN"},
+        lid_script=[lid("gu-IN", 0.8)],
         stt={"a": FakeSTT(["a one"], detected=[("gu-IN", 0.96)]), "b": FakeSTT()},
         stt_open="auto",
     )
     await call.run({"a": talk() + silence(2000)})
     assert call.stt["a"].langs == ["auto"]
     assert call.langs() == [("a", "gu-IN", "CONFIRMED", None)]
-    assert call.bus.kinds("lang")[0].payload["source"] == "stt_final"
+
+
+async def test_the_default_opens_stt_in_the_best_guess():
+    """L8: the realtime socket's own detection is not good enough, so by default an auto
+    side's STT opens in its best language so far (hint, else Hindi) and reopens once the
+    side is decided."""
+    from dubhash.session.language import AutoLang as _Auto
+
+    assert _Auto(hints={}, sides={}).stt_open == "guess"
 
 
 async def test_the_language_is_decided_at_the_final_not_after_tts():
@@ -111,8 +120,8 @@ async def test_the_language_is_decided_at_the_final_not_after_tts():
     after the final. It only needs the final and the end of the utterance."""
     call = Call(
         {"a": "auto", "b": "kn-IN"},
-        stt={"a": FakeSTT(["a one"], detected=[("ta-IN", 0.97)]), "b": FakeSTT()},
-        stt_open="auto",
+        lid_script=[lid("ta-IN", 0.97)],
+        stt={"a": FakeSTT(["a one"]), "b": FakeSTT()},
     )
     call.tts["b"] = call.session.providers.tts["b"] = FakeTTS(ttfb_ms=800, clock=call.clock)
     call.session.interpreters["a"].tts = call.tts["b"]
@@ -134,7 +143,7 @@ async def test_an_early_final_restart_asks_the_lid_once():
     assert call.pair.early_final_ms > 0
     # a real LID call is in flight for a while (cancelling it then does not save it)
     call.lid.delay_ms, call.lid.clock = 100, call.clock
-    paused = speech(1800) + silence(300) + speech(1000) + silence(2000)  # resumes after 300
+    paused = speech(2200) + silence(300) + speech(1000) + silence(2000)  # resumes after 300
     await call.run({"a": paused})
     assert call.session.interpreters["a"].early_restarts >= 1
     assert len(call.lid.calls) == 1
@@ -315,7 +324,7 @@ async def test_short_utterances_never_reach_the_lid():
         lid_script=[lid("ta-IN", 0.95)],
         stt={"a": FakeSTT(["haan ji theek"]), "b": FakeSTT()},
     )
-    await call.run({"a": talk(900) + silence(2000)})
+    await call.run({"a": talk(1500) + silence(2000)})
     assert call.lid.calls == []
     assert call.langs() == []
 
