@@ -51,7 +51,7 @@ from dubhash.interp.pipeline import BACKCHANNEL_MAX_WORDS, Interpreter
 from dubhash.legs.base import LegTransport
 from dubhash.session.floor import FloorController
 from dubhash.session.prompts import line_check_text, opening_text, short_opening_text
-from dubhash.session.providers import SIDES, Providers
+from dubhash.session.providers import SIDES, Providers, prewarm
 from dubhash.session.turn_log import TurnLog
 from dubhash.types import CallEvent, EventKind, Side, Translation, other
 
@@ -313,6 +313,17 @@ class CallSession:
         self._t_active: int | None = None
         self._t_end: int | None = None
         self._t_bypass: int | None = None
+        self.prewarm_task: asyncio.Task[None] | None = None
+
+    def start_prewarm(self) -> None:
+        """Open the provider sockets now (call creation), in the background, so the first
+        utterance does not pay the STT/TTS/MT handshakes (L7). Done again at activation."""
+        if self.mode != "interpret" or self.status == "ended":
+            return
+        if self.prewarm_task is None or self.prewarm_task.done():
+            self.prewarm_task = asyncio.get_running_loop().create_task(
+                prewarm(self.providers, self.pair), name=f"{self.call_id}-prewarm"
+            )
 
     # --- public API ------------------------------------------------------------------------
 
@@ -338,6 +349,8 @@ class CallSession:
             for side, leg in list(self.legs.items()):
                 await self._close_leg(side, leg)
                 self._publish("leg", {"side": side, "status": "closed"})
+            await self._stop_prewarm()
+            await self._aclose_providers()  # prewarmed sockets
             await self._finish()
             return
         self._stop.set()
@@ -391,6 +404,7 @@ class CallSession:
                 self._tg = tg
                 tg.create_task(self._watch_stop(), name=f"{self.call_id}-stop")
                 self.floor.quiet_from(self._t_active)  # not from when the call was created
+                self.start_prewarm()  # sockets warmed at creation may have gone stale
                 await self.floor.start()
                 for s in SIDES:
                     tg.create_task(self._pump(s), name=f"{self.call_id}-pump-{s}")
@@ -509,6 +523,7 @@ class CallSession:
         await self._close_interpreters()
         for side, leg in list(self.legs.items()):
             await self._close_leg(side, leg)
+        await self._stop_prewarm()
         await self._aclose_providers()
         await self._finish()
 
@@ -544,6 +559,13 @@ class CallSession:
             log.warning(
                 "leg.close_error", extra={"call_id": self.call_id, "side": side, "error": repr(e)}
             )
+
+    async def _stop_prewarm(self) -> None:
+        task, self.prewarm_task = self.prewarm_task, None
+        if task is not None and not task.done():
+            task.cancel()
+            with contextlib.suppress(BaseException):
+                await task
 
     async def _aclose_providers(self) -> None:
         p = self.providers

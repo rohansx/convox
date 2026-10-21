@@ -14,9 +14,12 @@ Fake names, *_IMPL=fake and DUBHASH_ENV=test all map to the fakes (providers.reg
 
 from __future__ import annotations
 
+import asyncio
 import logging
+import time
 from collections.abc import Callable
 from dataclasses import dataclass
+from typing import Any
 
 from dubhash.config.pairs import PairConfig
 from dubhash.config.settings import Settings
@@ -51,6 +54,38 @@ def _vad_factory() -> Callable[[], VAD]:
         log.warning("vad.fallback", extra={"error": repr(e), "vad": "energy"})
         return EnergyVAD
     return SileroVAD
+
+
+async def prewarm(providers: Providers, pair: PairConfig) -> None:
+    """Open every provider connection the call will need before anyone speaks (L7): the
+    STT socket per source side (in that side's language), the TTS socket per target side,
+    and the MT HTTPS connection. Providers without a prewarm() are skipped; failures are
+    logged and never raised (the first utterance then connects as before)."""
+    jobs: list[tuple[str, Any]] = []
+    for s in SIDES:
+        cfg = pair.side(s)
+        if (fn := getattr(providers.stt[s], "prewarm", None)) is not None:
+            jobs.append((f"stt:{s}", fn(cfg.lang)))
+        if (fn := getattr(providers.tts[s], "prewarm", None)) is not None:
+            jobs.append((f"tts:{s}", fn(cfg.voice_f)))
+    mt = getattr(providers.mt, "inner", providers.mt)
+    if (fn := getattr(mt, "prewarm", None)) is not None:
+        jobs.append(("mt", fn()))
+    if not jobs:
+        return
+    t0 = time.monotonic()
+    results = await asyncio.gather(*(j for _, j in jobs), return_exceptions=True)
+    for (what, _), res in zip(jobs, results, strict=True):
+        if isinstance(res, BaseException):
+            log.warning(
+                "provider.prewarm_failed %s",
+                what,
+                extra={"provider": what, "stage": "prewarm", "error": repr(res)},
+            )
+    log.info(
+        "provider.prewarm",
+        extra={"pair": pair.key, "latency_ms": int((time.monotonic() - t0) * 1000)},
+    )
 
 
 def build_providers(pair: PairConfig, settings: Settings) -> Providers:

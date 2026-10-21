@@ -251,7 +251,7 @@ def get_session_factory(conn: HTTPConnection) -> Callable[..., Any]:
         from dubhash.session.call_session import CallSession
         from dubhash.session.providers import build_providers
 
-        return CallSession(
+        session = CallSession(
             call_id,
             pair,
             build_providers(pair, state.settings),
@@ -262,5 +262,7 @@ def get_session_factory(conn: HTTPConnection) -> Callable[..., Any]:
             record=record,
             opening_line=opening_line,
         )
+        session.start_prewarm()  # STT/TTS/MT sockets open while the phones join (L7)
+        return session
 
     return make
