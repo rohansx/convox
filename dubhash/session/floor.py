@@ -16,7 +16,7 @@ from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
-from dubhash.audio.frames import bytes_to_ms
+from dubhash.audio.frames import FRAME_BYTES, bytes_to_ms
 from dubhash.clock import Clock
 from dubhash.events import EventBus
 from dubhash.legs.base import LegTransport
@@ -101,6 +101,10 @@ class FloorController:
         self._quiet_since = now  # last speech or end of playback
         self._line_checked = False  # once per silence period
         self._line_tasks: dict[Side, asyncio.Task[None]] = {}
+        # DTMF replay: the rendered audio last sent to each listener side
+        self._last_heard: dict[Side, tuple[Translation, bytes]] = {}
+        self._internal: set[int] = set()  # id() of replay Translations made here
+        self._replay_seq = 0
 
     # --- public view ---------------------------------------------------------------------
 
@@ -189,11 +193,11 @@ class FloorController:
 
     async def on_translation(self, tr: Translation) -> None:
         async with self._lock:
-            self._queue.append(tr)
-            if self._state in ("IDLE", _speaking(tr.side)):
-                self._drain()
-            else:
-                self._publish_state(self._state, self._state)
+            if self._bypass:
+                self._end(tr, clipped_ms=0)
+                await _close_audio(tr)
+                return
+            self._accept(tr)
 
     async def on_mark(self, side: Side, tag: str) -> None:
         async with self._lock:
@@ -201,7 +205,7 @@ class FloorController:
             if pb is None or side != pb.listener or tag != pb.tr.tag:
                 return  # stale (e.g. after a clear) or foreign
             await self._stop_task(pb)
-            self._playback_ended()
+            self._playback_ended(pb)
             self._end(pb.tr, clipped_ms=bytes_to_ms(pb.sent) if pb.failed else None)
             if not self._drain():
                 self._set_state("IDLE")
@@ -209,6 +213,19 @@ class FloorController:
     async def on_dtmf(self, side: Side, digit: str) -> None:
         async with self._lock:
             self._publish("dtmf", {"side": side, "digit": digit})
+            log.info("floor.dtmf", extra={"side": side, "digit": digit})
+            if self._bypass:
+                return
+            if digit == self.escape_dtmf:
+                await self._enter_bypass(side, digit)
+            elif digit == self.replay_dtmf:
+                self._replay(side)
+
+    async def forward(self, side: Side, frame: bytes) -> None:
+        """Bypass passthrough: a frame from `side` goes to the other leg at 0 dB.
+        A no-op until bypass is on."""
+        if self._bypass:
+            await self._legs[other(side)].send(frame)
 
     async def on_barge_in(self, side: Side) -> None:
         async with self._lock:
@@ -240,6 +257,52 @@ class FloorController:
 
     # --- internals (call with the lock held) ---------------------------------------------
 
+    def _accept(self, tr: Translation) -> None:
+        """§2.1 rule 1: play now if the floor is free or the source's, else enqueue.
+        Either way it goes through the queue, so arrival order holds."""
+        self._queue.append(tr)
+        if self._state in ("IDLE", _speaking(tr.side)):
+            self._drain()
+        else:
+            self._publish_state(self._state, self._state)
+
+    def _replay(self, listener: Side) -> None:
+        heard = self._last_heard.get(listener)
+        if heard is None:
+            return
+        orig, audio = heard
+        self._replay_seq -= 1  # negative seq: a distinct tag, never a turn
+        tr = Translation(
+            side=orig.side,
+            seq=self._replay_seq,
+            src_text=orig.src_text,
+            tgt_text=orig.tgt_text,
+            audio=_frames(audio),
+            voice=orig.voice,
+        )
+        self._internal.add(id(tr))
+        self._accept(tr)
+
+    async def _enter_bypass(self, side: Side, digit: str) -> None:
+        """Rule 6: plain mixer for the rest of the call. Nothing is dropped silently."""
+        pb = self._pb
+        if pb is not None:
+            await self._cut(pb)
+        while self._queue:
+            tr = self._queue.popleft()
+            self._end(tr, clipped_ms=0)
+            await _close_audio(tr)
+        for s in list(self._line_tasks):
+            self._stop_line_check(s)
+        self._bypass = True
+        self._speaking.clear()
+        self._publish("bypass", {"side": side, "digit": digit})
+        log.info("floor.bypass", extra={"side": side})
+        if self._state != "IDLE":
+            self._set_state("IDLE")
+        if self._on_bypass is not None:
+            self._on_bypass()
+
     def _activity(self) -> None:
         self._last_speech = self._quiet_since = self._clock.now_ms()
         self._line_checked = False
@@ -266,7 +329,9 @@ class FloorController:
         if task is not None:
             task.cancel()
 
-    def _playback_ended(self) -> None:
+    def _playback_ended(self, pb: _Playback) -> None:
+        if pb.audio:
+            self._last_heard[pb.listener] = (pb.tr, bytes(pb.audio))
         self._pb = None
         self._barge_since = None
         self._quiet_since = self._clock.now_ms()
@@ -293,7 +358,7 @@ class FloorController:
         it in its buffer, so this is an upper bound on what the listener heard.
         """
         await self._stop_task(pb)
-        self._playback_ended()
+        self._playback_ended(pb)
         with contextlib.suppress(Exception):
             await self._legs[pb.listener].clear()
         clipped_ms = bytes_to_ms(pb.sent)
@@ -317,7 +382,8 @@ class FloorController:
     async def _play(self, pb: _Playback) -> None:
         tr = pb.tr
         leg = self._legs[pb.listener]
-        stream = self._render(tr)
+        # replays carry audio that was already rendered once
+        stream = tr.audio if id(tr) in self._internal else self._render(tr)
         try:
             try:
                 async for chunk in stream:
@@ -355,6 +421,9 @@ class FloorController:
         tr.timings.setdefault("t_play_start", now)
         tr.timings["t_play_end"] = now
         tr.clipped_ms = clipped_ms
+        if id(tr) in self._internal:
+            self._internal.discard(id(tr))
+            return
         if self._on_played is not None:
             self._on_played(tr)
 
@@ -371,3 +440,15 @@ class FloorController:
     def _publish(self, kind: EventKind, payload: dict[str, Any]) -> None:
         if self._events is not None:
             self._events.publish(CallEvent(self.call_id, self._clock.now_ms(), kind, payload))
+
+
+async def _frames(audio: bytes) -> AsyncIterator[bytes]:
+    for i in range(0, len(audio), FRAME_BYTES):
+        yield audio[i : i + FRAME_BYTES]
+
+
+async def _close_audio(tr: Translation) -> None:
+    aclose = getattr(tr.audio, "aclose", None)
+    if aclose is not None:
+        with contextlib.suppress(Exception):
+            await aclose()

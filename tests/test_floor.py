@@ -399,3 +399,142 @@ async def test_trace_6_4_held_floor_rescued_by_4s_tick():
     assert (fc.state, list(fc.queue)) == ("PLAYING_AB", [])
     await rig.finish()
     check_all_ended(rig)
+
+
+# --- DTMF -------------------------------------------------------------------------------
+
+
+async def earcon_render(tr):
+    yield b"\x00" * FRAME_BYTES
+    async for c in tr.audio:
+        yield c
+
+
+async def test_dtmf_1_mid_playing_ab_queues_replay_of_what_a_last_heard():
+    rig = Rig()
+    fc = rig.fc = rig.make(render=earcon_render)
+    b1 = rig.tr("b", 1, n_frames=3)
+    await rig.hand(b1)
+    heard = b"".join(e.data for e in rig.legs["a"].entries("send"))
+    await rig.finish()
+    a1 = rig.tr("a", 1)
+    await rig.hand(a1)
+    await fc.on_dtmf("a", "1")
+    await rig.step()
+    assert rig.bus.kinds("dtmf")[-1].payload == {"side": "a", "digit": "1"}
+    assert fc.playing is a1 and len(fc.queue) == 1
+    replay = fc.queue[0]
+    assert replay.side == "b" and replay.seq < 0 and replay.tgt_text == b1.tgt_text
+    n_before = len(rig.legs["a"].entries("send"))
+    await rig.finish()  # a1 ends, the replay plays to A after it
+    assert fc.playing is replay and fc.state == "PLAYING_BA"
+    again = b"".join(e.data for e in rig.legs["a"].entries("send")[n_before:])
+    assert again == heard  # the rendered audio, not rendered a second time
+    await rig.finish()
+    assert fc.state == "IDLE"
+    assert rig.played == [b1, a1]  # replays are not turns
+    check_all_ended(rig)
+
+
+async def test_dtmf_1_when_idle_plays_at_once_and_nothing_heard_is_a_no_op():
+    rig = Rig()
+    fc = rig.fc
+    await fc.on_dtmf("b", "1")
+    await rig.step()
+    assert fc.state == "IDLE" and not fc.queue
+    a1 = rig.tr("a", 1)
+    await rig.hand(a1)
+    await rig.finish()
+    await fc.on_dtmf("b", "1")
+    await rig.step()
+    assert fc.state == "PLAYING_AB" and fc.playing is not None and fc.playing.seq < 0
+    await rig.finish()
+    assert fc.state == "IDLE"
+
+
+async def test_dtmf_1_replays_a_clipped_item_up_to_the_cut():
+    rig = Rig()
+    fc = rig.fc
+    feed = FeedAudio()
+    a1 = rig.tr("a", 1, audio=feed)
+    feed.push(*frames_of(1, 4))
+    await rig.hand(a1)
+    await fc.on_speech_start("b")
+    await rig.advance(1200)
+    await fc.on_speech_end("b")
+    await fc.on_utterance_discarded("b")
+    await fc.on_dtmf("b", "1")
+    await rig.step()
+    assert fc.playing is not None and fc.playing.seq < 0
+    assert len(rig.legs["b"].entries("send")) == 8
+
+
+async def test_dtmf_0_while_playing_with_2_queued_enters_bypass():
+    rig = Rig()
+    fc = rig.fc
+    feed = FeedAudio()
+    b1 = rig.tr("b", 1, audio=feed)
+    feed.push(*frames_of(1, 10))
+    await rig.hand(b1)
+    a1, b2 = rig.tr("a", 1), rig.tr("b", 2)
+    await rig.hand(a1)
+    await rig.hand(b2)
+    assert len(fc.queue) == 2
+    await fc.on_dtmf("b", "0")
+    await rig.step()
+    assert fc.bypass and rig.bypassed == 1
+    assert fc.playing is None and not fc.queue
+    assert b1.clipped_ms == 200 and a1.clipped_ms == 0 and b2.clipped_ms == 0
+    assert rig.played == [b1, a1, b2]
+    assert [e.op for e in rig.legs["a"].entries() if e.op != "send"] == ["clear"]
+    assert rig.bus.kinds("bypass")[-1].payload == {"side": "b", "digit": "0"}
+    check_all_ended(rig)
+    # plain mixer: each leg's frames go to the other at 0 dB
+    n = len(rig.log)
+    await fc.forward("a", b"\xf1\x02" * 320)
+    await fc.forward("b", b"\xf3\x04" * 320)
+    fwd = rig.log[n:]
+    assert [(e.side, e.data[:2]) for e in fwd] == [("b", b"\xf1\x02"), ("a", b"\xf3\x04")]
+    # the state machine is gone for good
+    await fc.on_speech_start("a")
+    await rig.advance(15000)
+    await fc.on_dtmf("a", "1")
+    late = rig.tr("a", 9)
+    await rig.hand(late)
+    assert late.clipped_ms == 0 and late in rig.played
+    assert rig.log[n + 2 :] == []
+    assert rig.bypassed == 1
+    check_all_ended(rig)
+
+
+async def test_forward_is_a_no_op_until_bypass():
+    rig = Rig()
+    await rig.fc.forward("a", b"\x01" * FRAME_BYTES)
+    assert rig.log == []
+
+
+async def test_escape_digit_is_configurable():
+    rig = Rig()
+    fc = rig.fc = rig.make(escape_dtmf="9")
+    await fc.on_dtmf("a", "0")
+    assert not fc.bypass
+    await fc.on_dtmf("a", "9")
+    assert fc.bypass
+
+
+async def test_trace_6_5_escape():
+    rig = Rig()
+    fc = rig.fc
+    b1 = rig.tr("b", 1)
+    await rig.hand(b1)
+    a3 = rig.tr("a", 3)
+    await rig.hand(a3)
+    assert (fc.state, list(fc.queue)) == ("PLAYING_BA", [a3])  # 1
+    await fc.on_dtmf("a", "0")  # 2
+    await rig.step()
+    assert rig.legs["a"].entries("clear")
+    assert b1.clipped_ms is not None and a3.clipped_ms == 0
+    assert rig.bus.kinds("bypass") and rig.bypassed == 1
+    await fc.forward("a", b"\x05" * FRAME_BYTES)
+    assert rig.legs["b"].entries("send")[-1].data[0] == 5
+    check_all_ended(rig)
