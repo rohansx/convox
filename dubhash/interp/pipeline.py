@@ -172,7 +172,11 @@ class Interpreter:
         # The STT already outputs the target language (e.g. Marathi speech -> English final
         # for an English listener): no MT call, and t_mt = t_stt_final.
         self.mt_skip = pair.side(side).mt_lang == self.tgt.lang
-        self.endpointer = Endpointer(eou_ms=pair.eou_ms, backchannel_max_ms=pair.backchannel_max_ms)
+        self.endpointer = Endpointer(
+            eou_ms=pair.eou_ms,
+            backchannel_max_ms=pair.backchannel_max_ms,
+            max_utterance_ms=pair.max_utterance_ms,
+        )
         self._seq = 0
         self._current: _Job | None = None
         self._last_done: asyncio.Event | None = None
@@ -290,6 +294,7 @@ class Interpreter:
                             "t_eou": ev.t_eou,
                             "utt_ms": ev.duration_ms,
                             "backchannel": ev.short,
+                            "forced": ev.forced,
                         },
                     )
                 job.queue.put_nowait(None)

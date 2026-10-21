@@ -7,7 +7,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
-from pydantic import field_validator
+from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 PACKAGE_DIR = Path(__file__).resolve().parent.parent
@@ -58,6 +58,18 @@ class Settings(BaseSettings):
     tts_impl: Literal["real", "fake"] = "fake"
     enable_webrtc_leg: bool = True
     bench_realtime: bool = False
+    # The opening line per call kind (L7): "short" = the two language names and "speak"
+    # (~1.5-2 s), "full" = the disclosure sentence (+ record sentence), "off" = none.
+    loopback_opening_line: Literal["short", "full", "off"] = "short"  # /loopback and /join
+    pstn_opening_line: Literal["short", "full", "off"] = "full"  # POST /v1/calls
+
+    # Per-call recording for diagnosis (dubhash/store/recorder.py): mic and playout wavs,
+    # every CallEvent, client telemetry and a summary under call_recording_dir. Dev and
+    # test only (consent, DPDP): None means "on in dev, off otherwise"; never on by
+    # default in prod.
+    call_recording: bool | None = None
+    call_recording_dir: Path = Path("out/calls")
+    log_file: Path | None = Path("logs/dubhash.log")  # JSON lines, rotating; empty = off
 
     @field_validator("exotel_api_host")
     @classmethod
@@ -75,6 +87,17 @@ class Settings(BaseSettings):
             if (base / v).exists():
                 return base / v
         return v
+
+    @field_validator("log_file", mode="before")
+    @classmethod
+    def _empty_log_file(cls, v: object) -> object:
+        return None if v == "" else v
+
+    @model_validator(mode="after")
+    def _recording_default(self) -> Settings:
+        if self.call_recording is None:
+            self.call_recording = self.dubhash_env == "dev"
+        return self
 
     @property
     def forces_fakes(self) -> bool:

@@ -14,11 +14,17 @@
 # (*-male-1 -> shubh, *-female-1 -> ishita). They STILL NEED THE LISTENING TEST (Q3).
 # spec_mt / spec_after_ms: speculative MT on the latest STT partial during the EOU wait. Off:
 # Sarvam realtime partials rarely match the final (live hit 1/8, L1a).
+# duck_db / duck_ms: on telephony calls the speaker's original plays under the first duck_ms
+# of the translation at duck_db, as an "a real person spoke" cue. Calls with co-located
+# phones (/join, loopback) play no original: the listener heard it in the room (21 Oct
+# stage test: "double sound").
 # early_final_ms (default 0 = off): end the STT stream after this much silence, before EOU,
 # so MT/TTS run during the EOU wait; restarted on the whole utterance if speech resumes.
 # hi-kn: 200 (L3, live first-audio p50 1727 -> 1377 ms, 20/20 finals identical; half of
 # the early finals are discarded on comma pauses, costing an extra STT stream each and
 # rarely a cancelled MT call).
+# max_utterance_ms (default 7000, not set below): an utterance that has run this long ends at
+# the next pause between words (L7), so a noisy room or a monologue is never held back.
 
 hi-kn:
   a: { lang: hi-IN, stt: sarvam-translate, mt_src: en-IN, tts: bulbul, voice_m: "bulbul:hi-male-1", voice_f: "bulbul:hi-female-1" }
@@ -26,7 +32,8 @@ hi-kn:
   eou_ms: 550
   backchannel_max_ms: 600
   barge_in_min_ms: 1200
-  duck_db: -14
+  duck_db: -20
+  duck_ms: 600
   spec_mt: false
   spec_after_ms: 200
   early_final_ms: 200
@@ -37,7 +44,8 @@ hi-kn-direct:
   eou_ms: 550
   backchannel_max_ms: 600
   barge_in_min_ms: 1200
-  duck_db: -14
+  duck_db: -20
+  duck_ms: 600
   spec_mt: false
   spec_after_ms: 200
 
@@ -47,7 +55,8 @@ hi-ta:
   eou_ms: 550
   backchannel_max_ms: 600
   barge_in_min_ms: 1200
-  duck_db: -14
+  duck_db: -20
+  duck_ms: 600
   spec_mt: false
   spec_after_ms: 200
 
@@ -62,7 +71,8 @@ mr-hi:
   eou_ms: 550
   backchannel_max_ms: 600
   barge_in_min_ms: 1200
-  duck_db: -14
+  duck_db: -20
+  duck_ms: 600
   spec_mt: false
   spec_after_ms: 200
   early_final_ms: 200
@@ -73,7 +83,8 @@ mr-hi-direct:
   eou_ms: 550
   backchannel_max_ms: 600
   barge_in_min_ms: 1200
-  duck_db: -14
+  duck_db: -20
+  duck_ms: 600
   spec_mt: false
   spec_after_ms: 200
 
@@ -87,7 +98,8 @@ mr-en:
   eou_ms: 550
   backchannel_max_ms: 600
   barge_in_min_ms: 1200
-  duck_db: -14
+  duck_db: -20
+  duck_ms: 600
   spec_mt: false
   spec_after_ms: 200
   early_final_ms: 200
@@ -105,7 +117,8 @@ gu-hi:
   eou_ms: 550
   backchannel_max_ms: 600
   barge_in_min_ms: 1200
-  duck_db: -14
+  duck_db: -20
+  duck_ms: 600
   spec_mt: false
   spec_after_ms: 200
   early_final_ms: 200
@@ -116,7 +129,8 @@ gu-hi-direct:
   eou_ms: 550
   backchannel_max_ms: 600
   barge_in_min_ms: 1200
-  duck_db: -14
+  duck_db: -20
+  duck_ms: 600
   spec_mt: false
   spec_after_ms: 200
 
@@ -126,7 +140,8 @@ gu-en:
   eou_ms: 550
   backchannel_max_ms: 600
   barge_in_min_ms: 1200
-  duck_db: -14
+  duck_db: -20
+  duck_ms: 600
   spec_mt: false
   spec_after_ms: 200
   early_final_ms: 200
@@ -138,6 +153,7 @@ fake-fake:
   eou_ms: 550
   backchannel_max_ms: 600
   barge_in_min_ms: 1200
-  duck_db: -14
+  duck_db: -20
+  duck_ms: 600
   spec_mt: false
   spec_after_ms: 200

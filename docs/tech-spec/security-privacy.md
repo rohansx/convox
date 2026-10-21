@@ -29,7 +29,7 @@ Played to each leg in its own language as soon as both legs have sent `start`, b
 | Hindi side | "aap hindi mein boliye, saamne wala kannada mein sunega. chhote vaakya boliye." |
 | Kannada side | "ನೀವು ಕನ್ನಡದಲ್ಲಿ ಮಾತನಾಡಿ, ಅವರು ಹಿಂದಿಯಲ್ಲಿ ಕೇಳುತ್ತಾರೆ." |
 
-As built (`session/prompts.py`, [L4](../plan/open-questions.md#answer-log)): one sentence of about 3.5 s per language, because the two-sentence line ran 7–9 s and held up the first translation. Hindi: "aap hindi mein chhote vaakya boliye, woh kannada mein sunenge." Kannada: the sentence above. Marathi and English lines exist for the Marathi pairs; the Marathi, Tamil and Kannada texts still need a native speaker's review (PQ5). The line goes through the floor controller and is marked, and no translation plays to a leg until its opening has finished.
+As built (`session/prompts.py`, [L4](../plan/open-questions.md#answer-log)): one sentence of about 3.5 s per language, because the two-sentence line ran 7–9 s and held up the first translation. Hindi: "aap hindi mein chhote vaakya boliye, woh kannada mein sunenge." Kannada: the sentence above. Marathi and English lines exist for the Marathi pairs; the Marathi, Tamil and Kannada texts still need a native speaker's review (PQ5). The line goes through the floor controller and is marked. Since L7 a translation for a leg still hearing its opening cuts it, and `/join` and loopback calls play a short line instead (the two language names and "speak", ~2 s, without the record sentence); PSTN calls keep the full disclosure (`PSTN_OPENING_LINE=full`). Counsel should confirm the disclosure may be cut short once the other party is already talking (G17).
 
 Gaps to close (**proposed**, TBD with counsel, see [open questions](../plan/open-questions.md)):
 
@@ -65,7 +65,7 @@ Proposed: the trust-review package lists every sub-processor, what data it recei
 |---|---|---|
 | Turn timestamps, flags, provider ids | kept (needed for latency metrics and audit) | kept |
 | `src_text`, `tgt_text` | nulled after latency metrics are computed | kept. Retention window TBD (proposed: 30 days, then purge job) |
-| Caller audio | never stored. Exists only in process memory during the call | S3 only with an explicit audio opt-in (see [data model](data-model.md#s3-recordings-opt-in)) |
+| Caller audio | never stored. Exists only in process memory during the call. Exception: dev and test calls with `CALL_RECORDING` on (default in `DUBHASH_ENV=dev` only) write local wavs for diagnosis (`store/recorder.py`); only with the callers' consent, never in prod by default | S3 only with an explicit audio opt-in (see [data model](data-model.md#s3-recordings-opt-in)) |
 | Phone numbers (`calls.a_number`, `b_number`) | **proposed:** store a salted hash for dedupe after the call ends. Keep the raw number only while the call is live | same |
 | Vendor-side retention | per vendor terms. TBD: confirm Sarvam/ElevenLabs/Deepgram data-retention and no-training settings | |
 

@@ -93,6 +93,42 @@ async def test_ticker_behind_schedule_still_yields():
     assert progressed == 5 and ticker.max_late_ms > 0
 
 
+async def test_ticker_room_mixes_each_mic_into_the_other_delayed_and_quieter():
+    """--room-db: two phones in one room; each mic also hears the other speaker."""
+    import asyncio
+
+    import numpy as np
+
+    class Rec:
+        def __init__(self, frames):
+            self.mic = list(frames)
+            self.sent = []
+
+        def take_mic(self):
+            return self.mic.pop(0) if self.mic else ll.SILENCE
+
+        async def tick(self, mic=None):
+            self.sent.append(mic)
+
+    loud = np.full(FRAME_BYTES // 2, 10000, dtype=np.int16).tobytes()
+    a, b = Rec([loud] * 3), Rec([])
+    ticker = ll.Ticker([a, b], room_db=-20.0, room_delay_ms=40)
+    task = asyncio.create_task(ticker.run())
+    await ticker.wait_ticks(6)
+    task.cancel()
+    vals = [int(np.frombuffer(f, dtype=np.int16)[0]) for f in b.sent[:6]]
+    assert vals == [0, 0, 1000, 1000, 1000, 0]  # 2 ticks late, 20 dB down
+    assert a.sent[:3] == [loud] * 3  # b's silence adds nothing
+
+
+async def test_room_cross_talk_makes_no_extra_turns(server):
+    utts = ll.fake_utts(ll.SCRIPT[:2])
+    opts = ll.Opts(opening="skip", pause_ms=300, quiet_ms=400, turn_timeout_s=6, room_db=-12.0)
+    result = await ll.run_call(server, utts, opts)
+    spoken = [t for t in result["turns"] if not t.get("backchannel")]
+    assert [t["side"] for t in spoken] == ["a", "b"], result["turns"]
+
+
 def test_stages_are_critical_path_when_early_final_finishes_before_eou():
     # early final: STT final and MT land inside the 550 ms EOU wait
     turn = dict(

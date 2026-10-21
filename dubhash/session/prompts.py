@@ -116,6 +116,41 @@ _LANGS: dict[str, _Lang] = {
 }
 
 
+# The SHORT opening (`opening_line: short`, the /join and loopback default): the two
+# language names and "speak", about 1.5-2 s of Bulbul speech instead of 3-9 s. A caller who
+# talked at once waited behind the opening for their first translation (L7). It never
+# carries the record sentence. (template, plain language names in this language)
+# TODO(PQ5): native review of every short line; we wrote them.
+_SHORT: dict[str, tuple[str, dict[str, str]]] = {
+    "hi": (
+        "{self} से {other}. बोलिए.",
+        {"hi": "हिंदी", "kn": "कन्नड़", "ta": "तमिल", "mr": "मराठी", "gu": "गुजराती",
+         "en": "अंग्रेज़ी"},
+    ),
+    "mr": (
+        "{self} ते {other}. बोला.",
+        {"mr": "मराठी", "hi": "हिंदी", "kn": "कन्नड", "ta": "तमिळ", "gu": "गुजराती",
+         "en": "इंग्रजी"},
+    ),
+    "gu": (
+        "{self} થી {other}. બોલો.",
+        {"gu": "ગુજરાતી", "hi": "હિન્દી", "en": "અંગ્રેજી", "mr": "મરાઠી", "kn": "કન્નડ",
+         "ta": "તમિલ"},
+    ),
+    "kn": (
+        "{self}, {other}. ಮಾತನಾಡಿ.",
+        {"kn": "ಕನ್ನಡ", "hi": "ಹಿಂದಿ", "ta": "ತಮಿಳು", "mr": "ಮರಾಠಿ", "gu": "ಗುಜರಾತಿ",
+         "en": "ಇಂಗ್ಲಿಷ್"},
+    ),
+    "ta": (
+        "{self}, {other}. பேசுங்கள்.",
+        {"ta": "தமிழ்", "hi": "இந்தி", "kn": "கன்னடம்", "mr": "மராத்தி", "gu": "குஜராத்தி",
+         "en": "ஆங்கிலம்"},
+    ),
+    "en": ("{self} to {other}. Go ahead.", _EN_NAMES),
+}  # fmt: skip
+
+
 def _base(lang: str) -> str:
     return lang.split("-", 1)[0].lower()
 
@@ -131,6 +166,18 @@ def opening_text(lang: str, other_lang: str, *, record: bool = False) -> str:
         self=spec.names.get(me, me), other=spec.names.get(them, _EN_NAMES.get(them, them))
     )
     return text + (spec.record if record else "")
+
+
+def short_opening_text(lang: str, other_lang: str) -> str:
+    """The short opening line ("Marathi to Hindi. Go ahead.", about 1.5-2 s) for a listener
+    speaking `lang` whose partner speaks `other_lang`. Unknown languages fall back to
+    English."""
+    me, them = _base(lang), _base(other_lang)
+    template, names = _SHORT.get(me, _SHORT["en"])
+    return template.format(
+        self=names.get(me, _EN_NAMES.get(me, me)),
+        other=names.get(them, _EN_NAMES.get(them, them)),
+    )
 
 
 def line_check_text(lang: str) -> str:

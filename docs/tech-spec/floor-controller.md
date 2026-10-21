@@ -88,7 +88,7 @@ Event sources:
 
 All events are serialised through the controller's single task, so handlers never run concurrently.
 
-Config values (per pair, `config/pairs.yaml`): `backchannel_max_ms: 600`, `barge_in_min_ms: 1200`, `duck_db: -14`. Fixed in the spec: 4 s force-play, 10 s line check.
+Config values (per pair, `config/pairs.yaml`): `backchannel_max_ms: 600`, `barge_in_min_ms: 1200`, `duck_db: -20`, `duck_ms: 600` (the ducked original plays on telephony calls only, [audio.md § mixer](audio.md#6-mixer)). Fixed in the spec: 4 s force-play, 10 s line check.
 
 ### 2.1 Interpretation where the spec is terse
 
@@ -133,6 +133,10 @@ Between 600 and 1200 ms the listener's speech neither interrupts nor counts as a
 |---|---|
 | **Both legs silent ≥ 4 s and queue non-empty** (nothing playing) | Force-play the head of the queue. This recovers from a held floor, e.g. a stuck `X_SPEAKING`. |
 | **Silence ≥ 10 s** | Play a soft **"aap line par hain?"** in both languages. The localised prompt text per language is TBD. |
+
+### Opening line (session prompt)
+
+The opening line is sent through the controller (`play_prompt`) and marked. A translation for a leg that is still hearing its opening does **not** wait for it (L7): when the usual rules start that playback, the opening is cut. No more prompt audio is sent, its mark is not sent (or no longer awaited), the playback clears the leg before its first frame so the transport drops what it still had queued, and a `prompt_cut` event is published. Playback to the other leg is never affected. Which opening a call gets (`short`, `full`, `off`) is a per-call setting ([configuration](configuration.md)).
 
 ### Rule 6: DTMF 1 replay, 0 bypass
 
@@ -256,9 +260,30 @@ Rider (A, Hindi) and customer (B, Kannada). Platform log at the end: 4 turns, p5
 
 ---
 
-## 7. Implementation notes
+## 7. Cross-talk and echo
 
-- The controller is the only writer to legs, so the mixer is driven from here. Each playback is earcon + TTS chunks, with the speaker's original ducked underneath ([audio.md § mixer](audio.md#6-mixer)), then `mark(tag)` after the last chunk. `tag` should identify the Translation (for example `f"{side}:{seq}"`) so a stale mark after a `clear()` is ignored.
+The controller trusts the speech events it gets. Two kinds of mic speech are not a person talking to dubhash, and the session (`session/crosstalk.py`, wired in `session/call_session.py`) filters them before they become speech events or turns.
+
+**Cross-talk (co-located phones only).** On the stage demo (/join) and loopback calls both phones are in one room, so B's mic also hears A speaking, a few metres away. Without a gate B's interpreter took A's Marathi for B's Hindi: junk turns that queued behind the real ones, played to A (the "double sound" of the 21 Oct stage test), and could barge in on A's own translation. `CallSession(co_located=True)` (set by `create_loopback_call`, so /join and loopback; off for PSTN, where each leg is its own phone line) turns the gate on. It keeps a short level history (RMS dBFS per 20 ms frame and the VAD's voiced flag) for both mics:
+
+| When | Rule | Effect |
+|---|---|---|
+| each voiced frame on a side with no open utterance | the other side has an open utterance (it started first), is voiced now, and its last 300 ms are at least **6 dB** louder than this side's last 100 ms | the frame goes to the endpointer as silence: no utterance, no STT stream (stage `frame`) |
+| speech start while the other side talks | the utterance is **suspect**: its speech start/end and discard are not reported to the floor (no floor grab, no barge-in timer) | cleared, and reported late, as soon as it is within 6 dB of the other mic over 5 matched frames, or voiced for 5 frames while the other mic is not |
+| STT `end()` (before the vendor's final is awaited) | the other side had an utterance that started first (300 ms slack for jitter between the phones), at least half of this utterance's voiced frames coincide with voiced frames there (±40 ms), and over those frames the other mic is at least 6 dB louder | empty final, so the interpreter discards the utterance; the vendor stream settles in the background so its socket goes back to the warm pool (stage `eou`) |
+| STT final with a language code | the language the vendor reports is the other side's (and not this side's) | discarded (reason `lang`). Sarvam is called with a fixed `language_code`, so this only fires if Sarvam reports a different one |
+
+Two people genuinely talking over each other are each near their own phone, so their levels are within a few dB at both mics and the normal floor rules apply (`tests/session/test_crosstalk_session.py` compares the turns with the gate on and off).
+
+**Echo (every call).** A leg playing a translation can hear it on its own mic: a phone's loudspeaker (`?duplex=1`; the phone page otherwise sends silence while it plays) or line echo on PSTN. While playback to a leg runs, and for 300 ms after its mark, a mic frame more than **10 dB** under the playback's level (power mean of the translation's rendered frames, the earcon left out) goes to the endpointer as silence. Echo then never starts speech or the barge-in timer. Line echo after a network echo canceller is normally 30 dB or more down and browser echo cancellation removes most loudspeaker echo, while a caller talking over a translation (Bulbul plays at about −18 dBFS) is rarely more than 10 dB under it, so a real barge-in still works (`test_quiet_speech_over_the_playback_still_barges_in`: 8 dB under). `ECHO_MARGIN_DB` needs a check on real PSTN levels.
+
+**Measured (live, 21 Oct, `tools/live_loopback.py --join --a-lang mr-IN --b-lang hi-IN --room-db -12`: real Sarvam/Bulbul, two scripted phones whose mics each carry the other's voice 12 dB down and 40 ms late, 7 script lines).** Before the gate: **14 server turns** for 7 lines (every line also became a junk turn on the other side), queue wait p95 **3925 ms**, first-audio p50/p95 1317 / **5256 ms**. With it: **7 turns**, queue p95 1 ms, first-audio p50/p95 1409 / 1557 ms. At `--room-db -6` (the margin itself) still 7 of 7; with no room, 7 of 7 and p50/p95 1444 / 2044 ms, so genuine turns are kept. The junk turns queueing ahead of the real ones are one cause of the "5 seconds" heard on the stage test.
+
+Every drop is published as an event of kind `crosstalk` with `{side, reason: level | lang | echo, stage: frame | eou}` (one per run of gated frames), and logged as `crosstalk.drop`.
+
+## 8. Implementation notes
+
+- The controller is the only writer to legs, so the mixer is driven from here. Each playback is earcon + TTS chunks, with the speaker's original ducked under the first 600 ms on telephony calls ([audio.md § mixer](audio.md#6-mixer)), then `mark(tag)` after the last chunk. `tag` should identify the Translation (for example `f"{side}:{seq}"`) so a stale mark after a `clear()` is ignored.
 - Because a Translation's audio is a live async iterator from TTS, "playing" starts at the first chunk. An underrun while TTS is still synthesising must not be treated as "finished". Only the transport mark ends playback.
 - Every state change, queue depth change, DTMF and barge-in is emitted on the controller's event stream, which feeds console SSE ([console.md](console.md)) and the turn log.
 - Timers (barge-in, 4 s, 10 s) use the call's monotonic clock, not wall time, so `FakeLeg` runs faster than real time in tests.

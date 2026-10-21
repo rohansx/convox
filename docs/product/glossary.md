@@ -38,7 +38,7 @@ This page defines the shared vocabulary used across the dubhash docs, code and s
 
 | Term | Definition |
 |---|---|
-| **Ducking** | Mixing the speaker's original voice under the translation at reduced volume (`duck_db: -14`) during the TTS window. The listener knows the other person really spoke, so the delay reads as interpretation, not failure. Cut #4 on the cut list (fallback is plain earcon only). |
+| **Ducking** | Mixing the speaker's original voice under the translation at reduced volume (`duck_db: -20`) for the first `duck_ms` (600 ms) of the TTS, on telephony calls only (co-located /join and loopback calls play no original). The listener knows the other person really spoke, so the delay reads as interpretation, not failure. Cut #4 on the cut list (fallback is plain earcon only). |
 | **Earcon** | A short (120 ms) soft tone, so the listener never hears more than about 700 ms of silence without a signal. Whether it plays at EOU or when the translation starts is TBD ([audio](../tech-spec/audio.md#unresolved-mixer-details)). It is not a real latency cut, but it lowers perceived latency more than any real cut. |
 | **Frame** | The internal audio unit: 20 ms of PCM16 mono at 16 kHz = **640 bytes**. Stamped by `FrameClock` with leg-relative ms. |
 | **`FrameClock`** | Stamps each inbound frame with leg-relative milliseconds. Used to measure jitter and gaps. |

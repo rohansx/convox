@@ -110,6 +110,8 @@ Frame format, `FrameClock` and gap handling are covered in [audio.md](audio.md).
 | Measure | Speech/silence segments per leg. |
 | Owner | P2 |
 
+As built, the VAD is wrapped in `NoiseFloorGate` (`interp/vad.py`, L7): a frame counts as speech only if its RMS is also more than 6 dB above an adaptive noise floor (the level of the room, learned from non-speech frames, reset to the quiet 10th percentile when nearly every frame of the last 5 s is louder, digital silence ignored). Babble, a TV or phone AGC no longer keep Silero above 0.5 between sentences.
+
 The VAD emits `speech_start(side)` and `speech_end(side)` to the floor controller. The controller uses these for the barge-in and backchannel timers, not only for EOU. Windowing details are in [audio.md § Silero windowing](audio.md#4-silero-vad-windowing).
 
 ### 3.3 endpoint (EOU)
@@ -118,6 +120,7 @@ The VAD emits `speech_start(side)` and `speech_end(side)` to the floor controlle
 |---|---|
 | Implementation | EOU fires when **silence ≥ `eou_ms`** (per pair, start at **550 ms**) **AND** the utterance is **≥ 300 ms** long. If Sarvam's stream emits an end-of-utterance or final event earlier, take that instead. |
 | Backchannel | Utterances **< 600 ms with ≤ 2 words** are tagged `backchannel` and **not translated**. |
+| Max length | After `max_utterance_ms` (7000) an utterance ends at the next low-energy dip (at the latest 1 s later), `forced=True`; speech carrying on starts the next one (L7). |
 | Measure | `t_eou` (ms after the last speech frame). |
 | Owner | P2 |
 

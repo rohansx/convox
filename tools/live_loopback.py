@@ -30,8 +30,24 @@ after the earcon (heard_ms). It joins the server's turn log (GET /v1/calls/{id}/
 the stage breakdown. Writes out/live/<call>_a.wav, <call>_b.wav (what each leg heard) and
 out/live/<call>.json, and prints a table with p50/p95.
 
+--room-db DB simulates two phones in one room (the /join stage setup): each tab's mic also
+carries the other tab's mic DB lower and --room-delay-ms later, so cross-talk turns show
+up as extra server turns ("server turns" line).
+
+    STT_IMPL=real MT_IMPL=real TTS_IMPL=real uv run python tools/live_loopback.py \
+        --a-lang mr-IN --b-lang hi-IN --room-db -12
+
 Timing is the client's 20 ms tick clock: no browser jitter buffer or device latency is
 modelled, so heard_ms is a lower bound on a real tab's (leg-transports.md section 5).
+
+Real-room variants (L7):
+    --noise-snr 15     pink room noise on both mics, 15 dB under the speech, during the
+                       lines and in every pause (the mic is never digitally silent)
+    --speak-at-start   the first line starts as soon as the opening line starts arriving,
+                       like a caller who talks at once (the opening is not waited out)
+    --opening-line short|full|off
+                       the call's opening (default: the server's; /join and loopback calls
+                       get "short" since L7, "full" with the record sentence before)
 """
 
 from __future__ import annotations
@@ -69,6 +85,7 @@ import websockets  # noqa: E402
 from dubhash.audio.earcon import EARCON  # noqa: E402
 from dubhash.audio.frames import FRAME_BYTES, FRAME_MS  # noqa: E402
 from dubhash.audio.wav import read_wav, write_wav  # noqa: E402
+from tests.audio_fixtures import mix, pink_noise  # noqa: E402
 
 OUT = ROOT / "out" / "live"
 SILENCE = b"\x00" * FRAME_BYTES
@@ -195,9 +212,15 @@ class Opts:
     pause_ms: int = 800  # silence after a translation finished before the next line
     quiet_ms: int = 700  # listener silence that counts as "translation finished"
     turn_timeout_s: float = 12.0
-    opening: str = "play"  # "play": wait it out like a person; "skip": drop it once received
+    # "play": wait it out like a person; "skip": drop it once received; "talk": start the
+    # first line as soon as it starts arriving (speak immediately at call start)
+    opening: str = "play"
     opening_timeout_s: float = 20.0
     join: bool = False  # start from the stage host page (POST /join), QR-token sockets
+    room_db: float | None = None  # co-located phones: each mic hears the other this much lower
+    room_delay_ms: int = 40
+    noise_snr: float | None = None  # pink room noise this many dB under the speech
+    opening_line: str | None = None  # short | full | off (default: the server's)
 
 
 # --- audio helpers ----------------------------------------------------------------------
@@ -230,6 +253,19 @@ def last_voiced(frames: list[bytes]) -> int:
     return -1
 
 
+def translation_marks(tab: Tab, since: int) -> list[str]:
+    """Marks received from index `since` on that end a translation (not the opening)."""
+    return [n for n in tab.mark_names[since:] if n != "opening"]
+
+
+def room_noise(utts: list[Utt], snr_db: float, ms: int = 60000, seed: int = 0) -> list[bytes]:
+    """Frames of pink noise snr_db under the speech level of the utterances' voiced frames
+    (looped by the Tab for as long as the call runs)."""
+    voiced_pcm = b"".join(f for u in utts for f in frames_of(u.pcm) if voiced(f))
+    level = dbfs(voiced_pcm) - snr_db
+    return frames_of(pink_noise(ms, level, seed=seed))
+
+
 def pct(xs: list[int], p: float) -> int | None:
     """Nearest-rank percentile."""
     if not xs:
@@ -253,11 +289,14 @@ class Tab:
         self.played = 0  # bytes of received audio played (or dropped by clear)
         self.marks: deque[tuple[int, str]] = deque()  # (received offset, name)
         self.acks: list[str] = []
+        self.mark_names: list[str] = []  # every mark received, in order
         self.rec = bytearray()  # what was played: exactly FRAME_BYTES per tick
         self.mic: deque[bytes] = deque()
         self.t_last_rx: float | None = None  # monotonic time of the last audio received
         self.clears = 0
         self.closed = False
+        self.noise: list[bytes] = []  # room noise mixed into every mic frame (looped)
+        self._noise_i = 0
 
     async def reader(self) -> None:
         try:
@@ -271,6 +310,7 @@ class Tab:
                     m = json.loads(msg)
                     if m.get("type") == "mark":
                         self.marks.append((self.received, str(m.get("name"))))
+                        self.mark_names.append(str(m.get("name")))
                     elif m.get("type") == "clear":
                         self.clears += 1
                         self.played += len(self.buf)
@@ -281,7 +321,11 @@ class Tab:
         finally:
             self.closed = True
 
-    async def tick(self) -> None:
+    def take_mic(self) -> bytes:
+        return self.mic.popleft() if self.mic else SILENCE
+
+    async def tick(self, mic: bytes | None = None) -> None:
+        """Play one frame, ack due marks, send one mic frame (`mic`, else the queue's)."""
         out = bytes(self.buf[:FRAME_BYTES])
         del self.buf[:FRAME_BYTES]
         self.played += len(out)
@@ -290,7 +334,11 @@ class Tab:
             name = self.marks.popleft()[1]
             self.acks.append(name)
             await self._send(json.dumps({"type": "mark", "name": name}))
-        await self._send(self.mic.popleft() if self.mic else SILENCE)
+        frame = mic if mic is not None else self.take_mic()
+        if self.noise:
+            frame = mix(frame, self.noise[self._noise_i % len(self.noise)])
+            self._noise_i += 1
+        await self._send(frame)
 
     async def _send(self, data: bytes | str) -> None:
         if self.closed:
@@ -311,11 +359,26 @@ class Tab:
         )
 
 
-class Ticker:
-    """Drives both tabs on one absolute 20 ms schedule. tick n covers [n*20, (n+1)*20) ms."""
+def mix_db(base: bytes, overlay: bytes, db: float) -> bytes:
+    b = np.frombuffer(base, dtype=np.int16).astype(np.float64)
+    o = np.frombuffer(overlay, dtype=np.int16).astype(np.float64)
+    out = b + np.rint(o * 10 ** (db / 20))
+    return np.clip(out, -32768, 32767).astype(np.int16).tobytes()
 
-    def __init__(self, tabs: list[Tab]) -> None:
+
+class Ticker:
+    """Drives both tabs on one absolute 20 ms schedule. tick n covers [n*20, (n+1)*20) ms.
+
+    room_db (two tabs): each tab's mic frame also carries the other tab's, room_db lower
+    and room_delay_ms later (co-located phones)."""
+
+    def __init__(
+        self, tabs: list[Any], *, room_db: float | None = None, room_delay_ms: int = 40
+    ) -> None:
         self.tabs = tabs
+        self.room_db = room_db
+        delay = max(0, room_delay_ms // FRAME_MS)
+        self._room: list[deque[bytes]] = [deque([SILENCE] * delay) for _ in tabs]
         self.n = 0
         self.t0 = time.monotonic()
         self.max_late_ms = 0.0
@@ -331,8 +394,17 @@ class Ticker:
             else:  # behind: catch up, but always yield so the readers keep running
                 self.max_late_ms = max(self.max_late_ms, -delay * 1000)
                 await asyncio.sleep(0)
-            for tab in self.tabs:
-                await tab.tick()
+            if self.room_db is None:
+                for tab in self.tabs:
+                    await tab.tick()
+            else:
+                mics = [tab.take_mic() for tab in self.tabs]
+                for line, m in zip(self._room, mics, strict=True):
+                    line.append(m)
+                heard = [line.popleft() for line in self._room]
+                for i, tab in enumerate(self.tabs):
+                    far = heard[1 - i] if len(self.tabs) == 2 else SILENCE
+                    await tab.tick(mix_db(mics[i], far, self.room_db))
             self.n += 1
             async with self._cond:
                 self._cond.notify_all()
@@ -378,20 +450,36 @@ class TurnRow:
 def measure(row: TurnRow, rec: bytes) -> None:
     """Latencies are from the end of speech; the window opens when the line starts, so a
     translation that starts before the speaker finished shows up as a negative number."""
-    frames = frames_of(rec[row.n_start * FRAME_BYTES : row.n_next * FRAME_BYTES])
+    win = rec[row.n_start * FRAME_BYTES : row.n_next * FRAME_BYTES]
+    frames = frames_of(win)
     hits = [k for k, f in enumerate(frames) if voiced(f)]
     if not hits:
         return
-    k = hits[0]
     end = row.n_voice_end - row.n_start
-    row.heard_audio_ms = len(hits) * FRAME_MS
-    row.heard_span_ms = (hits[-1] - k + 1) * FRAME_MS
-    speech_from = k
-    if frames[k] == EARCON[:FRAME_BYTES]:
+    # The translation starts at its earcon, wherever that is: an opening line may still be
+    # playing when the window opens (--speak-at-start), and after an opening whose last
+    # chunk was not a whole frame the earcon is off the 20 ms grid.
+    o = find_earcon(win)
+    if o is not None:
+        k = -(-o // FRAME_BYTES)  # the first whole frame of earcon
+        speech_from = -(-(o + len(EARCON)) // FRAME_BYTES)
+        hits = [h for h in hits if h >= o // FRAME_BYTES]
         row.earcon_ms = (k - end) * FRAME_MS
-        speech_from = k + EARCON_FRAMES
+    else:
+        k = speech_from = hits[0]
+    row.heard_audio_ms = len(hits) * FRAME_MS
+    row.heard_span_ms = (hits[-1] - min(k, hits[-1]) + 1) * FRAME_MS
     after = [h for h in hits if h >= speech_from]
     row.heard_ms = (after[0] - end) * FRAME_MS if after else None
+
+
+def find_earcon(pcm: bytes) -> int | None:
+    """Byte offset (sample aligned) of the earcon's first frame in pcm, or None."""
+    needle = EARCON[:FRAME_BYTES]
+    i = pcm.find(needle)
+    while i >= 0 and i % 2:
+        i = pcm.find(needle, i + 1)
+    return None if i < 0 else i
 
 
 STAGES = (
@@ -477,6 +565,8 @@ async def _start_join(
     if opts.pair:
         raise SystemExit("--join picks the pair by languages (find_pair); drop --pair")
     form = {"a_lang": opts.a_lang, "b_lang": opts.b_lang, "record": "true"}
+    if opts.opening_line:
+        form["opening_line"] = opts.opening_line
     r = await http.post("/join", data=form, headers=srv.headers_console)
     if r.status_code != 303:
         raise RuntimeError(f"POST /join: {r.status_code} {r.text[:200]}")
@@ -497,6 +587,8 @@ async def run_call(srv: Server, utts: list[Utt], opts: Opts) -> dict[str, Any]:
     body: dict[str, Any] = {"a_lang": opts.a_lang, "b_lang": opts.b_lang, "record": True}
     if opts.pair:
         body["pair"] = opts.pair
+    if opts.opening_line:
+        body["opening_line"] = opts.opening_line
     async with httpx.AsyncClient(base_url=srv.base, timeout=30) as http:
         if opts.join:
             call_id, sockets = await _start_join(srv, http, opts)
@@ -513,10 +605,15 @@ async def run_call(srv: Server, utts: list[Utt], opts: Opts) -> dict[str, Any]:
             websockets.connect(sockets["b"], max_size=None) as wb,
         ):
             tabs = {"a": Tab("a", wa), "b": Tab("b", wb)}
+            if opts.noise_snr is not None:
+                for i, t in enumerate(tabs.values()):
+                    t.noise = room_noise(utts, opts.noise_snr, seed=11 + i)
             for side, ws in (("a", wa), ("b", wb)):
                 lang = opts.a_lang if side == "a" else opts.b_lang
                 await ws.send(json.dumps({"type": "hello", "side": side, "lang": lang}))
-            ticker = Ticker(list(tabs.values()))
+            ticker = Ticker(
+                list(tabs.values()), room_db=opts.room_db, room_delay_ms=opts.room_delay_ms
+            )
             tasks = [asyncio.create_task(t.reader()) for t in tabs.values()]
             tasks.append(asyncio.create_task(ticker.run()))
             try:
@@ -578,6 +675,14 @@ async def _opening(tabs: dict[str, Tab], ticker: Ticker, opts: Opts) -> dict[str
     t0 = ticker.n
     got = await _until(lambda: all(t.received for t in tabs.values()), opts.opening_timeout_s)
     first_rx = {s: t.received for s, t in tabs.items()}
+    if opts.opening == "talk":  # speak at once: the opening keeps playing under the line
+        return {
+            "received": got,
+            "bytes": {s: t.received for s, t in tabs.items()},
+            "first_chunk_bytes": first_rx,
+            "ms": {s: t.received * 1000 // 32000 for s, t in tabs.items()},
+            "wait_ms": (ticker.n - t0) * FRAME_MS,
+        }
     if opts.opening == "skip":
         await _until(
             lambda: all(
@@ -611,7 +716,7 @@ async def _script(
         spk, lst = tabs[u.side], tabs[_other(u.side)]
         fr = frames_of(u.pcm)
         lv = last_voiced(fr)
-        rx0, clears0 = lst.received, lst.clears
+        rx0, clears0, m0 = lst.received, lst.clears, len(lst.mark_names)
         n_start = ticker.n + len(spk.mic)
         spk.mic.extend(fr)
         row = TurnRow(i, u.side, u.text, n_start=n_start, n_voice_end=n_start + lv + 1)
@@ -620,6 +725,8 @@ async def _script(
         rows.append(row)
         await _until(lambda s=spk: not s.mic, len(fr) * FRAME_MS / 1000 + 5)
         await _until(lambda t=lst, n=rx0: t.received > n, opts.turn_timeout_s)
+        # the translation's own mark (an opening still arriving is not the translation)
+        await _until(lambda t=lst, k=m0: bool(translation_marks(t, k)), opts.turn_timeout_s)
         await _until(lambda t=lst: t.quiet_for(opts.quiet_ms), opts.turn_timeout_s)
         row.clears = lst.clears - clears0
         await ticker.wait_ticks(opts.pause_ms // FRAME_MS)
@@ -730,7 +837,14 @@ def serve(settings_kw: dict[str, Any], env_file: Path | None) -> Iterator[Server
         **settings_kw,
     )
     app = create_app(settings)
-    config = uvicorn.Config(app, host="127.0.0.1", port=port, log_level="warning", lifespan="on")
+    config = uvicorn.Config(
+        app,
+        host="127.0.0.1",
+        port=port,
+        log_level="warning",
+        lifespan="on",
+        ws_per_message_deflate=False,  # as make dev and the Dockerfile (L7)
+    )
     srv = uvicorn.Server(config)
     th = threading.Thread(target=srv.run, daemon=True)
     th.start()
@@ -809,7 +923,11 @@ def fake_utts(lines: tuple[Line, ...], ms: int = 1200) -> list[Utt]:
             for ln in lines]  # fmt: skip
 
 
-def main(argv: list[str] | None = None) -> int:
+def script_lines(sc: Script, skip: int = 0, n: int | None = None) -> tuple[Line, ...]:
+    return sc.lines[skip:][:n]
+
+
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawTextHelpFormatter)
     p.add_argument("--pair", default=None, help="pairs.yaml key (default: by languages)")
     p.add_argument(
@@ -821,21 +939,48 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--a-lang", default=None, help="default: the script's")
     p.add_argument("--b-lang", default=None, help="default: the script's")
     p.add_argument("--n", type=int, default=None, help="script lines to play (default: all)")
+    p.add_argument("--skip", type=int, default=0, help="start at this script line (0-based)")
     p.add_argument("--join", action="store_true", help="stage path: POST /join, token sockets")
     p.add_argument("--fake", action="store_true", help="fake providers, fake utterances")
     p.add_argument("--out", type=Path, default=OUT)
     p.add_argument("--pause-ms", type=int, default=800)
     p.add_argument("--log", default="WARNING", help="dubhash log level to stderr")
-    a = p.parse_args(argv)
+    p.add_argument(
+        "--room-db",
+        type=float,
+        default=None,
+        help="co-located phones: each mic also hears the other this many dB lower (e.g. -12)",
+    )
+    p.add_argument("--room-delay-ms", type=int, default=40)
+    p.add_argument("--noise-snr", type=float, default=None, help="pink room noise, dB SNR")
+    p.add_argument("--speak-at-start", action="store_true", help="first line during the opening")
+    p.add_argument("--opening-line", choices=["short", "full", "off"], default=None)
+    return p.parse_args(argv)
+
+
+def main(argv: list[str] | None = None) -> int:
+    a = parse_args(argv)
     handler = logging.StreamHandler()
     handler.setFormatter(logging.Formatter("%(relativeCreated)8.0f %(levelname)s %(message)s"))
+    handler.setLevel(a.log.upper())  # the app's file log (logs/dubhash.log) keeps INFO
     logging.getLogger("dubhash").addHandler(handler)
-    logging.getLogger("dubhash").setLevel(a.log.upper())
+    logging.getLogger("dubhash").setLevel(min(logging.INFO, handler.level))
     name = a.script or script_for(a.a_lang, a.b_lang) or DEFAULT_SCRIPT
     sc = SCRIPTS[name]
     a_lang, b_lang = a.a_lang or sc.a_lang, a.b_lang or sc.b_lang
-    lines = sc.lines[: a.n]
-    opts = Opts(pair=a.pair, a_lang=a_lang, b_lang=b_lang, pause_ms=a.pause_ms, join=a.join)
+    lines = script_lines(sc, a.skip, a.n)
+    opts = Opts(
+        pair=a.pair,
+        a_lang=a_lang,
+        b_lang=b_lang,
+        pause_ms=a.pause_ms,
+        join=a.join,
+        room_db=a.room_db,
+        room_delay_ms=a.room_delay_ms,
+        noise_snr=a.noise_snr,
+        opening="talk" if a.speak_at_start else "play",
+        opening_line=a.opening_line,
+    )
     if a.fake:
         utts = fake_utts(lines)
         kw: dict[str, Any] = {"dubhash_env": "test"}
@@ -854,6 +999,10 @@ def main(argv: list[str] | None = None) -> int:
     print(f"call {result['call_id']}  pair {result['pair']}  script {name}  {result['status']}")
     print(table(result, summary))
     print(f"opening: {result['opening']}  max tick late: {result['max_tick_late_ms']} ms")
+    spoken = [t for t in result["turns"] if not t.get("backchannel")]
+    by_side = {s: sum(t["side"] == s for t in spoken) for s in ("a", "b")}
+    lines_by = {s: sum(r.side == s for r in result["rows"]) for s in ("a", "b")}
+    print(f"server turns {by_side} for script lines {lines_by}  room_db {a.room_db}")
     print(f"wrote {write_outputs(result, summary, a.out)}")
     return 0
 
