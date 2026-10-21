@@ -51,3 +51,15 @@ def test_one_entry_per_language_pair():
         langs = frozenset((p.a.lang, p.b.lang))
         assert langs not in seen, f"{key} duplicates {seen[langs]}"
         seen[langs] = key
+
+
+def test_mr_hi_default_pivots_both_sides_through_english():
+    """L4: live first-audio heard p50 ~2.5 s direct -> ~1.56 s pivot + early final."""
+    p = find_pair(PAIRS, "mr-IN", "hi-IN")
+    assert p is not None and p.key == "mr-hi"
+    for side in (p.a, p.b):
+        assert side.stt == "sarvam-translate" and side.mt_lang == "en-IN"
+    assert p.early_final_ms == 200
+    d = PAIRS["mr-hi-direct"]
+    assert (d.a.stt, d.b.stt) == ("sarvam", "sarvam") and d.early_final_ms == 0
+    assert (d.a.mt_lang, d.b.mt_lang) == ("mr-IN", "hi-IN")

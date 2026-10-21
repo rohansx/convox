@@ -14,7 +14,7 @@ def test_early_final_defaults_to_off():
     assert pairs["fake-fake"].early_final_ms == 0
 
 
-MEASURED_ON = {"hi-kn", "mr-en"}  # pairs whose early final was measured live (L3, L4)
+MEASURED_ON = {"hi-kn", "mr-hi", "mr-en"}  # early final measured live (L3, L4)
 
 
 def test_early_final_on_only_where_measured():
