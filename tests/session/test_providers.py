@@ -8,6 +8,8 @@ from dubhash.interp import vad as vad_mod
 from dubhash.interp.mt_cache import CachedMT
 from dubhash.providers.errors import ProviderUnavailable
 from dubhash.providers.fakes import EnergyVAD, FakeMT, FakeSTT, FakeTTS
+from dubhash.providers.sarvam_tts import BulbulTTS
+from dubhash.providers.tts_cache import CachedTTS
 from dubhash.session import providers as providers_mod
 from dubhash.session.providers import Providers, build_providers
 
@@ -25,14 +27,14 @@ def test_fake_pair_maps_to_fakes_per_side_and_cached_mt():
     assert isinstance(p, Providers)
     assert set(p.stt) == {"a", "b"} and set(p.tts) == {"a", "b"}
     assert all(isinstance(s, FakeSTT) for s in p.stt.values())
-    assert all(isinstance(t, FakeTTS) for t in p.tts.values())
+    assert all(isinstance(t, CachedTTS) and isinstance(t.inner, FakeTTS) for t in p.tts.values())
     assert p.stt["a"] is not p.stt["b"]  # one stream source per side
     assert isinstance(p.mt, CachedMT) and isinstance(p.mt.inner, FakeMT)
 
 
 def test_real_pair_with_fake_impl_settings_gets_fakes():
     p = build_providers(PAIRS["hi-kn"], settings())
-    assert isinstance(p.stt["a"], FakeSTT) and isinstance(p.tts["b"], FakeTTS)
+    assert isinstance(p.stt["a"], FakeSTT) and isinstance(p.tts["b"].inner, FakeTTS)
     assert isinstance(p.mt.inner, FakeMT)
 
 
@@ -74,3 +76,32 @@ def test_vad_falls_back_to_energy_when_silero_cannot_load(monkeypatch):
     monkeypatch.setattr(providers_mod, "SileroVAD", broken)
     p = build_providers(PAIRS["fake-fake"], settings())
     assert isinstance(p.vad_factory().inner, EnergyVAD)  # behind the noise-floor gate
+
+
+def test_every_tts_goes_through_the_audio_cache_and_fakes_get_their_own(tmp_path):
+    s = settings(tts_cache_dir=tmp_path)
+    p1 = build_providers(PAIRS["fake-fake"], s)
+    p2 = build_providers(PAIRS["fake-fake"], s)
+    # fakes: one store per call (tests never see another test's audio), no disk
+    assert p1.tts["a"].store is p1.tts["b"].store
+    assert p1.tts["a"].store is not p2.tts["a"].store
+    assert p1.tts["a"].store.disk_dir is None
+    assert p1.mt.shared is not p2.mt.shared
+
+
+def test_real_tts_shares_one_process_store_with_disk(tmp_path):
+    s = settings(sarvam_api_key="k", tts_impl="real", mt_impl="real", tts_cache_dir=tmp_path)
+    p1 = build_providers(PAIRS["mr-hi"], s)
+    p2 = build_providers(PAIRS["mr-hi"], s)
+    assert isinstance(p1.tts["a"].inner, BulbulTTS)
+    assert p1.tts["a"].inner is not p2.tts["a"].inner  # sockets stay per call
+    assert p1.tts["a"].store is p2.tts["b"].store  # the audio is shared
+    assert p1.tts["a"].store.disk_dir == tmp_path
+    assert p1.mt.shared is p2.mt.shared  # phrase-pack translations too
+    assert p1.prefill_rps == s.phrase_prefill_rps > 0
+
+
+def test_tts_cache_dir_empty_means_memory_only():
+    s = Settings(_env_file=None, dubhash_env="dev", tts_cache_dir="")
+    assert s.tts_cache_dir is None
+    assert settings().tts_cache_mb == 64

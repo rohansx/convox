@@ -6,6 +6,10 @@
   A->B synthesises with `tts["b"]`; the opening line and line check to leg X use `tts[X]`.
 - MT by settings ("sarvam" unless MT_IMPL=fake or the pair is all-fake), wrapped in the
   per-call CachedMT.
+- Every TTS wrapped in CachedTTS (L10). Real vendors share one process-wide audio store
+  (settings.tts_cache_mb, phrase-pack audio also on disk in tts_cache_dir) and CachedMT
+  shares the process's phrase-pack translations (mt_cache.SHARED_PHRASES); a call whose
+  TTS or MT is a fake gets stores of its own, so tests never see each other's audio.
 - VAD: SileroVAD when the model loads, else EnergyVAD, behind NoiseFloorGate (speech must
   also be 6 dB over the room's noise floor, L7); one fresh instance per call to
   `vad_factory()` (Silero keeps recurrent state per leg, the gate the leg's floor).
@@ -25,10 +29,11 @@ from typing import Any
 from dubhash.config.pairs import PairConfig
 from dubhash.config.settings import Settings
 from dubhash.interp.contracts import MT, STT, TTS, VAD
-from dubhash.interp.mt_cache import CachedMT
+from dubhash.interp.mt_cache import SHARED_PHRASES, CachedMT
 from dubhash.interp.vad import NoiseFloorGate, SileroVAD
-from dubhash.providers.fakes import EnergyVAD
+from dubhash.providers.fakes import EnergyVAD, FakeMT, FakeTTS
 from dubhash.providers.registry import build_mt, build_stt, build_tts
+from dubhash.providers.tts_cache import CachedTTS, TTSAudioCache
 from dubhash.types import Side
 
 log = logging.getLogger(__name__)
@@ -42,6 +47,7 @@ class Providers:
     mt: MT
     tts: dict[Side, TTS]  # keyed by the side whose language it speaks (the TARGET side)
     vad_factory: Callable[[], VAD]
+    prefill_rps: float = 0.0  # phrase-pack prefill rate (0 = no prefill, session/prefill.py)
 
 
 def _all_fake(pair: PairConfig) -> bool:
@@ -92,11 +98,30 @@ async def prewarm(providers: Providers, pair: PairConfig) -> None:
     )
 
 
+_STORES: dict[tuple[int, str | None], TTSAudioCache] = {}
+
+
+def tts_store(settings: Settings) -> TTSAudioCache:
+    """The process-wide audio store for these settings (one per size and directory)."""
+    d = settings.tts_cache_dir
+    key = (settings.tts_cache_mb, None if d is None else str(d))
+    store = _STORES.get(key)
+    if store is None:
+        store = _STORES[key] = TTSAudioCache(settings.tts_cache_mb * 1024 * 1024, d)
+    return store
+
+
 def build_providers(pair: PairConfig, settings: Settings) -> Providers:
     mt_name = "fake" if _all_fake(pair) else "sarvam"
+    mt = build_mt(mt_name, settings)
+    tts = {s: build_tts(pair.side(s).tts, settings) for s in SIDES}
+    fake_tts = any(isinstance(t, FakeTTS) for t in tts.values())
+    store = TTSAudioCache(settings.tts_cache_mb * 1024 * 1024) if fake_tts else tts_store(settings)
+    shared = {} if isinstance(mt, FakeMT) else SHARED_PHRASES
     return Providers(
         stt={s: build_stt(pair.side(s).stt, settings) for s in SIDES},
-        mt=CachedMT(build_mt(mt_name, settings)),
-        tts={s: build_tts(pair.side(s).tts, settings) for s in SIDES},
+        mt=CachedMT(mt, shared=shared),
+        tts={s: CachedTTS(t, store) for s, t in tts.items()},
         vad_factory=_vad_factory(),
+        prefill_rps=settings.phrase_prefill_rps if settings.phrase_prefill else 0.0,
     )

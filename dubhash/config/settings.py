@@ -71,6 +71,18 @@ class Settings(BaseSettings):
     call_recording_dir: Path = Path("out/calls")
     log_file: Path | None = Path("logs/dubhash.log")  # JSON lines, rotating; empty = off
 
+    # Phrase / audio cache (L10). Every call's TTS goes through a byte-bounded LRU shared by
+    # the process; phrase-pack audio is also written to tts_cache_dir (empty = memory only).
+    tts_cache_mb: int = 64
+    tts_cache_dir: Path | None = Path("out/tts_cache")
+    # Prefill the call's phrase pack (config/phrases/<vertical>.yaml) into the MT and TTS
+    # caches in the background at call creation, at most this many vendor requests/s.
+    phrase_prefill: bool = True
+    phrase_prefill_rps: float = 4.0
+    # While a translation plays to a leg, open that leg's STT socket and the TTS socket
+    # for its reply's voice, so the likely next turn pays no connect (L10).
+    next_turn_prewarm: bool = True
+
     @field_validator("exotel_api_host")
     @classmethod
     def _exotel_host(cls, v: str) -> str:
@@ -88,7 +100,7 @@ class Settings(BaseSettings):
                 return base / v
         return v
 
-    @field_validator("log_file", mode="before")
+    @field_validator("log_file", "tts_cache_dir", mode="before")
     @classmethod
     def _empty_log_file(cls, v: object) -> object:
         return None if v == "" else v
