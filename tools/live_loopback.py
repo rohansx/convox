@@ -221,6 +221,9 @@ class Opts:
     room_delay_ms: int = 40
     noise_snr: float | None = None  # pink room noise this many dB under the speech
     opening_line: str | None = None  # short | full | off (default: the server's)
+    auto: str = ""  # sides created with lang "auto" ("a", "b", "ab"); the script keeps its own
+    hint: str | None = None  # lang_hint for the auto sides
+    menu_digit: str | None = None  # an auto side's tab presses this after hearing the menu
 
 
 # --- audio helpers ----------------------------------------------------------------------
@@ -297,6 +300,8 @@ class Tab:
         self.closed = False
         self.noise: list[bytes] = []  # room noise mixed into every mic frame (looped)
         self._noise_i = 0
+        self.menu_digit: str | None = None  # pressed once the keypad menu has played
+        self.digits: list[str] = []
 
     async def reader(self) -> None:
         try:
@@ -334,6 +339,9 @@ class Tab:
             name = self.marks.popleft()[1]
             self.acks.append(name)
             await self._send(json.dumps({"type": "mark", "name": name}))
+            if name == "menu" and self.menu_digit and not self.digits:
+                self.digits.append(self.menu_digit)  # the caller heard the menu: press it
+                await self._send(json.dumps({"type": "dtmf", "digit": self.menu_digit}))
         frame = mic if mic is not None else self.take_mic()
         if self.noise:
             frame = mix(frame, self.noise[self._noise_i % len(self.noise)])
@@ -564,7 +572,7 @@ async def _start_join(
     call id and each side's socket URL carrying that side's join token."""
     if opts.pair:
         raise SystemExit("--join picks the pair by languages (find_pair); drop --pair")
-    form = {"a_lang": opts.a_lang, "b_lang": opts.b_lang, "record": "true"}
+    form = {**call_langs(opts), "record": "true"}
     if opts.opening_line:
         form["opening_line"] = opts.opening_line
     r = await http.post("/join", data=form, headers=srv.headers_console)
@@ -583,8 +591,30 @@ async def _start_join(
     return call_id, sockets
 
 
+def call_langs(opts: Opts) -> dict[str, str]:
+    """a_lang/b_lang for the call: the script's, or "auto" (+ hint) for --auto sides."""
+    out = {"a_lang": opts.a_lang, "b_lang": opts.b_lang}
+    for side in opts.auto:
+        out[f"{side}_lang"] = "auto"
+        if opts.hint:
+            out[f"{side}_lang_hint"] = opts.hint
+    return out
+
+
+def lang_line(result: dict[str, Any]) -> str:
+    """What the call resolved each side to (GET /v1/calls legs[].detected)."""
+    legs = result.get("legs") or {}
+    cells = []
+    for s in ("a", "b"):
+        leg = legs.get(s) or {}
+        det = leg.get("detected") or {}
+        cells.append(f"{s}={det.get('lang') or leg.get('lang')} ({det.get('state', 'fixed')})")
+    digits = {s: d for s, d in (result.get("menu_digits") or {}).items() if d}
+    return "lang " + " ".join(cells) + (f"  menu digits {digits}" if digits else "")
+
+
 async def run_call(srv: Server, utts: list[Utt], opts: Opts) -> dict[str, Any]:
-    body: dict[str, Any] = {"a_lang": opts.a_lang, "b_lang": opts.b_lang, "record": True}
+    body: dict[str, Any] = {**call_langs(opts), "record": True}
     if opts.pair:
         body["pair"] = opts.pair
     if opts.opening_line:
@@ -605,6 +635,8 @@ async def run_call(srv: Server, utts: list[Utt], opts: Opts) -> dict[str, Any]:
             websockets.connect(sockets["b"], max_size=None) as wb,
         ):
             tabs = {"a": Tab("a", wa), "b": Tab("b", wb)}
+            for side in opts.auto:
+                tabs[side].menu_digit = opts.menu_digit
             if opts.noise_snr is not None:
                 for i, t in enumerate(tabs.values()):
                     t.noise = room_noise(utts, opts.noise_snr, seed=11 + i)
@@ -662,6 +694,8 @@ async def run_call(srv: Server, utts: list[Utt], opts: Opts) -> dict[str, Any]:
         "max_tick_late_ms": round(ticker.max_late_ms),
         "acks": {s: len(t.acks) for s, t in tabs.items()},
         "clears": {s: t.clears for s, t in tabs.items()},
+        "legs": call.get("legs") or {},
+        "menu_digits": {s: t.digits for s, t in tabs.items() if s in opts.auto},
         "rec": {s: bytes(t.rec) for s, t in tabs.items()},
     }
 
@@ -955,6 +989,15 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p.add_argument("--noise-snr", type=float, default=None, help="pink room noise, dB SNR")
     p.add_argument("--speak-at-start", action="store_true", help="first line during the opening")
     p.add_argument("--opening-line", choices=["short", "full", "off"], default=None)
+    p.add_argument(
+        "--auto",
+        default="",
+        choices=["", "a", "b", "ab"],
+        help='create these sides with lang "auto" (the script still speaks its languages)',
+    )
+    p.add_argument("--hint", default=None, help="lang_hint for the --auto sides")
+    p.add_argument("--menu-digit", default=None, help="an auto tab presses it after the menu")
+    p.add_argument("--lang-min-speech-ms", type=int, default=None, help="server LANG_MIN_SPEECH_MS")
     return p.parse_args(argv)
 
 
@@ -980,6 +1023,9 @@ def main(argv: list[str] | None = None) -> int:
         noise_snr=a.noise_snr,
         opening="talk" if a.speak_at_start else "play",
         opening_line=a.opening_line,
+        auto=a.auto,
+        hint=a.hint,
+        menu_digit=a.menu_digit,
     )
     if a.fake:
         utts = fake_utts(lines)
@@ -990,6 +1036,8 @@ def main(argv: list[str] | None = None) -> int:
         utts = asyncio.run(synth_script(lines, {"a": a_lang, "b": b_lang}, a.out, sc.voices))
         kw = {}
         env_file = ROOT / ".env"
+        if a.lang_min_speech_ms is not None:
+            kw["lang_min_speech_ms"] = a.lang_min_speech_ms
         impl = {k: os.environ.get(k) for k in ("STT_IMPL", "MT_IMPL", "TTS_IMPL")}
         if any(v != "real" for v in impl.values()):
             print(f"warning: provider switches are {impl}; set all three to real", file=sys.stderr)
@@ -1003,6 +1051,8 @@ def main(argv: list[str] | None = None) -> int:
     by_side = {s: sum(t["side"] == s for t in spoken) for s in ("a", "b")}
     lines_by = {s: sum(r.side == s for r in result["rows"]) for s in ("a", "b")}
     print(f"server turns {by_side} for script lines {lines_by}  room_db {a.room_db}")
+    if a.auto:
+        print(lang_line(result))
     print(f"wrote {write_outputs(result, summary, a.out)}")
     return 0
 

@@ -42,6 +42,35 @@ def server():
         yield srv
 
 
+async def test_auto_side_hears_the_menu_and_presses_a_digit():
+    """--auto a --menu-digit 5: A's call side is lang "auto"; FakeLID is never sure, so
+    after two long lines A's tab hears the keypad menu and presses 5 (Tamil)."""
+    # f0 differs per line: Silero stops accepting a fake voice it has heard (fake_utts)
+    utts = [
+        ll.Utt("a", ll.fake_speech(1400, 120.0), "x"),
+        ll.Utt("a", ll.fake_speech(1400, 175.0), "y"),
+        ll.Utt("b", ll.fake_speech(1200, 220.0), "z"),
+    ]
+    with ll.serve({"dubhash_env": "test", "lang_min_speech_ms": 600}, None) as srv:
+        opts = ll.Opts(
+            a_lang="hi-IN",
+            b_lang="kn-IN",
+            opening="skip",
+            pause_ms=1500,
+            quiet_ms=400,
+            turn_timeout_s=6,
+            auto="a",
+            hint="mr-IN",
+            menu_digit="5",
+        )
+        result = await ll.run_call(srv, utts, opts)
+    assert result["pair"] == "auto-kn"
+    assert result["menu_digits"] == {"a": ["5"]}
+    assert result["legs"]["a"]["lang"] == "auto"
+    assert result["legs"]["a"]["detected"]["lang"] == "ta-IN"
+    assert "lang a=ta-IN (CONFIRMED)" in ll.lang_line(result)
+
+
 async def test_core_loop_with_fakes(server, tmp_path):
     utts = ll.fake_utts(ll.SCRIPT[:2])
     opts = ll.Opts(opening="skip", pause_ms=300, quiet_ms=400, turn_timeout_s=6)
