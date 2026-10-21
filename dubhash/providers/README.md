@@ -238,3 +238,110 @@ and only the final is English, so en→kn cannot start before the final arrives.
 MT would have to run hi→kn on Hindi partials (about 1.36 s), and that result is thrown
 away whenever B's English final is used. The two speed-ups do not stack unless both
 sockets (transcribe and translate) are opened per utterance, which doubles STT cost.
+
+## Language identification (L8)
+
+For `lang: "auto"`: which of `SUPPORTED_LANGS` (hi, mr, gu, kn, ta, en) a caller speaks.
+Contract in `dubhash/interp/langid.py` (`LangGuess`, `LanguageID`, `pick`); engine
+`SarvamLID` (`sarvam_lid.py`); `FakeLID` in `fakes.py`; `build_lid(name, settings)`.
+
+**What Sarvam offers** (docs read 21 Oct, then checked live):
+- **Realtime STT socket**, [WS reference](https://docs.sarvam.ai/api-reference/speech-to-text/transcribe/realtime/ws),
+  [guide](https://docs.sarvam.ai/api/api-guides-tutorials/speech-to-text/realtime-streaming):
+  `language_code=auto` (not `unknown`) is accepted by `saaras:v3-realtime` and `saaras:v4`
+  ("adaptive language detection"). Finals carry `language` (BCP-47) and
+  `language_confidence` (0..1), "present only when `language_code=auto`". Partials carry
+  `language` too. **Live:** works with `mode=translate` as well, where the final is
+  English and `language` is the *source* language. With a fixed `language_code` the final
+  carries **no** language at all (checked live), so `detected_lang` is always None today
+  and the cross-talk `lang` gate (floor-controller.md) never fires on Sarvam.
+  `SarvamSTT`/`SarvamSTTTranslate.open("auto")` now set `detected_lang` (or-IN → od-IN)
+  and `detected_confidence` from the final. Partials' `language` is ignored: it said
+  `en-IN` while Marathi was being spoken.
+- **REST STT**, [reference](https://docs.sarvam.ai/api-reference/speech-to-text/transcribe):
+  `POST /speech-to-text` (multipart `file`, `model`, `language_code`) with
+  `language_code=unknown` auto-detects and returns `language_code` +
+  `language_probability`. The docs tie `unknown` to `saaras:v3`; live it also works on
+  `saaras:v4` and `saarika:v2.5`. Limits ([rate limits](https://docs.sarvam.ai/api/getting-started/ratelimits),
+  [STT FAQ](https://docs.sarvam.ai/api/speech-to-text/faq)): 30 s of audio per request,
+  60 req/min on the starter tier (we hit 429s at about 1 req/s and retried). Live latency
+  on a warm client: **p50 about 195 ms, p95 about 350 ms** for 1-3 s of audio.
+- **Text LID**, [reference](https://docs.sarvam.ai/api-reference/text/identify-language),
+  [guide](https://docs.sarvam.ai/api/api-guides-tutorials/text-processing/language-detection):
+  `POST /text-lid` `{"input"}` (max 1000 chars) → `language_code`, `script_code`; 11
+  languages; **no confidence**. Live: **p50 604 ms, p95 681 ms**.
+- No dedicated speech-LID endpoint exists; the REST STT with `unknown` is it.
+
+**The engine.** `SarvamLID.identify(pcm, candidates)` sends the first `window_ms` (2000)
+of the utterance as a WAV to `saaras:v3` and `saaras:v4` **in parallel** and applies
+`decide()`: if both name the same candidate, that language (an agreed `en-IN` also needs
+v3 ≥ 0.9); otherwise v3 alone if it clears 0.7 (`en-IN`: 0.95); else `lang=None`. Errors
+answer None (`lid.error` logged), never raise. `text_check=True` adds a text-LID veto
+(off: it cost 600 ms and caught nothing the thresholds did not).
+
+**Measurement** (`uv run python tools/langid_probe.py`, 21 Oct). Corpus: 10 short, hard,
+parallel sentences per language (OTP, lift, flat, parcel, plumber, "cash on delivery";
+hi/mr/gu near-identical: "लिफ्ट बंद है / लिफ्ट बंद आहे / લિફ્ટ બંધ છે"), Bulbul v3 shubh
+(male) and ishita (female), leading silence trimmed to 100 ms: 120 clips, 0.76-2.8 s,
+p50 1.6 s, 85 under 2 s. "Long": consecutive pairs joined (60 clips, 2.2-5.2 s, p50 3.4 s).
+Channels: `clean` 16 kHz and `pstn` (16k → 8k → G.711 mu-law → 8k → 16k, `audio/codec.py`
++ `audio/resample.py`). Candidates = all six. Synthetic voices: real callers will differ.
+
+Top-1 accuracy (raw answer, no threshold), short / long clips:
+
+| engine | channel | first 1.0 s | first 2.0 s | whole utterance |
+|---|---|---|---|---|
+| REST `saaras:v3` | pstn | 78% / 80% | 92.5% / 95% | 91% / 100% |
+| REST `saaras:v3` | clean | 78% / 80% | 90% / 93% | 89% / 100% |
+| REST `saaras:v4` | pstn | 80% / 82% | 95% / 97% | 96% / 100% |
+| REST `saaras:v4` | clean | 79% / 83% | 97% / 97% | 97% / 100% |
+| realtime `auto` (transcribe) | pstn | | | **17%** / 70% |
+| realtime `auto` (translate) | pstn | | | **17%** / 70% |
+| text-lid on the v3 transcript | pstn | | | 92% / 95% |
+
+Decisions (accepted = a language returned; wrong = accepted and not the truth):
+
+| rule | pstn 2.0 s short / long | clean 2.0 s short / long | wrong |
+|---|---|---|---|
+| v3 ≥ 0.7 (en 0.95) | 64% overall | 79% overall | 0 / 360 |
+| **v3+v4 vote (default)** | **87% / 88%** | **89% / 92%** | **0 / 360** |
+| v3+v4 vote, whole utterance | 86% / 95% | 88% / 98% | 0 / 360 |
+| v3+v4 vote, first 1.0 s | 82% / 75% | 91% / 88% | **11 + 24 wrong** |
+
+Latency of the vote (the slower of two parallel calls): p50 **230 ms**, p95 **430-760 ms**.
+
+Confusion, REST `saaras:v3`, pstn, short clips (rows = truth; "other" = a language
+outside the six: te, pa, ml, bn):
+
+| truth | 1.0 s: hi mr gu kn ta en other | 2.0 s: hi mr gu kn ta en other | whole: hi mr gu kn ta en other |
+|---|---|---|---|
+| hi | 14 0 0 0 0 4 2 | 20 0 0 0 0 0 0 | 20 0 0 0 0 0 0 |
+| mr | 0 15 0 0 0 4 1 | 0 17 0 0 0 2 1 | 0 18 0 0 0 1 1 |
+| gu | 1 0 17 0 0 2 0 | 0 0 20 0 0 0 0 | 0 0 18 0 0 2 0 |
+| kn | 0 0 0 16 0 4 0 | 0 0 0 19 0 1 0 | 0 0 0 18 0 2 0 |
+| ta | 0 1 1 1 13 3 1 | 0 0 0 0 16 4 0 | 0 0 0 0 16 4 0 |
+| en | 1 0 0 0 0 19 0 | 1 0 0 0 0 19 0 | 1 0 0 0 0 19 0 |
+
+**mr↔hi and gu↔hi.** REST: **0** mr→hi and **0** hi→mr at every window, both channels,
+both models (30 clips each). gu→hi **1** at 1.0 s only ("હા, બરાબર છે" cut to "हाँ,
+बराबर", v3 0.66 pstn / 0.94 clean); 0 at 2.0 s and whole. The realtime socket did
+confuse them on long clips: mr→hi 3/10 (at confidence 1.0, and it then transcribed the
+Marathi as Hindi: "लिफ्ट बंद है"), gu→mr 2/10.
+
+**What goes wrong.** Almost every error is **en-IN** on an utterance that starts with, or
+is only, English loanwords: "Flat number 302", "Cash on delivery ₹400", "OTP vandcha"
+(transcripts come back in Latin script). On 8 kHz audio v3 scores these 0.38-0.65; on
+wideband up to 0.93, hence the en-IN thresholds. At 1.0 s confident wrong answers
+(0.99) are common, so no threshold makes 1.0 s safe. v4 is the better top-1 model but
+says 0.99 when wrong (kn→mr 0.987, ta→en 0.993), so it only votes. The realtime `auto`
+socket answers en-IN for every short clip (120/120, often *translating* to English in
+transcribe mode: "The lift is closed."), and is wrong at confidence 1.0 on long ones.
+The same audio on a fresh or a warm socket gave the same answers (it is not sticky).
+
+**Recommendation.** Decide from the first **2.0 s** of speech with the default vote
+(0.7 / en 0.95 / agreed-en 0.9). If it returns None (about 1 in 8 utterances), try again
+on the next utterance (on PSTN the whole long utterance was accepted 95% of the time,
+never wrong); after two inconclusive tries, use the keypad menu. Never decide on 1.0 s.
+The STT final's `detected_lang` alone does **not** suffice: realtime `auto` is wrong on
+short turns and confidently wrong on long ones, and it also degrades the transcript; a
+fixed-language socket reports nothing. Open the side's STT in its decided language.
