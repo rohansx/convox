@@ -94,11 +94,30 @@ async def prewarm(providers: Providers, pair: PairConfig) -> None:
     )
 
 
-def build_providers(pair: PairConfig, settings: Settings) -> Providers:
+def build_lid(settings: Settings) -> LanguageID | None:
+    """FakeLID with fake STT settings (or DUBHASH_ENV=test), else the Sarvam engine
+    (dubhash/providers/sarvam_lid.py). Without the engine there is no LID: an auto side
+    then resolves from STT finals' language codes, else the keypad menu."""
+    if settings.stt_impl == "fake" or settings.forces_fakes:
+        from dubhash.providers.fakes import FakeLID
+
+        return FakeLID()
+    try:
+        from dubhash.providers.sarvam_lid import SarvamLID  # type: ignore[import-not-found]
+    except ImportError:
+        log.warning("lid.unavailable", extra={"provider": "sarvam", "stage": "lid"})
+        return None
+    lid: LanguageID = SarvamLID(settings.sarvam_api_key)
+    return lid
+
+
+def build_providers(pair: PairConfig, settings: Settings, *, lid: bool = False) -> Providers:
+    """lid: the call has lang "auto" sides, so it needs a LanguageID."""
     mt_name = "fake" if _all_fake(pair) else "sarvam"
     return Providers(
         stt={s: build_stt(pair.side(s).stt, settings) for s in SIDES},
         mt=CachedMT(build_mt(mt_name, settings)),
         tts={s: build_tts(pair.side(s).tts, settings) for s in SIDES},
         vad_factory=_vad_factory(),
+        lid=build_lid(settings) if lid else None,
     )
