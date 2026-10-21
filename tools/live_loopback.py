@@ -388,6 +388,12 @@ async def run_call(srv: Server, utts: list[Utt], opts: Opts) -> dict[str, Any]:
 
     for r_ in rows:
         measure(r_, bytes(tabs[_other(r_.side)].rec))
+    first = rows[0].n_start if rows else ticker.n
+    for s, t in tabs.items():  # when each caller first hears the opening line
+        hits = [
+            k for k, f in enumerate(frames_of(bytes(t.rec[: first * FRAME_BYTES]))) if voiced(f)
+        ]
+        opening.setdefault("onset_ms", {})[s] = hits[0] * FRAME_MS if hits else None
     offset = (session_t0 - ticker.t0) * 1000 if session_t0 is not None else None
     if offset is not None:
         join_server(rows, turns, offset)
