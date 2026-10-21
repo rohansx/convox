@@ -24,6 +24,7 @@ from dubhash.config.settings import Settings, get_settings
 from dubhash.events import EventBus
 from dubhash.store.db import init_db, make_engine, make_sessionmaker, ping
 from dubhash.store.writer import TurnWriter
+from dubhash.ward import routes as ward_routes
 
 log = logging.getLogger(__name__)
 
@@ -96,6 +97,7 @@ def create_app(
     app.include_router(loopback.http)
     app.include_router(loopback.router)
     app.add_exception_handler(ApiError, api_error_handler)
+    app.include_router(ward_routes.router)
     app.mount("/static/console", StaticFiles(directory=console.STATIC_DIR), name="console-static")
     if LEGS_STATIC_DIR.is_dir():
         app.mount("/static/legs", StaticFiles(directory=LEGS_STATIC_DIR), name="legs-static")
