@@ -16,11 +16,19 @@ is never affected.
 
 Chunked utterances (L9, Translation.final_chunk): a chunk of A's ongoing utterance plays
 to B under the usual rule (floor IDLE or A's), while A is still speaking. Once one of its
-chunks has started, A is the floor's "holder" until its final chunk starts (or the rest
-is discarded, B barges in, or the 4 s rescue fires): when a playback ends with nothing of
-A's queued the state is A_SPEAKING, not IDLE, and only A's next chunk may start, so B's
-translation never lands in the middle of A's utterance. Each chunk is its own playback
-(mark, barge-in, clip), so the invariants hold per chunk.
+chunks has started, A is the floor's "holder" until its utterance's last delivery starts:
+when a playback ends with nothing of A's queued the state is A_SPEAKING, not IDLE, and
+only A's next chunk may start, so B's translation never lands in the middle of A's
+utterance. Each chunk is its own playback (mark, barge-in, clip), so the invariants hold
+per chunk.
+
+The hold never outlives its utterance. The last delivery is the final chunk, or, when the
+rest of the utterance is discarded (on_utterance_discarded), the last chunk of A's still
+queued (it is marked so; with none queued the hold ends at once). The interpreter delivers
+an utterance's chunks and its discard in order, so whatever of A's is queued at the
+discard belongs to an utterance that has ended. B's barge-in and bypass end it too.
+Defensive: with A silent, nothing of A's playing or queued, and no chunk of A's for
+hold_timeout_ms, the hold is released ("hold_released" event); the 4 s rescue stays.
 """
 
 from __future__ import annotations
@@ -84,6 +92,7 @@ class FloorController:
         backchannel_max_ms: int = 600,
         barge_in_min_ms: int = 1200,
         force_play_silence_ms: int = 4000,
+        hold_timeout_ms: int = 1500,
         line_check_silence_ms: int = 10000,
         escape_dtmf: str = "0",
         replay_dtmf: str = "1",
@@ -108,6 +117,7 @@ class FloorController:
         self.backchannel_max_ms = backchannel_max_ms
         self.barge_in_min_ms = barge_in_min_ms
         self.force_play_silence_ms = force_play_silence_ms
+        self.hold_timeout_ms = hold_timeout_ms
         self.line_check_silence_ms = line_check_silence_ms
         self.escape_dtmf = escape_dtmf
         self.replay_dtmf = replay_dtmf
@@ -142,6 +152,9 @@ class FloorController:
         # chunked utterances (L9): the side whose utterance has started playing a chunk
         # and not yet its final chunk. It keeps the floor: only its chunks start until then
         self._holder: Side | None = None
+        self._hold_t = now  # last sign of the holder: its chunk queued, a playback, speech
+        # id() of queued chunks that are their utterance's last delivery (rest discarded)
+        self._last_chunk: set[int] = set()
 
     # --- public view ---------------------------------------------------------------------
 
@@ -292,6 +305,8 @@ class FloorController:
                 return
             self._speaking.add(side)
             self._activity()
+            if side == self._holder:
+                self._hold_t = self._clock.now_ms()
             if self._state == "IDLE":
                 self._set_state(_speaking(side))
             elif self._pb is not None and side == self._pb.listener:
@@ -303,13 +318,22 @@ class FloorController:
             if self._bypass:
                 return
             self._activity()
+            if side == self._holder:
+                self._hold_t = self._clock.now_ms()
             if self._pb is not None and side == self._pb.listener:
                 self._barge_since = None  # under barge_in_min_ms: never interrupts
 
     async def on_utterance_discarded(self, side: Side) -> None:
         """§2.1 rule 2: the floor holder's utterance produced no translation."""
         async with self._lock:
-            if self._holder == side:  # the rest of a chunked utterance: nothing more comes
+            # the rest of a chunked utterance: nothing more of it comes. Its last chunk
+            # still queued (if any) ends the hold when it starts; with none, it ends now
+            mine = (t for t in reversed(self._queue) if t.side == side)
+            last = next((t for t in mine if id(t) not in self._internal), None)
+            if last is not None:
+                if not last.final_chunk:
+                    self._last_chunk.add(id(last))
+            elif self._holder == side:
                 self._holder = None
             if self._bypass or self._state != _speaking(side):
                 return
@@ -386,6 +410,15 @@ class FloorController:
                 await self._barge_in(pb.listener)
             if self._pb is not None or self._speaking:
                 return
+            holder = self._holder
+            if (
+                holder is not None
+                and self.hold_timeout_ms > 0
+                and now - self._hold_t >= self.hold_timeout_ms
+                and not any(t.side == holder for t in self._queue)
+            ):  # defensive: the holder is silent and no chunk of its has come
+                self._release_hold(holder, "timeout", now - self._hold_t)
+                return
             silent = now - self._last_speech >= self.force_play_silence_ms
             if silent and self._holder is not None:  # its final chunk never came
                 self._holder = None
@@ -403,9 +436,20 @@ class FloorController:
 
     # --- internals (call with the lock held) ---------------------------------------------
 
+    def _release_hold(self, side: Side, reason: str, idle_ms: int) -> None:
+        self._holder = None
+        log.warning(
+            "floor.hold_released", extra={"side": side, "reason": reason, "idle_ms": idle_ms}
+        )
+        self._publish("hold_released", {"side": side, "reason": reason, "idle_ms": idle_ms})
+        if not self._drain() and self._state == _speaking(side) and side not in self._speaking:
+            self._set_state("IDLE")
+
     def _accept(self, tr: Translation) -> None:
         """§2.1 rule 1: play now if the floor is free or the source's, else enqueue.
         Either way it goes through the queue, so arrival order holds."""
+        if tr.side == self._holder:
+            self._hold_t = self._clock.now_ms()
         self._queue.append(tr)
         if self._state in ("IDLE", _speaking(tr.side)):
             self._drain()
@@ -442,6 +486,7 @@ class FloorController:
             self._stop_line_check(s)
         self._bypass = True
         self._holder = None
+        self._last_chunk.clear()
         self._prompts.clear()
         self._uncut.clear()
         self._speaking.clear()
@@ -484,7 +529,7 @@ class FloorController:
             self._last_heard[pb.listener] = (pb.tr, bytes(pb.audio))
         self._pb = None
         self._barge_since = None
-        self._quiet_since = self._clock.now_ms()
+        self._quiet_since = self._hold_t = self._clock.now_ms()
         self._line_checked = False
 
     async def _barge_in(self, side: Side) -> None:
@@ -539,10 +584,12 @@ class FloorController:
             if tr is None:
                 return False
             self._queue.remove(tr)
+        last = id(tr) in self._last_chunk  # its utterance's last delivery (rest discarded)
+        self._last_chunk.discard(id(tr))
         if id(tr) in self._internal:  # a DTMF replay is no part of an utterance
             pass
-        elif not tr.final_chunk:
-            self._holder = tr.side
+        elif not tr.final_chunk and not last:
+            self._holder, self._hold_t = tr.side, self._clock.now_ms()
         elif self._holder == tr.side:
             self._holder = None
         pb = _Playback(tr, other(tr.side))

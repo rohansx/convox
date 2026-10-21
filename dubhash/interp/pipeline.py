@@ -248,6 +248,7 @@ class Interpreter:
         self.early_restarts = 0  # early finals discarded because speech resumed
         self.early_used = 0  # delivered translations that came from an early final
         self.chunks_committed = 0  # chunks delivered before their utterance's EOU (L9)
+        self.chunks_failed = 0  # committed chunks lost to MT/TTS errors (after one retry)
         self._bg: set[asyncio.Task[Any]] = set()
         self._utterances = 0
         # silence before the STT stream is ended inside an utterance: early_final_ms, or
@@ -408,6 +409,7 @@ class Interpreter:
         tr: Translation | None = None
         commit: asyncio.Task[bool] | None = None  # chunking: does the early final pass?
         mark = _EarlyFinal(0)
+        ending: asyncio.Task[str] | None = None  # the early final's STT end()
         early_audio = b""
         early_stage = stage
         chunk, chunk_start = 0, job.t_speech_start
@@ -446,7 +448,10 @@ class Interpreter:
                             ok = await asyncio.shield(commit)
                         commit = None
                         if ok:  # chunking: deliver it, go on without a replay
-                            self._deliver_chunk(job, early, chunk, chunk_start, mark, early_audio)
+                            assert ending is not None
+                            self._deliver_chunk(
+                                job, early, ending, chunk, chunk_start, mark, early_audio
+                            )
                             self.chunks_committed += 1
                             chunk, chunk_start = chunk + 1, item.t
                             job.chunk_t0 = item.t
@@ -569,13 +574,17 @@ class Interpreter:
         self,
         job: _Job,
         early: asyncio.Task[_Ready],
+        ending: asyncio.Task[str],
         chunk: int,
         t_start: int,
         mark: _EarlyFinal,
         audio: bytes,
     ) -> None:
         """Hand a committed chunk to the sink once it is ready, in order: after the previous
-        utterance and this utterance's earlier chunks (job.chain), before what follows."""
+        utterance and this utterance's earlier chunks (job.chain), before what follows.
+        Its STT final passed the chunk guards, so its speech is part of no other chunk: an
+        MT/TTS error is retried once on that final, never dropped silently (it is logged
+        as chunk.dropped if the retry fails too)."""
         prev, done = job.chain, asyncio.Event()
         job.chain = done
 
@@ -587,17 +596,8 @@ class Interpreter:
                 except _Discarded:
                     pass
                 except Exception as e:
-                    log.warning(
-                        "provider.error",
-                        extra={
-                            "call_id": self.call_id,
-                            "side": self.side,
-                            "provider": self.mt.name,
-                            "stage": "chunk",
-                            "error": repr(e),
-                            "reconnecting": False,
-                        },
-                    )
+                    self._log_chunk_error(e, "chunk")
+                    ready = await self._retry_chunk(ending, audio, job, chunk)
                 if prev is not None:
                     await prev.wait()
                 if ready is None:
@@ -636,6 +636,45 @@ class Interpreter:
                 done.set()
 
         self._keep(asyncio.create_task(deliver(), name=f"interp-chunk-{self.side}"))
+
+    async def _retry_chunk(
+        self, ending: asyncio.Task[str], audio: bytes, job: _Job, chunk: int
+    ) -> _Ready | None:
+        """A committed chunk's MT/TTS failed: try once more on its STT final."""
+        try:
+            final = (await asyncio.shield(ending)).strip()
+            stage = _Stage("mt", self.mt.name)
+            return await self._finish(
+                final, False, audio, job, stage, self.clock.now_ms(), speculate=False
+            )
+        except asyncio.CancelledError:
+            raise
+        except Exception as e:
+            self._log_chunk_error(e, "chunk_retry")
+        self.chunks_failed += 1
+        log.warning(
+            "chunk.dropped",
+            extra={
+                "call_id": self.call_id,
+                "side": self.side,
+                "utterance_id": job.utterance_id,
+                "chunk": chunk,
+            },
+        )
+        return None
+
+    def _log_chunk_error(self, e: BaseException, stage: str) -> None:
+        log.warning(
+            "provider.error",
+            extra={
+                "call_id": self.call_id,
+                "side": self.side,
+                "provider": self.mt.name,
+                "stage": stage,
+                "error": repr(e),
+                "reconnecting": False,
+            },
+        )
 
     def _log_final(self, latency_ms: int) -> None:
         log.info(
@@ -679,7 +718,15 @@ class Interpreter:
         return await self._finish(final, short, audio, job, stage, t_stt_final)
 
     async def _finish(
-        self, final: str, short: bool, audio: bytes, job: _Job, stage: _Stage, t_stt_final: int
+        self,
+        final: str,
+        short: bool,
+        audio: bytes,
+        job: _Job,
+        stage: _Stage,
+        t_stt_final: int,
+        *,
+        speculate: bool = True,
     ) -> _Ready:
         """STT final -> MT -> TTS first chunk. Raises _Discarded for empty/backchannel."""
         words = len(final.split())
@@ -701,7 +748,8 @@ class Interpreter:
             stage.name, stage.provider = "mt", self.mt.name
             if (has := getattr(self.mt, "has", None)) is not None:
                 extra["mt_cache_hit"] = int(has(text, src_lang, self.tgt.lang))
-            spec = await job.spec.take(final) if job.spec else SpecOutcome(None, False)
+            take = job.spec is not None and speculate
+            spec = await job.spec.take(final) if take and job.spec else SpecOutcome(None, False)
             tgt_text = spec.text if spec.text is not None else await self._translate(text)
             if self.readback is not None:
                 fixed = self.readback(final, tgt_text)

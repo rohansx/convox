@@ -565,6 +565,7 @@ class CallSession:
             self.clock,
             backchannel_max_ms=pair.backchannel_max_ms,
             barge_in_min_ms=pair.barge_in_min_ms,
+            hold_timeout_ms=max(pair.chunk_pause_ms * 4, 1500),
             escape_dtmf=escape_dtmf,
             render=self._render,
             events=bus,
