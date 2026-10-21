@@ -21,8 +21,11 @@ from dataclasses import dataclass
 import numpy as np
 
 from dubhash.audio.earcon import EARCON
-from dubhash.audio.frames import FRAME_BYTES, Reframer
+from dubhash.audio.frames import FRAME_BYTES, Reframer, ms_to_bytes
 
+# Bulbul starts every clip with 100-320 ms of digital silence (live, 21 Oct): heard after
+# the earcon as a gap. Dropping it brings the voice forward by that much.
+TRIM_LEAD_MS = 400
 _I16_MIN = -32768
 _I16_MAX = 32767
 
@@ -56,6 +59,15 @@ def passthrough_gain(frame: bytes, db: float = 0.0) -> bytes:
     return _saturate(np.rint(x).astype(np.int32))[0]
 
 
+def _trim_zeros(chunk: bytes, limit: int) -> tuple[bytes, int]:
+    """Drop leading all-zero samples, at most `limit` bytes. Returns (rest, limit left)."""
+    n = len(chunk) // 2 * 2
+    nz = np.flatnonzero(np.frombuffer(chunk[:n], dtype=np.int16))
+    lead = int(nz[0]) * 2 if nz.size else n
+    cut = min(lead, limit // 2 * 2)
+    return chunk[cut:], limit - cut
+
+
 @dataclass(slots=True)
 class RenderStats:
     frames: int = 0  # frames yielded, earcon included
@@ -69,11 +81,13 @@ async def render_playback(
     duck_db: float = -14.0,
     earcon: bytes | None = EARCON,
     stats: RenderStats | None = None,
+    trim_lead_ms: int = TRIM_LEAD_MS,
 ) -> AsyncIterator[bytes]:
     """Yield 640-byte frames: earcon, then TTS reframed, with source_audio mixed underneath at
     duck_db from the first TTS sample until either runs out. Ends when the TTS ends; the last
     partial frame is zero-padded (source is not mixed into the padding). Streams: each frame
-    is yielded as soon as the TTS bytes for it arrive."""
+    is yielded as soon as the TTS bytes for it arrive. Up to trim_lead_ms of leading
+    all-zero TTS samples are dropped (the source then aligns to the first kept sample)."""
     st = stats if stats is not None else RenderStats()
     if earcon:
         framer = Reframer()
@@ -96,7 +110,13 @@ async def render_playback(
         return out
 
     framer = Reframer()
+    trim_left = ms_to_bytes(trim_lead_ms)  # leading zero bytes we may still drop
     async for chunk in tts:
+        if trim_left:
+            chunk, trim_left = _trim_zeros(chunk, trim_left)
+            if not chunk:
+                continue
+            trim_left = 0  # first kept sample: never trim again
         for f in framer.push(chunk):
             out = _duck(f)
             st.frames += 1
