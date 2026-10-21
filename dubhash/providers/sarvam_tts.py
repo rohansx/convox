@@ -23,7 +23,7 @@ from websockets.protocol import State
 
 from dubhash.audio.frames import SAMPLE_RATE
 from dubhash.audio.resample import Resampler
-from dubhash.providers.registry import ProviderError
+from dubhash.providers.errors import ProviderError
 
 log = logging.getLogger(__name__)
 

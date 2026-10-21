@@ -13,7 +13,7 @@ from collections.abc import AsyncIterator
 
 import httpx
 
-from dubhash.providers.registry import ProviderError
+from dubhash.providers.errors import ProviderError
 
 log = logging.getLogger(__name__)
 

@@ -9,17 +9,11 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from dubhash.providers.errors import ProviderError, ProviderUnavailable  # noqa: F401
+
 if TYPE_CHECKING:
     from dubhash.config.settings import Settings
     from dubhash.interp.contracts import MT, STT, TTS
-
-
-class ProviderError(RuntimeError):
-    """A vendor call failed (HTTP error, timeout, fatal socket error)."""
-
-
-class ProviderUnavailable(ProviderError):
-    """The provider cannot be built: unknown name or missing API key."""
 
 
 def _key(value: str, env: str, name: str) -> str:

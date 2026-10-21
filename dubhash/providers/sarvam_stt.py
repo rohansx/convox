@@ -28,7 +28,7 @@ from websockets.asyncio.client import ClientConnection, connect
 from websockets.exceptions import ConnectionClosed, InvalidHandshake
 
 from dubhash.audio.frames import SAMPLE_RATE
-from dubhash.providers.registry import ProviderError
+from dubhash.providers.errors import ProviderError
 
 log = logging.getLogger(__name__)
 

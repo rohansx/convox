@@ -11,8 +11,10 @@ class Resampler:
         self.in_rate = in_rate
         self.out_rate = out_rate
         self._passthrough = in_rate == out_rate
-        self._stream = None if self._passthrough else soxr.ResampleStream(
-            in_rate, out_rate, 1, dtype="int16", quality="HQ"
+        self._stream = (
+            None
+            if self._passthrough
+            else soxr.ResampleStream(in_rate, out_rate, 1, dtype="int16", quality="HQ")
         )
 
     def process(self, pcm16: bytes) -> bytes:

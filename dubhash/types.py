@@ -77,6 +77,7 @@ EventKind = Literal[
     "provider_error",  # {provider, stage, error}
     "leg",  # {side, status}
     "call",  # {status}
+    "line_check",  # {sides}: "aap line par hain?" played after 10 s silence
 ]
 
 
