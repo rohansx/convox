@@ -13,6 +13,14 @@ rules start it, the prompt is CUT. No more of it is sent, its mark is not sent (
 longer awaited), and the translation's playback clears the leg before its first frame, so
 whatever the phone still had queued of the prompt is dropped. Playback to the other leg
 is never affected.
+
+Chunked utterances (L9, Translation.final_chunk): a chunk of A's ongoing utterance plays
+to B under the usual rule (floor IDLE or A's), while A is still speaking. Once one of its
+chunks has started, A is the floor's "holder" until its final chunk starts (or the rest
+is discarded, B barges in, or the 4 s rescue fires): when a playback ends with nothing of
+A's queued the state is A_SPEAKING, not IDLE, and only A's next chunk may start, so B's
+translation never lands in the middle of A's utterance. Each chunk is its own playback
+(mark, barge-in, clip), so the invariants hold per chunk.
 """
 
 from __future__ import annotations
@@ -125,6 +133,9 @@ class FloorController:
         # legs hearing a prompt: side -> (mark tag, deadline ms; _NEVER while sending)
         self._prompts: dict[Side, tuple[str, int]] = {}
         self._prompt_sent: dict[Side, int] = {}  # bytes of the current prompt sent so far
+        # chunked utterances (L9): the side whose utterance has started playing a chunk
+        # and not yet its final chunk. It keeps the floor: only its chunks start until then
+        self._holder: Side | None = None
 
     # --- public view ---------------------------------------------------------------------
 
@@ -285,6 +296,8 @@ class FloorController:
     async def on_utterance_discarded(self, side: Side) -> None:
         """§2.1 rule 2: the floor holder's utterance produced no translation."""
         async with self._lock:
+            if self._holder == side:  # the rest of a chunked utterance: nothing more comes
+                self._holder = None
             if self._bypass or self._state != _speaking(side):
                 return
             self._set_state("IDLE")
@@ -309,7 +322,7 @@ class FloorController:
             self._playback_ended(pb)
             self._end(pb.tr, clipped_ms=bytes_to_ms(pb.sent) if pb.failed else None)
             if not self._drain():
-                self._set_state("IDLE")
+                self._set_state(self._after_playback())
 
     async def on_dtmf(self, side: Side, digit: str) -> None:
         async with self._lock:
@@ -350,7 +363,12 @@ class FloorController:
                 await self._barge_in(pb.listener)
             if self._pb is not None or self._speaking:
                 return
-            if self._queue and now - self._last_speech >= self.force_play_silence_ms:
+            silent = now - self._last_speech >= self.force_play_silence_ms
+            if silent and self._holder is not None:  # its final chunk never came
+                self._holder = None
+                if not self._drain() and self._state != "IDLE":
+                    self._set_state("IDLE")
+            elif self._queue and silent:
                 self._drain()  # rule 5: rescue a held floor
             elif (
                 not self._queue
@@ -400,6 +418,7 @@ class FloorController:
         for s in list(self._line_tasks):
             self._stop_line_check(s)
         self._bypass = True
+        self._holder = None
         self._prompts.clear()
         self._speaking.clear()
         self._publish("bypass", {"side": side, "digit": digit})
@@ -450,6 +469,8 @@ class FloorController:
         if self._bypass or pb is None or side != pb.listener:
             return
         clipped_ms = await self._cut(pb)
+        if self._holder == pb.tr.side:  # the listener takes the floor from a chunked one
+            self._holder = None
         self._publish(
             "barge_in",
             {"side": side, "listener": side, "clipped_seq": pb.tr.seq, "clipped_ms": clipped_ms},
@@ -472,11 +493,28 @@ class FloorController:
         self._end(pb.tr, clipped_ms=clipped_ms)
         return clipped_ms
 
+    def _after_playback(self) -> State:
+        """The state when a playback ended and nothing else starts: the holder of a chunked
+        utterance keeps the floor (more of it is coming), else IDLE."""
+        return _speaking(self._holder) if self._holder is not None else "IDLE"
+
     def _drain(self) -> bool:
-        """Start the head of the queue if nothing is playing. True if something started."""
+        """Start the head of the queue if nothing is playing. True if something started.
+        While a chunked utterance holds the floor (L9), only its own next chunk starts;
+        other items wait behind it."""
         if self._pb is not None or not self._queue:
             return False
-        tr = self._queue.popleft()
+        if self._holder is None:
+            tr = self._queue.popleft()
+        else:
+            tr = next((t for t in self._queue if t.side == self._holder), None)
+            if tr is None:
+                return False
+            self._queue.remove(tr)
+        if not tr.final_chunk:
+            self._holder = tr.side
+        elif self._holder == tr.side:
+            self._holder = None
         pb = _Playback(tr, other(tr.side))
         if pb.listener in self._prompts:  # still hearing a prompt: cut it (L7)
             pb.clear_first = True
@@ -541,7 +579,7 @@ class FloorController:
             self._playback_ended(pb)
             self._end(pb.tr, clipped_ms=bytes_to_ms(pb.sent))
             if not self._drain():
-                self._set_state("IDLE")
+                self._set_state(self._after_playback())
 
     async def _stop_task(self, pb: _Playback) -> None:
         task = pb.task
