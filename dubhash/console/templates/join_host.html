@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% if call %}{{ sides[0].native }} ⇄ {{ sides[1].native }} · dubhash{% else %}Stage demo · dubhash{% endif %}</title>
+  <link rel="stylesheet" href="/static/console/join.css">
+</head>
+<body class="host{% if call %} has-call{% endif %}">
+<header class="host-top">
+  <span class="brand">dubhash</span>
+  {% if call %}
+    <span class="host-pair">{{ sides[0].native }} <span class="muted">⇄</span> {{ sides[1].native }}</span>
+    <span class="badge" id="state" data-state="{{ call.state }}">{{ call.state }}</span>
+  {% else %}
+    <span class="host-pair muted">Stage demo, no telephony</span>
+  {% endif %}
+  <nav><a href="/join">New call</a><a href="/console">Console</a></nav>
+</header>
+
+{% if not call %}
+<main class="host-main picker">
+  <h1>Pick the two languages</h1>
+  <p class="muted lead">Each person scans one code with their own phone. Nothing is dialled.</p>
+  {% if error %}<p class="alert" role="alert">{{ error }}</p>{% endif %}
+  <form method="post" action="/join" class="pairs">
+    {% for p in pairs %}
+    <label class="pair-card" data-pair="{{ p.value }}">
+      <input type="radio" name="pair" value="{{ p.value }}" {% if loop.first %}checked{% endif %}>
+      <span class="pair-langs">
+        <span class="pair-side"><b lang="{{ p.a.lang[:2] }}">{{ p.a.native }}</b><small>{{ p.a.english }}</small></span>
+        <span class="pair-arrow">⇄</span>
+        <span class="pair-side"><b lang="{{ p.b.lang[:2] }}">{{ p.b.native }}</b><small>{{ p.b.english }}</small></span>
+      </span>
+    </label>
+    {% endfor %}
+    <button type="submit" class="start">Start call</button>
+  </form>
+</main>
+{% else %}
+<main class="host-main call" id="call"
+      data-call-id="{{ call.call_id }}"
+      data-events="{{ events_url }}"
+      data-status="{{ call.status }}"
+      data-p50="{{ targets.p50 }}" data-p95="{{ targets.p95 }}"
+      data-a-native="{{ sides[0].native }}" data-b-native="{{ sides[1].native }}"
+      data-pair="{{ sides[0].lang }}|{{ sides[1].lang }}"
+      data-turns="{{ turns_json | forceescape }}">
+  <section class="qrs">
+    {% for s in sides %}
+    <figure class="qr" data-side="{{ s.side }}" data-url="{{ s.url }}">
+      <figcaption>
+        <span class="qr-native" lang="{{ s.lang[:2] }}">{{ s.native }}</span>
+        <span class="qr-english">{% if s.english != s.native %}{{ s.english }} · {% endif %}scan to join</span>
+      </figcaption>
+      <div class="qr-code">{{ s.svg | safe }}</div>
+      <div class="qr-leg" id="leg-{{ s.side }}" data-status="{{ call.legs.get(s.side, '') if call.legs else '' }}">waiting for phone</div>
+      <a class="qr-url" href="{{ s.url }}" target="_blank" rel="noopener">{{ s.url }}</a>
+    </figure>
+    {% endfor %}
+  </section>
+
+  <section class="ended" id="ended" hidden>
+    <p>Call ended.</p>
+    <form method="post" action="/join">
+      <input type="hidden" name="pair" value="{{ sides[0].lang }}|{{ sides[1].lang }}">
+      <button type="submit" class="start">Start again</button>
+    </form>
+  </section>
+
+  <section class="talk">
+    <div class="talk-head">
+      <div class="col-a"><b lang="{{ sides[0].lang[:2] }}">{{ sides[0].native }}</b></div>
+      <div class="stats"><span>turns <b id="n-turns">0</b></span><span>p50 <b id="p50">—</b></span></div>
+      <div class="col-b"><b lang="{{ sides[1].lang[:2] }}">{{ sides[1].native }}</b></div>
+    </div>
+    <div class="talk-body" id="timeline">
+      <p class="hint" id="empty">The transcript appears here once both phones have joined.</p>
+    </div>
+    <div class="partials">
+      <p class="partial col-a" id="partial-a" hidden></p>
+      <p class="partial col-b" id="partial-b" hidden></p>
+    </div>
+  </section>
+</main>
+<script src="/static/console/join_host.js" defer></script>
+{% endif %}
+</body>
+</html>
