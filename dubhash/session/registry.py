@@ -17,7 +17,7 @@ if TYPE_CHECKING:
 
 
 def new_call_id() -> str:
-    """ "c_" + 10 lowercase base32 chars (50 random bits) from `secrets`."""
+    """A new call id: "c_" + 10 lowercase base32 chars (50 random bits) from `secrets`."""
     return "c_" + base64.b32encode(secrets.token_bytes(10)).decode("ascii").lower()[:10]
 
 

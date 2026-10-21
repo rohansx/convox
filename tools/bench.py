@@ -19,7 +19,6 @@ import argparse
 import asyncio
 import dataclasses
 import json
-import math
 import sys
 from collections.abc import Callable, Sequence
 from pathlib import Path
@@ -161,7 +160,12 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     p.add_argument("--pair", default="hi-kn", help="pair key from config/pairs.yaml")
     for stage in ("stt", "mt", "tts"):
         p.add_argument(f"--{stage}", choices=("fake", "real"), default="fake")
-    p.add_argument("--vad", choices=("auto", "energy"), default="auto")
+    p.add_argument(
+        "--vad",
+        choices=("auto", "energy"),
+        default="auto",
+        help="auto: Silero if it loads (EnergyVAD for synthetic audio)",
+    )
     p.add_argument("--out", type=Path, default=Path("out"))
     p.add_argument("--call-id", default=None)
     p.add_argument("--tail-ms", type=int, default=5000, help="silence after the audio (real time)")
@@ -176,14 +180,15 @@ async def run_bench(args: argparse.Namespace) -> dict[str, Any]:
         raise SystemExit(f"unknown pair {args.pair!r}; choose from {sorted(pairs)}")
     pair = pairs[args.pair]
     providers = build_providers(pair, settings)
-    if args.vad == "energy":
-        providers.vad_factory = EnergyVAD
 
     inbound = synthetic_inbound()
     if args.a_wav:
         inbound["a"] = read_wav(args.a_wav)
     if args.b_wav:
         inbound["b"] = read_wav(args.b_wav)
+    synthetic = not (args.a_wav or args.b_wav)
+    if args.vad == "energy" or (args.vad == "auto" and synthetic):
+        providers.vad_factory = EnergyVAD  # Silero is not trained on synthetic harmonics
 
     realtime = "real" in (args.stt, args.mt, args.tts)
     call_id = args.call_id or new_call_id()
@@ -235,7 +240,7 @@ async def run_bench(args: argparse.Namespace) -> dict[str, Any]:
 
 
 def _fmt(v: int | None) -> str:
-    return "-" if v is None or (isinstance(v, float) and math.isnan(v)) else str(v)
+    return "-" if v is None else str(v)
 
 
 def main(argv: Sequence[str] | None = None) -> int:
