@@ -115,3 +115,24 @@ def test_spec_after_ms_overrides_pair(tmp_path, monkeypatch):
     assert late["spec"]["after_ms"] == 200 and early["spec"]["after_ms"] == 40
     fa = early["stages"]["first_audio"]["p50"]
     assert fa <= late["stages"]["first_audio"]["p50"] - 140
+
+
+def test_early_final_ms_flag_cuts_first_audio(tmp_path, monkeypatch, capsys):
+    monkeypatch.setenv("DUBHASH_ENV", "dev")
+    off = _bench(tmp_path, "c_ef0", "--no-spec", "--early-final-ms", "0")
+    on = _bench(tmp_path, "c_ef200", "--no-spec", "--early-final-ms", "200")
+    assert off["early_final"] == {
+        "early_final_ms": 0,
+        "started": 0,
+        "restarts": 0,
+        "used": 0,
+        "restart_rate": None,
+    }
+    assert on["early_final"]["early_final_ms"] == 200
+    assert on["early_final"]["started"] == 3 and on["early_final"]["used"] == 3
+    assert on["early_final"]["restarts"] == 0 and on["early_final"]["restart_rate"] == 0.0
+    # 550 ms EOU, then final 290 + MT 1200 + TTS 250 after an end() sent 350 ms earlier
+    fa_off = off["stages"]["first_audio"]["p50"]
+    assert on["stages"]["first_audio"]["p50"] <= fa_off - 300
+    assert [t["src_text"] for t in on["turns"]] == [t["src_text"] for t in off["turns"]]
+    assert "early_final" in capsys.readouterr().out
