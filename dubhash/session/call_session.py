@@ -69,6 +69,7 @@ from dubhash.session.language import (
     AutoLang,
     LanguageResolver,
     LangUpdate,
+    indic_share,
 )
 from dubhash.session.prompts import (
     auto_opening_text,
@@ -129,7 +130,7 @@ class _LangEvidence:
     speech_ms: int
     stt_lang: str | None
     text: str | None
-    lid: asyncio.Task[LangGuess] | None
+    audio: bytes  # for language ID, run once the utterance is over
     stt_confidence: float | None = None
 
 
@@ -1041,23 +1042,19 @@ class CallSession:
         text: str | None,
         stt_confidence: float | None = None,
     ) -> None:
-        """An auto side's STT final: start language ID on the utterance (when it is long
-        enough to decide on) and keep the evidence on the utterance. An early-final
-        restart replaces it, so each utterance counts once."""
+        """An auto side's STT final: keep the evidence on the utterance (when it is long
+        enough to decide on). An early-final restart replaces it, so each utterance counts
+        once, and language ID runs once, when it is judged."""
         r = self.resolvers.get(side)
         if r is None:
             return
-        old, utt.lang_ev = utt.lang_ev, None
-        if old is not None and old.lid is not None:
-            old.lid.cancel()
+        utt.lang_ev = None
         vad = self._sink.vads.get(side)
         end = vad.last_voiced if vad is not None else self.clock.now_ms()
         speech_ms = end - utt.t_start + FRAME_MS
         if not final.strip() or r.pinned or speech_ms < r.config.min_speech_ms:
             return
-        lid = self.providers.lid
-        task = self._spawn_lang(lid.identify(audio, r.config.supported)) if lid else None
-        utt.lang_ev = _LangEvidence(speech_ms, stt_lang, text or final, task, stt_confidence)
+        utt.lang_ev = _LangEvidence(speech_ms, stt_lang, text or final, audio, stt_confidence)
         self._lang_ready(side, utt)
 
     def _lang_ready(self, side: Side, utt: _Utt) -> None:
@@ -1073,11 +1070,25 @@ class CallSession:
             self._spawn_lang(self._resolve(side, ev))
 
     async def _resolve(self, side: Side, ev: _LangEvidence) -> None:
+        r = self.resolvers[side]
         async with self._lang_lock[side]:  # FIFO: utterances are judged in order
-            guess = await self._lid_result(side, ev.lid)
+            guess = await self._lid_guess(side, ev.audio, r)
             if self.floor.bypass:
                 return
-            update = self.resolvers[side].observe(
+            log.info(
+                "lang.evidence",
+                extra={
+                    "call_id": self.call_id,
+                    "side": side,
+                    "speech_ms": ev.speech_ms,
+                    "stt_lang": ev.stt_lang,
+                    "stt_confidence": ev.stt_confidence,
+                    "lid_lang": guess.lang if guess else None,
+                    "lid_confidence": guess.confidence if guess else None,
+                    "indic_share": round(indic_share(ev.text), 2),
+                },
+            )
+            update = r.observe(
                 speech_ms=ev.speech_ms,
                 stt_lang=ev.stt_lang,
                 lid=guess,
@@ -1087,17 +1098,18 @@ class CallSession:
             if update is not None:
                 await self._apply_lang(update)
 
-    async def _lid_result(
-        self, side: Side, task: asyncio.Task[LangGuess] | None
-    ) -> LangGuess | None:
-        if task is None:
+    async def _lid_guess(self, side: Side, audio: bytes, r: LanguageResolver) -> LangGuess | None:
+        lid = self.providers.lid
+        if lid is None or not audio or r.pinned:
             return None
-        await asyncio.wait({task})
-        if task.cancelled():
-            return None
-        exc = task.exception()
-        if exc is None:
-            return task.result()
+        try:
+            return await lid.identify(audio, r.config.supported)
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            return self._lid_failed(side, exc)
+
+    def _lid_failed(self, side: Side, exc: Exception) -> None:
         name = getattr(self.providers.lid, "name", "lid")
         log.warning(
             "provider.error",
@@ -1110,7 +1122,6 @@ class CallSession:
             },
         )
         self._publish("provider_error", {"provider": name, "stage": "lid", "error": repr(exc)})
-        return None
 
     async def _apply_lang(self, up: LangUpdate) -> None:
         payload = up.payload()

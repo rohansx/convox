@@ -123,6 +123,24 @@ async def test_the_language_is_decided_at_the_final_not_after_tts():
     assert decided < turn.t_tts_ttfb
 
 
+async def test_an_early_final_restart_asks_the_lid_once():
+    """Live c_lrbuuv2fwv: each early-final restart (pair early_final_ms 200) started its
+    own LID call. LID runs once per utterance, when the utterance is over."""
+    call = Call(
+        {"a": "auto", "b": "kn-IN"},
+        lid_script=[lid("ta-IN", 0.95)],
+        stt={"a": FakeSTT(["a one", "a one again"]), "b": FakeSTT()},
+    )
+    assert call.pair.early_final_ms > 0
+    # a real LID call is in flight for a while (cancelling it then does not save it)
+    call.lid.delay_ms, call.lid.clock = 100, call.clock
+    paused = speech(1800) + silence(300) + speech(1000) + silence(2000)  # resumes after 300
+    await call.run({"a": paused})
+    assert call.session.interpreters["a"].early_restarts >= 1
+    assert len(call.lid.calls) == 1
+    assert call.langs() == [("a", "ta-IN", "CONFIRMED", None)]
+
+
 async def test_a_hinted_side_is_confirmed_and_the_partner_hears_the_hint_until_then():
     """A (auto, hint mr-IN) and B (hi-IN). B speaks first: A hears Marathi (the hint).
     Two agreeing Marathi guesses from A confirm it."""
