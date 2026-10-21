@@ -262,12 +262,16 @@ async def synth_corpus(key: str, langs: Sequence[str], n: int) -> dict[tuple, by
                 for voice, tmpl in VOICES.items():
                     path = _clip_path(lang, i, voice)
                     if not path.exists():
-                        pcm = b"".join([c async for c in tts.synth(text, tmpl, lang)])
+                        pcm = await _retry(_synth_one, tts, text, tmpl, lang)
                         write_wav(path, trim_lead(pcm))
                     clips[(lang, i, voice)] = read_wav(path)
     finally:
         await tts.aclose()
     return clips
+
+
+async def _synth_one(tts: Any, text: str, voice: str, lang: str) -> bytes:
+    return b"".join([c async for c in tts.synth(text, voice, lang)])
 
 
 async def _retry(fn: Any, *args: Any, tries: int = 5) -> Any:
