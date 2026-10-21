@@ -1,0 +1,77 @@
+"""tools/live_loopback.py L7 variants: --noise-snr (pink room noise on the mic, during
+and between the lines), --speak-at-start (the first line starts as soon as the opening
+does) and --opening-line; the measuring copes with an opening still playing."""
+
+from __future__ import annotations
+
+import numpy as np
+import pytest
+
+from dubhash.audio.earcon import EARCON
+from dubhash.audio.frames import FRAME_BYTES
+from tests.audio_fixtures import dbfs, speech
+from tools import live_loopback as ll
+
+
+def test_measure_finds_the_earcon_behind_an_opening_still_playing():
+    voice = b"\x00\x10" * (FRAME_BYTES // 2)
+    rec = voice * 12 + EARCON + ll.SILENCE + voice * 3  # opening, cut, then the translation
+    row = ll.TurnRow(0, "a", "x", n_start=0, n_voice_end=5, n_next=len(rec) // FRAME_BYTES)
+    ll.measure(row, rec)
+    assert row.earcon_ms == (12 - 5) * 20
+    assert row.heard_ms == (12 + len(EARCON) // FRAME_BYTES + 1 - 5) * 20
+
+
+def test_room_noise_is_snr_below_the_speech_and_continuous():
+    utts = [ll.Utt("a", speech(1000)), ll.Utt("b", speech(800, f0=200))]
+    noise = ll.room_noise(utts, snr_db=15, ms=2000, seed=1)
+    assert len(noise) == 100 and all(len(f) == FRAME_BYTES for f in noise)
+    level = dbfs(b"".join(noise))
+    assert abs((dbfs(speech(1000)) - level) - 15) < 1.0
+
+
+async def test_tab_mixes_noise_into_every_mic_frame():
+    class WS:
+        def __init__(self) -> None:
+            self.sent: list[bytes] = []
+
+        async def send(self, data: bytes) -> None:
+            self.sent.append(data)
+
+    ws = WS()
+    tab = ll.Tab("a", ws)
+    noise = [np.full(FRAME_BYTES // 2, 100, dtype=np.int16).tobytes()] * 3
+    tab.noise = noise
+    tab.mic.append(np.full(FRAME_BYTES // 2, 1000, dtype=np.int16).tobytes())
+    for _ in range(4):
+        await tab.tick()
+    vals = [int(np.frombuffer(f, dtype=np.int16)[0]) for f in ws.sent]
+    assert vals == [1100, 100, 100, 100]  # speech + noise, then noise alone, looping
+
+
+@pytest.fixture
+def server():
+    with ll.serve({"dubhash_env": "test"}, None) as srv:
+        yield srv
+
+
+async def test_speak_at_start_does_not_wait_for_the_opening(server):
+    utts = ll.fake_utts(ll.SCRIPT[:1])
+    opts = ll.Opts(opening="talk", pause_ms=300, quiet_ms=400, turn_timeout_s=6,
+                   opening_line="full")  # fmt: skip
+    result = await ll.run_call(server, utts, opts)
+    assert result["opening"]["wait_ms"] <= 300  # started while the opening played
+    assert result["status"] == "completed"
+
+
+async def test_opening_line_is_passed_to_the_call(server):
+    utts = ll.fake_utts(ll.SCRIPT[:1])
+    opts = ll.Opts(opening="skip", pause_ms=300, quiet_ms=400, turn_timeout_s=6,
+                   opening_line="off", opening_timeout_s=1.0)  # fmt: skip
+    result = await ll.run_call(server, utts, opts)
+    assert result["opening"]["bytes"] == {"a": 0, "b": 0} or not result["opening"]["received"]
+
+
+def test_cli_flags():
+    a = ll.parse_args(["--noise-snr", "15", "--speak-at-start", "--opening-line", "short"])
+    assert a.noise_snr == 15 and a.speak_at_start and a.opening_line == "short"
