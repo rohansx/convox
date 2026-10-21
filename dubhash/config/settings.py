@@ -7,7 +7,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
-from pydantic import field_validator
+from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 PACKAGE_DIR = Path(__file__).resolve().parent.parent
@@ -59,6 +59,14 @@ class Settings(BaseSettings):
     enable_webrtc_leg: bool = True
     bench_realtime: bool = False
 
+    # Per-call recording for diagnosis (dubhash/store/recorder.py): mic and playout wavs,
+    # every CallEvent, client telemetry and a summary under call_recording_dir. Dev and
+    # test only (consent, DPDP): None means "on in dev, off otherwise"; never on by
+    # default in prod.
+    call_recording: bool | None = None
+    call_recording_dir: Path = Path("out/calls")
+    log_file: Path | None = Path("logs/dubhash.log")  # JSON lines, rotating; empty = off
+
     @field_validator("exotel_api_host")
     @classmethod
     def _exotel_host(cls, v: str) -> str:
@@ -75,6 +83,17 @@ class Settings(BaseSettings):
             if (base / v).exists():
                 return base / v
         return v
+
+    @field_validator("log_file", mode="before")
+    @classmethod
+    def _empty_log_file(cls, v: object) -> object:
+        return None if v == "" else v
+
+    @model_validator(mode="after")
+    def _recording_default(self) -> Settings:
+        if self.call_recording is None:
+            self.call_recording = self.dubhash_env == "dev"
+        return self
 
     @property
     def forces_fakes(self) -> bool:
