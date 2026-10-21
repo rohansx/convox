@@ -23,9 +23,10 @@ import numpy as np
 from dubhash.audio.earcon import EARCON
 from dubhash.audio.frames import FRAME_BYTES, Reframer, ms_to_bytes
 
-# Bulbul starts every clip with 100-320 ms of digital silence (live, 21 Oct): heard after
-# the earcon as a gap. Dropping it brings the voice forward by that much.
+# Bulbul starts every clip with 100-320 ms of (near-)digital silence (live, 21 Oct): heard
+# after the earcon as a gap. Dropping it brings the voice forward by that much.
 TRIM_LEAD_MS = 400
+TRIM_LEAD_PEAK = 8  # |sample| <= this counts as silence (about -72 dBFS)
 _I16_MIN = -32768
 _I16_MAX = 32767
 
@@ -60,9 +61,10 @@ def passthrough_gain(frame: bytes, db: float = 0.0) -> bytes:
 
 
 def _trim_zeros(chunk: bytes, limit: int) -> tuple[bytes, int]:
-    """Drop leading all-zero samples, at most `limit` bytes. Returns (rest, limit left)."""
+    """Drop leading near-zero samples, at most `limit` bytes. Returns (rest, limit left)."""
     n = len(chunk) // 2 * 2
-    nz = np.flatnonzero(np.frombuffer(chunk[:n], dtype=np.int16))
+    x = np.frombuffer(chunk[:n], dtype=np.int16).astype(np.int32)
+    nz = np.flatnonzero(np.abs(x) > TRIM_LEAD_PEAK)
     lead = int(nz[0]) * 2 if nz.size else n
     cut = min(lead, limit // 2 * 2)
     return chunk[cut:], limit - cut
@@ -87,7 +89,8 @@ async def render_playback(
     duck_db from the first TTS sample until either runs out. Ends when the TTS ends; the last
     partial frame is zero-padded (source is not mixed into the padding). Streams: each frame
     is yielded as soon as the TTS bytes for it arrive. Up to trim_lead_ms of leading
-    all-zero TTS samples are dropped (the source then aligns to the first kept sample)."""
+    near-silent TTS samples (|x| <= TRIM_LEAD_PEAK) are dropped (the source then aligns
+    to the first kept sample)."""
     st = stats if stats is not None else RenderStats()
     if earcon:
         framer = Reframer()
