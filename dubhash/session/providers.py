@@ -28,7 +28,9 @@ from dubhash.interp.contracts import MT, STT, TTS, VAD
 from dubhash.interp.langid import LanguageID
 from dubhash.interp.mt_cache import CachedMT
 from dubhash.interp.vad import NoiseFloorGate, SileroVAD
+from dubhash.providers.errors import ProviderUnavailable
 from dubhash.providers.fakes import EnergyVAD
+from dubhash.providers.registry import build_lid as registry_build_lid
 from dubhash.providers.registry import build_mt, build_stt, build_tts
 from dubhash.types import Side
 
@@ -62,16 +64,19 @@ def _vad_factory() -> Callable[[], VAD]:
     return lambda: NoiseFloorGate(inner())
 
 
-async def prewarm(providers: Providers, pair: PairConfig) -> None:
+async def prewarm(
+    providers: Providers, pair: PairConfig, stt_langs: dict[Side, str] | None = None
+) -> None:
     """Open every provider connection the call will need before anyone speaks (L7): the
-    STT socket per source side (in that side's language), the TTS socket per target side,
-    and the MT HTTPS connection. Providers without a prewarm() are skipped; failures are
-    logged and never raised (the first utterance then connects as before)."""
+    STT socket per source side (in that side's language, or stt_langs[side]: "auto" for a
+    lang-auto side), the TTS socket per target side, and the MT HTTPS connection.
+    Providers without a prewarm() are skipped; failures are logged and never raised (the
+    first utterance then connects as before)."""
     jobs: list[tuple[str, Any]] = []
     for s in SIDES:
         cfg = pair.side(s)
         if (fn := getattr(providers.stt[s], "prewarm", None)) is not None:
-            jobs.append((f"stt:{s}", fn(cfg.lang)))
+            jobs.append((f"stt:{s}", fn((stt_langs or {}).get(s, cfg.lang))))
         if (fn := getattr(providers.tts[s], "prewarm", None)) is not None:
             jobs.append((f"tts:{s}", fn(cfg.voice_f)))
     mt = getattr(providers.mt, "inner", providers.mt)
@@ -95,20 +100,14 @@ async def prewarm(providers: Providers, pair: PairConfig) -> None:
 
 
 def build_lid(settings: Settings) -> LanguageID | None:
-    """FakeLID with fake STT settings (or DUBHASH_ENV=test), else the Sarvam engine
-    (dubhash/providers/sarvam_lid.py). Without the engine there is no LID: an auto side
-    then resolves from STT finals' language codes, else the keypad menu."""
-    if settings.stt_impl == "fake" or settings.forces_fakes:
-        from dubhash.providers.fakes import FakeLID
-
-        return FakeLID()
+    """The call's LanguageID (providers.registry.build_lid: FakeLID under fake STT or
+    DUBHASH_ENV=test, else SarvamLID). Without a key there is none: an auto side then
+    resolves from STT finals' languages, else the keypad menu."""
     try:
-        from dubhash.providers.sarvam_lid import SarvamLID  # type: ignore[import-not-found]
-    except ImportError:
-        log.warning("lid.unavailable", extra={"provider": "sarvam", "stage": "lid"})
+        return registry_build_lid("sarvam", settings)
+    except ProviderUnavailable as e:
+        log.warning("lid.unavailable", extra={"provider": "sarvam", "error": str(e)})
         return None
-    lid: LanguageID = SarvamLID(settings.sarvam_api_key)
-    return lid
 
 
 def build_providers(pair: PairConfig, settings: Settings, *, lid: bool = False) -> Providers:

@@ -63,17 +63,21 @@ class ResolverConfig:
     confirm_after: int = 2  # consecutive agreeing confident utterances to confirm
     switch_after: int = 2  # consecutive confident utterances to move a confirmed side
     menu_after: int = 2  # consecutive unsure/unsupported utterances before the menu
-    stt_confidence: float = 0.7  # weight of an STT final's language code (it has no score)
+    stt_confidence: float = 0.7  # weight of an STT final's language code without a score
     hint_prior: float = 0.15  # lift for a language that matches the hint
     supported: tuple[str, ...] = SUPPORTED_LANGS
+    # languages that need more than `confident`: loanword-only Indic utterances ("Flat
+    # number 302") come back en-IN at up to 0.93 (L8, providers/sarvam_lid.py)
+    lang_confident: dict[str, float] = field(default_factory=lambda: {"en-IN": 0.95})
 
 
-# How an auto side's STT stream opens. "guess": in the side's best language so far (its
-# resolved language, else its hint, else Hindi), reopened when that changes; Sarvam's
-# realtime socket rejects language_code=unknown (probe of 21 Oct), and the translate mode
-# English is the same whichever Indic code it opens with. "unknown": the vendor's
-# auto-detect code, for a provider that takes it.
-SttOpen = Literal["guess", "unknown"]
+# How an auto side's STT stream opens. "auto": Sarvam realtime's language_code=auto, whose
+# finals carry the detected language and its confidence, in translate mode too (engine
+# probe, 21 Oct; "unknown" is rejected). "guess": in the side's best language so far (its
+# resolved language, else its hint, else Hindi), reopened when that changes; translate-mode
+# English came out the same whichever Indic code the socket opened with (7/7 languages).
+SttOpen = Literal["auto", "guess"]
+STT_AUTO = "auto"
 MENU_WINDOW_MS = 15000  # after the menu finishes playing, digits mean language this long
 
 
@@ -84,7 +88,7 @@ class AutoLang:
     hints: dict[Side, str | None]  # the sides whose lang is "auto", with their hints
     sides: dict[str, SideConfig]  # per-language side defaults (config.pairs.language_sides)
     config: ResolverConfig = field(default_factory=lambda: ResolverConfig())
-    stt_open: SttOpen = "guess"
+    stt_open: SttOpen = "auto"
     menu_window_ms: int = MENU_WINDOW_MS
 
 
@@ -127,13 +131,17 @@ def combine(
     text: str | None = None,
     current: str | None = None,
     hint: str | None = None,
-    config: ResolverConfig = ResolverConfig(),  # noqa: B008 (frozen)
+    config: ResolverConfig | None = None,
+    stt_confidence: float | None = None,
 ) -> tuple[str | None, float, str, bool]:
     """(lang, confidence, source, unsupported) for one utterance's evidence. lang is None
-    when nothing supported was heard; `unsupported` when only unsupported languages were."""
+    when nothing supported was heard; `unsupported` when only unsupported languages were.
+    stt_confidence: the STT final's own score for stt_lang, when the vendor gives one."""
+    config = config or ResolverConfig()
     evidence: list[tuple[str, float, str]] = []
     if (code := normalise(stt_lang)) is not None:
-        evidence.append((code, config.stt_confidence, "stt_final"))
+        conf = config.stt_confidence if stt_confidence is None else stt_confidence
+        evidence.append((code, conf, "stt_final"))
     if lid is not None and (code := normalise(lid.lang)) is not None:
         evidence.append((code, float(lid.confidence), lid.source or "lid"))
     if current is not None and current != ENGLISH and _indic_share(text) >= MIXED_MIN_SHARE:
@@ -195,6 +203,7 @@ class LanguageResolver:
         stt_lang: str | None = None,
         lid: LangGuess | None = None,
         text: str | None = None,
+        stt_confidence: float | None = None,
     ) -> LangUpdate | None:
         """One utterance's evidence. Returns the update when the side's language or state
         changed, or when the keypad menu is wanted; else None."""
@@ -202,9 +211,16 @@ class LanguageResolver:
         if self.pinned or speech_ms < cfg.min_speech_ms:
             return None
         lang, conf, source, _ = combine(
-            stt_lang=stt_lang, lid=lid, text=text, current=self.lang, hint=self.hint, config=cfg
+            stt_lang=stt_lang,
+            lid=lid,
+            text=text,
+            current=self.lang,
+            hint=self.hint,
+            config=cfg,
+            stt_confidence=stt_confidence,
         )
-        sure = lang is not None and conf >= cfg.confident
+        need = max(cfg.confident, cfg.lang_confident.get(lang or "", 0.0))
+        sure = lang is not None and conf >= need
         if self.state == LangState.CONFIRMED:
             if not sure or lang == self.lang:
                 self._switch = None

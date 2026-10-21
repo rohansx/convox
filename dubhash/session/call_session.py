@@ -65,6 +65,7 @@ from dubhash.session.crosstalk import CrosstalkGate, Verdict
 from dubhash.session.floor import FloorController
 from dubhash.session.language import (
     MENU_DIGITS,
+    STT_AUTO,
     AutoLang,
     LanguageResolver,
     LangUpdate,
@@ -129,6 +130,7 @@ class _LangEvidence:
     stt_lang: str | None
     text: str | None
     lid: asyncio.Task[LangGuess] | None
+    stt_confidence: float | None = None
 
 
 @dataclass(slots=True, eq=False)
@@ -158,7 +160,13 @@ class _Judge(Protocol):
     def wants_audio(self) -> bool: ...
 
     def on_final(
-        self, utt: _Utt, final: str, lang: str | None, audio: bytes, text: str | None
+        self,
+        utt: _Utt,
+        final: str,
+        lang: str | None,
+        audio: bytes,
+        text: str | None,
+        lang_confidence: float | None = None,
     ) -> None: ...
 
 
@@ -203,8 +211,9 @@ class _TrackedStream:
         if utt is not None and judge is not None and self._audio is not None:
             if utt.crosstalk is None:
                 detected = getattr(self._inner, "detected_lang", None)
+                conf = getattr(self._inner, "detected_confidence", None)
                 audio = b"".join(self._audio)
-                judge.on_final(utt, final, detected, audio, self.last_partial)
+                judge.on_final(utt, final, detected, audio, self.last_partial, conf)
         return final
 
     def partials(self) -> AsyncIterator[str]:
@@ -433,9 +442,15 @@ class _SideJudge:
         return self._side in self._sink._s.resolvers
 
     def on_final(
-        self, utt: _Utt, final: str, lang: str | None, audio: bytes, text: str | None
+        self,
+        utt: _Utt,
+        final: str,
+        lang: str | None,
+        audio: bytes,
+        text: str | None,
+        lang_confidence: float | None = None,
     ) -> None:
-        self._sink._s._lang_final(self._side, utt, final, lang, audio, text)
+        self._sink._s._lang_final(self._side, utt, final, lang, audio, text, lang_confidence)
 
     def settle(self, stream: STTStream) -> None:
         """end() then aclose() a cross-talk stream in the background: a socket that
@@ -579,7 +594,12 @@ class CallSession:
             return
         if self.prewarm_task is None or self.prewarm_task.done():
             self.prewarm_task = asyncio.get_running_loop().create_task(
-                prewarm(self.providers, self.pair), name=f"{self.call_id}-prewarm"
+                prewarm(
+                    self.providers,
+                    self.pair,
+                    {s: self._stt_lang(s) for s in self.resolvers} or None,
+                ),
+                name=f"{self.call_id}-prewarm",
             )
 
     # --- public API ------------------------------------------------------------------------
@@ -979,8 +999,8 @@ class CallSession:
         return self._base_pair.side(side).lang if r is None else r.target
 
     def _stt_lang(self, side: Side) -> str:
-        if self.auto is not None and self.auto.stt_open == "unknown":
-            return "unknown"
+        if self.auto is not None and self.auto.stt_open == STT_AUTO:
+            return STT_AUTO
         return self._lang_of(side)
 
     def _side_cfg(self, lang: str) -> SideConfig:
@@ -1018,6 +1038,7 @@ class CallSession:
         stt_lang: str | None,
         audio: bytes,
         text: str | None,
+        stt_confidence: float | None = None,
     ) -> None:
         """An auto side's STT final: start language ID on the utterance (when it is long
         enough to decide on) and keep the evidence on the utterance. An early-final
@@ -1035,7 +1056,7 @@ class CallSession:
             return
         lid = self.providers.lid
         task = self._spawn_lang(lid.identify(audio, r.config.supported)) if lid else None
-        utt.lang_ev = _LangEvidence(speech_ms, stt_lang, text or final, task)
+        utt.lang_ev = _LangEvidence(speech_ms, stt_lang, text or final, task, stt_confidence)
 
     def _lang_utt_done(self, side: Side, utt: _Utt) -> None:
         """The utterance was delivered or discarded: judge its language evidence."""
@@ -1049,7 +1070,11 @@ class CallSession:
             if self.floor.bypass:
                 return
             update = self.resolvers[side].observe(
-                speech_ms=ev.speech_ms, stt_lang=ev.stt_lang, lid=guess, text=ev.text
+                speech_ms=ev.speech_ms,
+                stt_lang=ev.stt_lang,
+                lid=guess,
+                text=ev.text,
+                stt_confidence=ev.stt_confidence,
             )
             if update is not None:
                 await self._apply_lang(update)

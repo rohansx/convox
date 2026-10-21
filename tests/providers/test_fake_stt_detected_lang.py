@@ -26,3 +26,11 @@ async def test_no_audio_consumes_no_detected_lang():
     assert await s.end() == ""
     assert s.detected_lang is None
     assert (await utter(stt))[1] == "kn-IN"
+
+
+async def test_a_detected_entry_can_carry_its_confidence():
+    stt = FakeSTT(script=["one"], detected=[("ta-IN", 0.93)])
+    s = await stt.open("auto")
+    await s.push(AUDIO)
+    await s.end()
+    assert (s.detected_lang, s.detected_confidence) == ("ta-IN", 0.93)

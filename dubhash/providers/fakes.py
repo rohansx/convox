@@ -53,6 +53,7 @@ class FakeSTTStream:
         self._closed = False
         self.pushed_frames = 0
         self.detected_lang: str | None = None  # set by end(), as SarvamSTTStream does
+        self.detected_confidence: float | None = None
         self._heard = 0  # bytes that count towards words (all, or voiced only)
         self._scripted_partials = owner._pop_partials()
 
@@ -91,7 +92,11 @@ class FakeSTTStream:
             scripted = self._owner._pop()
             final = scripted if scripted is not None else self._text(_word_count(ms))
             if self._owner._detected:  # else leave whatever the test set
-                self.detected_lang = self._owner._pop_detected()
+                entry = self._owner._pop_detected()
+                if isinstance(entry, tuple):
+                    self.detected_lang, self.detected_confidence = entry
+                else:
+                    self.detected_lang = entry
         self._finish()
         return final
 
@@ -120,8 +125,9 @@ class FakeSTT:
     (audio_ms, text): text is emitted as a partial once audio_ms of audio has been pushed.
     A scripted utterance emits only those partials ([] = none). ignore_silence: only
     voiced frames count towards words. final_delay_ms sleeps on `clock` when given.
-    detected: the language reported on each final (stream.detected_lang), in order; None
-    entries and an exhausted script report None."""
+    detected: the language reported on each final (stream.detected_lang), in order, or a
+    (lang, confidence) pair (also sets detected_confidence); None entries and an exhausted
+    script report None."""
 
     name = "fake"
 
@@ -133,10 +139,10 @@ class FakeSTT:
         partials: list[list[tuple[int, str]]] | None = None,
         ignore_silence: bool = False,
         clock: Any = None,
-        detected: list[str | None] | None = None,
+        detected: list[str | tuple[str, float] | None] | None = None,
     ) -> None:
         self._script: deque[str] = deque(script or [])
-        self._detected: deque[str | None] = deque(detected or [])
+        self._detected: deque[str | tuple[str, float] | None] = deque(detected or [])
         self.final_delay_ms = final_delay_ms
         self._partial_script: deque[list[tuple[int, str]]] | None = (
             deque(partials) if partials is not None else None
@@ -152,7 +158,7 @@ class FakeSTT:
     def _pop(self) -> str | None:
         return self._script.popleft() if self._script else None
 
-    def _pop_detected(self) -> str | None:
+    def _pop_detected(self) -> str | tuple[str, float] | None:
         return self._detected.popleft() if self._detected else None
 
     def _pop_partials(self) -> deque[tuple[int, str]] | None:

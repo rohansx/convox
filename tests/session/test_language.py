@@ -169,9 +169,9 @@ def test_code_mixed_english_does_not_flip_an_indic_side():
     Devanagari. Those utterances do not count towards a switch."""
     r = confirmed("hi-IN")
     mixed = "मेरा order number क्या है, delivery कब होगी"
-    assert observe(r, "en-IN", 0.8, text=mixed) is None
-    assert observe(r, "en-IN", 0.8, text=mixed) is None
-    assert observe(r, "en-IN", 0.8, text=mixed) is None
+    assert observe(r, "en-IN", 0.97, text=mixed) is None
+    assert observe(r, "en-IN", 0.97, text=mixed) is None
+    assert observe(r, "en-IN", 0.97, text=mixed) is None
     assert (r.state, r.lang) == (C, "hi-IN")
 
 
@@ -181,8 +181,8 @@ def test_english_script_loanwords_never_count_as_english():
 
 def test_plain_english_still_switches_an_indic_side():
     r = confirmed("hi-IN")
-    observe(r, "en-IN", 0.8, text="where is my order")
-    up = observe(r, "en-IN", 0.8, text="it was due yesterday")
+    observe(r, "en-IN", 0.96, text="where is my order")
+    up = observe(r, "en-IN", 0.96, text="it was due yesterday")
     assert (up.state, up.lang) == (C, "en-IN")
 
 
@@ -267,6 +267,25 @@ def test_update_payload_is_the_lang_event():
     menu = LanguageResolver("a")
     observe(menu, None, 0.1)
     assert observe(menu, None, 0.1).payload()["menu"] is True
+
+
+def test_the_stt_finals_own_confidence_is_used_when_it_has_one():
+    """Sarvam realtime with language_code=auto reports language_confidence on finals."""
+    sure = LanguageResolver("a")
+    up = sure.observe(speech_ms=LONG, stt_lang="mr-IN", stt_confidence=0.97)
+    assert (up.state, up.confidence) == (C, pytest.approx(0.97))
+    unsure = LanguageResolver("a")
+    assert unsure.observe(speech_ms=LONG, stt_lang="mr-IN", stt_confidence=0.4) is None
+
+
+def test_english_needs_more_confidence_than_an_indic_language():
+    """Loanword-only utterances ("Flat number 302") come back en-IN at up to 0.93 (L8)."""
+    r = LanguageResolver("a")
+    assert observe(r, "en-IN", 0.9) is None
+    assert observe(r, "en-IN", 0.93) is not None and r.menu_requested  # two unsure: menu
+    r2 = LanguageResolver("a")
+    assert observe(r2, "en-IN", 0.96).state == C
+    assert ResolverConfig().lang_confident == {"en-IN": 0.95}
 
 
 def test_lang_is_a_call_event_kind():

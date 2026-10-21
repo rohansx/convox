@@ -32,7 +32,17 @@ def talk(ms: int = 2000, f0: float = 140.0) -> bytes:
 
 
 class Call:
-    def __init__(self, langs, hints=None, *, lid_script=(), stt=None, opening_line=False, **kw):
+    def __init__(
+        self,
+        langs,
+        hints=None,
+        *,
+        lid_script=(),
+        stt=None,
+        opening_line=False,
+        stt_open="guess",
+        **kw,
+    ):
         self.clock = FakeClock()
         self.bus = RecordingBus()
         hints = hints or {}
@@ -45,7 +55,9 @@ class Call:
             stt=self.stt, mt=self.mt, tts=self.tts, vad_factory=EnergyVAD, lid=self.lid
         )
         auto = AutoLang(
-            hints={s: hints.get(s) for s in ("a", "b") if langs[s] == "auto"}, sides=SIDES
+            hints={s: hints.get(s) for s in ("a", "b") if langs[s] == "auto"},
+            sides=SIDES,
+            stt_open=stt_open,
         )
         self.legs = {s: FakeLeg(s, clock=self.clock) for s in ("a", "b")}
         self.session = CallSession(
@@ -78,6 +90,20 @@ class Call:
 
 
 PROMPTS = ("Namaste", "Please speak", "Hindi ke liye", "हिंदी.", "English.")
+
+
+async def test_with_stt_auto_the_finals_language_and_confidence_resolve_the_side():
+    """The default: the auto side's STT opens with language_code=auto, whose finals report
+    the language and its confidence; one sure final confirms without any LID guess."""
+    call = Call(
+        {"a": "auto", "b": "kn-IN"},
+        stt={"a": FakeSTT(["a one"], detected=[("gu-IN", 0.96)]), "b": FakeSTT()},
+        stt_open="auto",
+    )
+    await call.run({"a": talk() + silence(2000)})
+    assert call.stt["a"].langs == ["auto"]
+    assert call.langs() == [("a", "gu-IN", "CONFIRMED", None)]
+    assert call.bus.kinds("lang")[0].payload["source"] == "stt_final"
 
 
 async def test_a_hinted_side_is_confirmed_and_the_partner_hears_the_hint_until_then():
@@ -145,7 +171,7 @@ async def test_code_mixed_english_does_not_flip_a_confirmed_side():
     ]
     call = Call(
         {"a": "auto", "b": "kn-IN"},
-        lid_script=[lid("hi-IN", 0.95), lid("en-IN", 0.8), lid("en-IN", 0.85)],
+        lid_script=[lid("hi-IN", 0.95), lid("en-IN", 0.97), lid("en-IN", 0.98)],
         stt={"a": FakeSTT(["x", "y", "z"], partials=partials), "b": FakeSTT()},
     )
     await call.run({"a": talk() + talk() + talk()})

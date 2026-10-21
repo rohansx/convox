@@ -66,6 +66,37 @@ async def test_prewarm_opens_every_provider_of_the_pair():
     assert p.mt.inner.warmed == 1  # type: ignore[attr-defined]
 
 
+async def test_prewarm_opens_stt_in_the_language_the_side_will_use():
+    """lang "auto": an auto side's STT opens with language_code=auto, so that is the
+    socket to warm (the pool is keyed by language)."""
+    p = warm_providers()
+    await prewarm(p, PAIR, stt_langs={"a": "auto"})
+    assert p.stt["a"].warmed == ["auto"]  # type: ignore[attr-defined]
+    assert p.stt["b"].warmed == [PAIR.b.lang]  # type: ignore[attr-defined]
+
+
+async def test_an_auto_session_prewarms_its_auto_side_with_auto():
+    from dubhash.config.pairs import auto_pair, language_sides
+    from dubhash.session.call_session import CallSession
+    from dubhash.session.language import AutoLang
+    from tests.floor_helpers import RecordingBus
+    from tests.session.test_lang_auto_session import PAIRS as pairs
+
+    p = warm_providers()
+    session = CallSession(
+        "c_w",
+        auto_pair(pairs, {"a": "auto", "b": "kn-IN"}, {}),
+        p,
+        bus=RecordingBus(),
+        auto=AutoLang(hints={"a": None}, sides=language_sides(pairs)),
+    )
+    session.start_prewarm()
+    await spin()
+    assert p.stt["a"].warmed == ["auto"]  # type: ignore[attr-defined]
+    assert p.stt["b"].warmed == ["kn-IN"]  # type: ignore[attr-defined]
+    await session.hangup()
+
+
 async def test_prewarm_failures_are_logged_not_raised(caplog):
     p = warm_providers()
 
