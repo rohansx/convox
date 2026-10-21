@@ -8,6 +8,8 @@ sets `eou_signal` so the Endpointer can force EOU early (open question Q2).
 
 Sockets are kept warm per language in a small pool, pinged while idle (code 1008 is
 Sarvam's inactivity close), and reconnected on failure with the utterance's audio replayed.
+The warm-socket machinery (WarmSocket, WarmSTTStream, WarmSTTPool) is shared with
+deepgram_stt.py.
 """
 
 from __future__ import annotations
@@ -19,7 +21,7 @@ import json
 import logging
 import time
 from collections.abc import AsyncIterator
-from typing import Any, Literal
+from typing import Any, Literal, Protocol
 from urllib.parse import urlencode
 
 from websockets.asyncio.client import ClientConnection, connect
@@ -37,16 +39,23 @@ _LANG_ALIASES = {"od-IN": "or-IN"}
 _MAX_RECOVERIES = 2
 
 Endpointing = Literal["manual", "vad"]
+WireMsg = dict[str, Any] | bytes
 
 
-class _Conn:
-    """One live socket plus its reader task. Messages go to whichever stream owns it."""
+class MessageSink(Protocol):
+    def _on_message(self, msg: dict[str, Any]) -> None: ...
 
-    def __init__(self, ws: ClientConnection, lang: str) -> None:
+
+class WarmSocket:
+    """One live vendor socket plus its reader task. Parsed JSON messages go to whichever
+    stream currently owns it (`sink`)."""
+
+    def __init__(self, ws: ClientConnection, lang: str, ping: dict[str, Any]) -> None:
         self.ws = ws
         self.lang = lang
-        self.sink: SarvamSTTStream | None = None
+        self.sink: MessageSink | None = None
         self.dead = asyncio.Event()
+        self._ping = ping
         self._pinger: asyncio.Task[None] | None = None
         self._reader = asyncio.create_task(self._read())
 
@@ -59,17 +68,17 @@ class _Conn:
                     msg = json.loads(raw)
                 except ValueError:
                     continue
-                if self.sink is not None:
+                if self.sink is not None and isinstance(msg, dict):
                     self.sink._on_message(msg)
         except ConnectionClosed:
             pass
         finally:
             self.dead.set()
 
-    async def send(self, msg: dict[str, Any]) -> None:
+    async def send(self, msg: WireMsg) -> None:
         if self.dead.is_set():
             raise ConnectionClosed(None, None)
-        await self.ws.send(json.dumps(msg))
+        await self.ws.send(msg if isinstance(msg, bytes) else json.dumps(msg))
 
     def start_keepalive(self, interval_s: float) -> None:
         self.stop_keepalive()
@@ -84,7 +93,7 @@ class _Conn:
         with contextlib.suppress(ConnectionClosed):
             while not self.dead.is_set():
                 await asyncio.sleep(interval_s)
-                await self.send({"event": "ping"})
+                await self.send(self._ping)
 
     async def close(self) -> None:
         self.stop_keepalive()
@@ -94,44 +103,81 @@ class _Conn:
             await self._reader
 
 
-class SarvamSTTStream:
-    """One utterance on a (possibly warm) socket."""
+class WarmSTTStream:
+    """One utterance on a (possibly warm) socket. Subclasses define the wire messages.
 
-    def __init__(self, stt: SarvamSTT, lang: str, endpointing: Endpointing) -> None:
+    `_pending` counts utterances the server has started but not finalised; end() waits
+    until it reaches zero (or the timeout), reconnecting and replaying the utterance's
+    audio if the socket dies on the way.
+    """
+
+    provider = "?"
+
+    def __init__(self, stt: WarmSTTPool, lang: str) -> None:
         self._stt = stt
         self._lang = lang
-        self._manual = endpointing == "manual"
-        self._conn: _Conn | None = None
+        self._conn: WarmSocket | None = None
         self._audio: list[bytes] = []
         self._finals: list[str] = []
-        self._pending = 0  # utterances started on the server but not finalised
+        self._pending = 0
         self._settled = asyncio.Event()
         self._partials: asyncio.Queue[str | None] = asyncio.Queue()
         self._ended = False
         self._closed = False
         self._recoveries = 0
-        self.eou_signal = asyncio.Event()  # set on Sarvam vad.speech_end (vad mode only)
+        self.eou_signal = asyncio.Event()  # vendor end-of-utterance hint, when it has one
 
-    async def _bind(self, conn: _Conn) -> None:
+    # -- wire hooks -----------------------------------------------------------------
+    def _final_per_stream(self) -> bool:
+        """True if exactly one settling final follows our end message."""
+        return True
+
+    def _start_msgs(self) -> list[WireMsg]:
+        return []
+
+    def _audio_msg(self, frame: bytes) -> WireMsg:
+        raise NotImplementedError
+
+    def _end_msgs(self) -> list[WireMsg]:
+        return []
+
+    def _on_message(self, msg: dict[str, Any]) -> None:
+        raise NotImplementedError
+
+    # -- shared machinery -----------------------------------------------------------
+    def _add_final(self, text: str, *, settles: bool = True) -> None:
+        text = text.strip()
+        if text:
+            self._finals.append(text)
+        if settles:
+            self._pending = max(0, self._pending - 1)
+            if self._pending == 0:
+                self._settled.set()
+
+    def _speech_started(self) -> None:
+        self._pending += 1
+        self._settled.clear()
+
+    async def _bind(self, conn: WarmSocket) -> None:
         conn.stop_keepalive()
         conn.sink = self
         self._conn = conn
         self._finals.clear()
-        if self._manual:
-            self._pending = 1
+        self._pending = 1 if self._final_per_stream() else 0
+        if self._pending:
             self._settled.clear()
-            await conn.send({"event": "speech_start"})
         else:
-            self._pending = 0
             self._settled.set()
+        for m in self._start_msgs():
+            await conn.send(m)
 
     async def push(self, frame: bytes) -> None:
         if self._ended or self._closed:
             return
         self._audio.append(frame)
-        await self._send({"event": "audio_input", "audio": base64.b64encode(frame).decode()})
+        await self._send(self._audio_msg(frame))
 
-    async def _send(self, msg: dict[str, Any]) -> None:
+    async def _send(self, msg: WireMsg) -> None:
         if self._conn is None:
             return  # broken: recovery already failed
         try:
@@ -148,25 +194,22 @@ class SarvamSTTStream:
             self._recoveries += 1
             log.warning(
                 "provider.error",
-                extra={"provider": "sarvam", "stage": "stt", "reconnecting": True},
+                extra={"provider": self.provider, "stage": "stt", "reconnecting": True},
             )
             try:
                 conn = await self._stt._connect(self._lang)
                 await self._bind(conn)
                 for frame in self._audio:
-                    await conn.send(
-                        {"event": "audio_input", "audio": base64.b64encode(frame).decode()}
-                    )
-                if self._ended and self._manual:
-                    await conn.send({"event": "speech_end"})
+                    await conn.send(self._audio_msg(frame))
+                if self._ended:
+                    for m in self._end_msgs():
+                        await conn.send(m)
                 return True
             except (ProviderError, ConnectionClosed):
-                if self._conn is not None:
-                    await self._conn.close()
-                    self._conn = None
+                await self._drop()
         log.error(
             "provider.error",
-            extra={"provider": "sarvam", "stage": "stt", "reconnecting": False},
+            extra={"provider": self.provider, "stage": "stt", "reconnecting": False},
         )
         return False
 
@@ -177,8 +220,8 @@ class SarvamSTTStream:
             return " ".join(self._finals)
         self._ended = True
         t0 = time.monotonic()
-        if self._manual:
-            await self._send({"event": "speech_end"})
+        for m in self._end_msgs():
+            await self._send(m)
         deadline = t0 + self._stt.final_timeout_s
         ok = False
         while self._conn is not None:
@@ -189,7 +232,7 @@ class SarvamSTTStream:
             dead = asyncio.ensure_future(self._conn.dead.wait())
             try:
                 await asyncio.wait(
-                    {settled, dead}, timeout=remaining, return_when="FIRST_COMPLETED"
+                    {settled, dead}, timeout=remaining, return_when=asyncio.FIRST_COMPLETED
                 )
             finally:
                 settled.cancel()
@@ -197,21 +240,24 @@ class SarvamSTTStream:
             if self._settled.is_set():
                 ok = True
                 break
-            if self._conn.dead.is_set():
-                if not await self._recover():
-                    break
-                continue
+            if self._conn.dead.is_set() and not await self._recover():
+                break
         text = " ".join(self._finals)
         if ok:
             log.info(
                 "stt.final",
-                extra={"provider": "sarvam", "latency_ms": int((time.monotonic() - t0) * 1000)},
+                extra={
+                    "provider": self.provider,
+                    "latency_ms": int((time.monotonic() - t0) * 1000),
+                },
             )
             conn, self._conn = self._conn, None
             if conn is not None:
                 self._stt._release(conn)
         else:
-            log.warning("stt.final_timeout after %.1fs", self._stt.final_timeout_s)
+            log.warning(
+                "stt.final_timeout after %.1fs (%s)", self._stt.final_timeout_s, self.provider
+            )
             await self._drop()
         self._partials.put_nowait(None)
         return text
@@ -239,20 +285,118 @@ class SarvamSTTStream:
         if conn is not None:
             await conn.close()
 
+
+class WarmSTTPool:
+    """Idle warm sockets per language, pinged while idle. Subclasses build the URL."""
+
+    name = "?"
+    _ping: dict[str, Any] = {}
+
+    def __init__(
+        self,
+        *,
+        headers: dict[str, str],
+        final_timeout_s: float,
+        connect_timeout_s: float,
+        keepalive_s: float,
+        pool_size: int,
+    ) -> None:
+        self._headers = headers
+        self.final_timeout_s = final_timeout_s
+        self._connect_timeout = connect_timeout_s
+        self._keepalive = keepalive_s
+        self._pool_size = pool_size
+        self._idle: dict[str, list[WarmSocket]] = {}
+
+    def _lang(self, lang: str) -> str:
+        return lang
+
+    def _url(self, lang: str) -> str:
+        raise NotImplementedError
+
+    def _new_stream(self, lang: str) -> WarmSTTStream:
+        raise NotImplementedError
+
+    async def _open(self, lang: str) -> WarmSTTStream:
+        lang = self._lang(lang)
+        stream = self._new_stream(lang)
+        conn = self._take_idle(lang) or await self._connect(lang)
+        try:
+            await stream._bind(conn)
+        except ConnectionClosed:
+            await conn.close()
+            await stream._bind(await self._connect(lang))
+        return stream
+
+    async def prewarm(self, lang: str) -> None:
+        """Open a socket ahead of speech so open() skips the 150-300 ms handshake."""
+        lang = self._lang(lang)
+        if not self._idle.get(lang):
+            self._release(await self._connect(lang))
+
+    def _take_idle(self, lang: str) -> WarmSocket | None:
+        pool = self._idle.get(lang, [])
+        while pool:
+            conn = pool.pop()
+            if not conn.dead.is_set():
+                return conn
+            asyncio.ensure_future(conn.close())
+        return None
+
+    async def _connect(self, lang: str) -> WarmSocket:
+        try:
+            ws = await connect(
+                self._url(lang),
+                additional_headers=self._headers,
+                open_timeout=self._connect_timeout,
+            )
+        except (OSError, InvalidHandshake, TimeoutError) as e:
+            raise ProviderError(f"{self.name} stt connect failed: {type(e).__name__}") from e
+        return WarmSocket(ws, lang, self._ping)
+
+    def _release(self, conn: WarmSocket) -> None:
+        conn.sink = None
+        pool = self._idle.setdefault(conn.lang, [])
+        if conn.dead.is_set() or len(pool) >= self._pool_size:
+            asyncio.ensure_future(conn.close())
+            return
+        conn.start_keepalive(self._keepalive)
+        pool.append(conn)
+
+    async def aclose(self) -> None:
+        for pool in self._idle.values():
+            for conn in pool:
+                await conn.close()
+        self._idle.clear()
+
+
+class SarvamSTTStream(WarmSTTStream):
+    provider = "sarvam"
+
+    def __init__(self, stt: WarmSTTPool, lang: str, endpointing: Endpointing) -> None:
+        super().__init__(stt, lang)
+        self._manual = endpointing == "manual"
+
+    def _final_per_stream(self) -> bool:
+        return self._manual
+
+    def _start_msgs(self) -> list[WireMsg]:
+        return [{"event": "speech_start"}] if self._manual else []
+
+    def _audio_msg(self, frame: bytes) -> WireMsg:
+        return {"event": "audio_input", "audio": base64.b64encode(frame).decode()}
+
+    def _end_msgs(self) -> list[WireMsg]:
+        return [{"event": "speech_end"}] if self._manual else []
+
     def _on_message(self, msg: dict[str, Any]) -> None:
         event = msg.get("event")
         if event == "transcript.partial":
             self._partials.put_nowait(str(msg.get("text", "")))
         elif event == "transcript.final":
-            text = str(msg.get("text", "")).strip()
-            if text:
-                self._finals.append(text)
-            self._pending = max(0, self._pending - 1)
-            if self._pending == 0:
-                self._settled.set()
+            self._add_final(str(msg.get("text", "")))
         elif event == "vad.speech_start":
-            self._pending += 1
-            self._settled.clear()
+            self._speech_started()
         elif event == "vad.speech_end":
             self.eou_signal.set()
         elif event == "error":
@@ -267,8 +411,9 @@ class SarvamSTTStream:
             )
 
 
-class SarvamSTT:
+class SarvamSTT(WarmSTTPool):
     name = "sarvam"
+    _ping = {"event": "ping"}
 
     def __init__(
         self,
@@ -284,45 +429,31 @@ class SarvamSTT:
         pool_size: int = 2,
         vad_silence_ms: int | None = None,
     ) -> None:
-        self._key = api_key
+        super().__init__(
+            headers={"api-subscription-key": api_key},
+            final_timeout_s=final_timeout_s,
+            connect_timeout_s=connect_timeout_s,
+            keepalive_s=keepalive_s,
+            pool_size=pool_size,
+        )
         self._base = base_url.rstrip("/")
         self._model = model
         self._endpointing: Endpointing = endpointing
         self._stream_type = stream_type
-        self.final_timeout_s = final_timeout_s
-        self._connect_timeout = connect_timeout_s
-        self._keepalive = keepalive_s
-        self._pool_size = pool_size
         self._vad_silence_ms = vad_silence_ms
-        self._idle: dict[str, list[_Conn]] = {}
 
     async def open(self, lang: str) -> SarvamSTTStream:
-        lang = _LANG_ALIASES.get(lang, lang)
-        stream = SarvamSTTStream(self, lang, self._endpointing)
-        conn = self._take_idle(lang) or await self._connect(lang)
-        try:
-            await stream._bind(conn)
-        except ConnectionClosed:
-            await conn.close()
-            await stream._bind(await self._connect(lang))
+        stream = await self._open(lang)
+        assert isinstance(stream, SarvamSTTStream)
         return stream
 
-    async def prewarm(self, lang: str) -> None:
-        """Open a socket ahead of speech so open() skips the 150-300 ms handshake."""
-        lang = _LANG_ALIASES.get(lang, lang)
-        if not self._idle.get(lang):
-            self._release(await self._connect(lang))
+    def _lang(self, lang: str) -> str:
+        return _LANG_ALIASES.get(lang, lang)
 
-    def _take_idle(self, lang: str) -> _Conn | None:
-        pool = self._idle.get(lang, [])
-        while pool:
-            conn = pool.pop()
-            if not conn.dead.is_set():
-                return conn
-            asyncio.ensure_future(conn.close())
-        return None
+    def _new_stream(self, lang: str) -> SarvamSTTStream:
+        return SarvamSTTStream(self, lang, self._endpointing)
 
-    def _query(self, lang: str) -> str:
+    def _url(self, lang: str) -> str:
         q: dict[str, Any] = {
             "language_code": lang,
             "model": self._model,
@@ -333,31 +464,4 @@ class SarvamSTT:
         }
         if self._endpointing == "vad" and self._vad_silence_ms is not None:
             q["silence_duration_ms"] = self._vad_silence_ms
-        return urlencode(q)
-
-    async def _connect(self, lang: str) -> _Conn:
-        url = f"{self._base}/speech-to-text-realtime/ws?{self._query(lang)}"
-        try:
-            ws = await connect(
-                url,
-                additional_headers={"api-subscription-key": self._key},
-                open_timeout=self._connect_timeout,
-            )
-        except (OSError, InvalidHandshake, TimeoutError) as e:
-            raise ProviderError(f"sarvam stt connect failed: {type(e).__name__}") from e
-        return _Conn(ws, lang)
-
-    def _release(self, conn: _Conn) -> None:
-        conn.sink = None
-        pool = self._idle.setdefault(conn.lang, [])
-        if conn.dead.is_set() or len(pool) >= self._pool_size:
-            asyncio.ensure_future(conn.close())
-            return
-        conn.start_keepalive(self._keepalive)
-        pool.append(conn)
-
-    async def aclose(self) -> None:
-        for pool in self._idle.values():
-            for conn in pool:
-                await conn.close()
-        self._idle.clear()
+        return f"{self._base}/speech-to-text-realtime/ws?{urlencode(q)}"
