@@ -1,6 +1,12 @@
 # Per language pair. A side's tts/voice_* is the voice its language is spoken in, so it is
-# used when that side is the TARGET. Voice ids are placeholders until the Day 2 listening
-# test (open question 3). stt: sarvam | deepgram | fake. tts: bulbul | eleven | fake.
+# used when that side is the TARGET. stt: sarvam | deepgram | fake. tts: bulbul | eleven | fake.
+# Voice ids may be placeholders or real vendor ids; both work. Placeholders resolve in code
+# (providers/sarvam_tts.py, providers/eleven_tts.py) to real voices that STILL NEED THE
+# LISTENING TEST (open question 3):
+#   *-male-1 / *-female-1 (bulbul) -> bulbul:shubh / bulbul:ishita (Bulbul v3)
+#   hi-male-1 / hi-female-1 (eleven) -> eleven:jjlrvsvJ1M0ZMRNgZuLO "Karan" /
+#                                       eleven:KYiVPerWcenyBTIvWbfY "Sia"
+# Placeholders are kept here because tests/test_foundation.py asserts them.
 
 hi-kn:
   a: { lang: hi-IN, stt: sarvam, tts: eleven, voice_m: "eleven:hi-male-1", voice_f: "eleven:hi-female-1" }
