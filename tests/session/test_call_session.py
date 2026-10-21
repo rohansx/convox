@@ -175,6 +175,32 @@ async def test_opening_line_failure_is_logged_and_interpreting_continues():
     assert legs["b"].outbound.count(EARCON) == 1
 
 
+async def test_opening_line_streams_to_the_leg_while_it_is_synthesised():
+    """Live: the whole opening was synthesised before the first byte went out, so callers
+    heard 1.8-2.8 s of dead air after connecting (Bulbul, a 13.8 s Kannada opening)."""
+    release = asyncio.Event()
+
+    class GatedTTS(FakeTTS):
+        async def synth(self, text, voice, lang):
+            yield b"\x01\x00" * 1600
+            await release.wait()
+            yield b"\x02\x00" * 1600
+
+    prov = providers(tts={"a": GatedTTS(), "b": GatedTTS()})
+    session, legs, clock, bus = make(prov=prov, opening_line=True)
+    await attach_both(session, legs)
+    for _ in range(50):
+        await asyncio.sleep(0)
+        if legs["a"].outbound and legs["b"].outbound:
+            break
+    assert legs["a"].outbound == b"\x01\x00" * 1600 and legs["b"].outbound == b"\x01\x00" * 1600
+    release.set()
+    for _ in range(50):
+        await asyncio.sleep(0)
+    assert legs["a"].outbound.endswith(b"\x02\x00" * 1600)
+    await session.hangup()
+
+
 async def test_partials_are_published():
     session, legs, clock, bus = make()
     await attach_both(session, legs)
