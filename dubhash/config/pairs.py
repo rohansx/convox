@@ -46,6 +46,8 @@ class PairConfig:
     # finalise STT after this much silence, before EOU, so MT/TTS overlap the EOU wait.
     # 0 = off (interp/early_final.py, open question L3)
     early_final_ms: int = 0
+    # end an utterance at the next pause once it has run this long (0 = off, L7)
+    max_utterance_ms: int = 7000
 
     def side(self, side: Side) -> SideConfig:
         return self.a if side == "a" else self.b
@@ -71,6 +73,7 @@ def load_pairs(path: Path) -> dict[str, PairConfig]:
             spec_mt=bool(cfg.get("spec_mt", False)),
             spec_after_ms=int(cfg.get("spec_after_ms", 200)),
             early_final_ms=int(cfg.get("early_final_ms", 0)),
+            max_utterance_ms=int(cfg.get("max_utterance_ms", 7000)),
         )
     return out
 
