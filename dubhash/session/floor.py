@@ -94,6 +94,8 @@ class FloorController:
         self._pb: _Playback | None = None
         self._bypass = False
         self._bg: set[asyncio.Task[Any]] = set()
+        self._speaking: set[Side] = set()
+        self._barge_since: int | None = None  # listener speech start during playback
 
     # --- public view ---------------------------------------------------------------------
 
@@ -156,12 +158,17 @@ class FloorController:
         async with self._lock:
             if self._bypass:
                 return
+            self._speaking.add(side)
             if self._state == "IDLE":
                 self._set_state(_speaking(side))
+            elif self._pb is not None and side == self._pb.listener:
+                self._barge_since = self._clock.now_ms()  # §2.1 rule 3: listener only
 
     async def on_speech_end(self, side: Side) -> None:
         async with self._lock:
-            pass
+            self._speaking.discard(side)
+            if self._pb is not None and side == self._pb.listener:
+                self._barge_since = None  # under barge_in_min_ms: never interrupts
 
     async def on_utterance_discarded(self, side: Side) -> None:
         """§2.1 rule 2: the floor holder's utterance produced no translation."""
@@ -186,6 +193,7 @@ class FloorController:
                 return  # stale (e.g. after a clear) or foreign
             await self._stop_task(pb)
             self._pb = None
+            self._barge_since = None
             self._end(pb.tr, clipped_ms=bytes_to_ms(pb.sent) if pb.failed else None)
             if not self._drain():
                 self._set_state("IDLE")
@@ -194,11 +202,53 @@ class FloorController:
         async with self._lock:
             self._publish("dtmf", {"side": side, "digit": digit})
 
+    async def on_barge_in(self, side: Side) -> None:
+        async with self._lock:
+            await self._barge_in(side)
+
     async def tick(self) -> None:
         async with self._lock:
-            pass
+            if self._bypass:
+                return
+            now = self._clock.now_ms()
+            pb = self._pb
+            if (
+                pb is not None
+                and self._barge_since is not None
+                and now - self._barge_since >= self.barge_in_min_ms
+            ):
+                await self._barge_in(pb.listener)
 
     # --- internals (call with the lock held) ---------------------------------------------
+
+    async def _barge_in(self, side: Side) -> None:
+        """Rule 4: the listener spoke past barge_in_min_ms. Clear, clip, take the floor."""
+        pb = self._pb
+        if self._bypass or pb is None or side != pb.listener:
+            return
+        clipped_ms = await self._cut(pb)
+        self._publish(
+            "barge_in",
+            {"side": side, "listener": side, "clipped_seq": pb.tr.seq, "clipped_ms": clipped_ms},
+        )
+        log.info("floor.barge_in", extra={"side": side, "clipped_ms": clipped_ms})
+        self._set_state(_speaking(side))
+
+    async def _cut(self, pb: _Playback) -> int:
+        """Stop playback, clear the listener leg and end the item as clipped.
+
+        clipped_ms approximates "ms played" by the bytes handed to the leg, read as 16 kHz
+        PCM16 (render output, earcon included). The transport may still have held some of
+        it in its buffer, so this is an upper bound on what the listener heard.
+        """
+        await self._stop_task(pb)
+        self._pb = None
+        self._barge_since = None
+        with contextlib.suppress(Exception):
+            await self._legs[pb.listener].clear()
+        clipped_ms = bytes_to_ms(pb.sent)
+        self._end(pb.tr, clipped_ms=clipped_ms)
+        return clipped_ms
 
     def _drain(self) -> bool:
         """Start the head of the queue if nothing is playing. True if something started."""
@@ -207,6 +257,8 @@ class FloorController:
         tr = self._queue.popleft()
         pb = _Playback(tr, other(tr.side))
         self._pb = pb
+        # a listener already talking when playback starts is talking over it
+        self._barge_since = self._clock.now_ms() if pb.listener in self._speaking else None
         self._set_state(_playing(tr.side))
         pb.task = self._spawn(self._play(pb))
         return True
