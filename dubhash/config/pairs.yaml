@@ -61,6 +61,18 @@ mr-hi:
   spec_mt: false
   spec_after_ms: 200
 
+# Stage demo (QR phones, /join): a Marathi speaker with an English one. Direct routes, not
+# measured yet; early_final off until it is.
+mr-en:
+  a: { lang: mr-IN, stt: sarvam, tts: bulbul, voice_m: "bulbul:mr-male-1", voice_f: "bulbul:mr-female-1" }
+  b: { lang: en-IN, stt: sarvam, tts: bulbul, voice_m: "bulbul:en-male-1", voice_f: "bulbul:en-female-1" }
+  eou_ms: 550
+  backchannel_max_ms: 600
+  barge_in_min_ms: 1200
+  duck_db: -14
+  spec_mt: false
+  spec_after_ms: 200
+
 # all-fake pair for tests and the day-2 FakeLeg pipeline
 fake-fake:
   a: { lang: hi-IN, stt: fake, tts: fake, voice_m: "fake:m", voice_f: "fake:f" }

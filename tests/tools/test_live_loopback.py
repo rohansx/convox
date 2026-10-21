@@ -120,3 +120,28 @@ def test_stages_unchanged_for_sequential_pipeline():
         "queue": 10,
         "first_audio": 1800,
     }
+
+
+async def test_join_path_uses_the_qr_token_sockets(server):
+    """--join: the call is started from the host page (POST /join) and both tabs connect
+    with the token from the QR URLs, like the stage phones."""
+    utts = ll.fake_utts(ll.script_for("mr-IN", "hi-IN")[:2])
+    opts = ll.Opts(
+        a_lang="mr-IN", b_lang="hi-IN", join=True, opening="skip", pause_ms=300,
+        quiet_ms=400, turn_timeout_s=6,
+    )  # fmt: skip
+    result = await ll.run_call(server, utts, opts)
+    assert result["status"] == "completed"
+    assert result["pair"] == "mr-hi"
+    assert all("&t=" in u for u in result["sockets"].values()), result["sockets"]
+    assert [r.side for r in result["rows"]] == ["a", "b"]
+    assert all(r.heard_ms is not None for r in result["rows"])
+
+
+def test_scripts_and_voices_follow_the_languages():
+    mr = ll.script_for("mr-IN", "hi-IN")
+    assert len(mr) >= 6 and mr[0].side == "a" and mr[1].side == "b"
+    assert ll.script_for("hi-IN", "kn-IN") == ll.SCRIPT
+    assert [ln.side for ln in ll.script_for("mr-IN", "en-IN")] == ["a", "b"] * 3
+    assert ll.voice_for("a", "mr-IN") == "bulbul:mr-male-1"
+    assert ll.voice_for("b", "hi-IN") == "bulbul:hi-female-1"

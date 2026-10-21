@@ -3,6 +3,8 @@
     STT_IMPL=real MT_IMPL=real TTS_IMPL=real uv run python tools/live_loopback.py
     STT_IMPL=real MT_IMPL=real TTS_IMPL=real uv run python tools/live_loopback.py \
         --pair hi-kn-direct
+    STT_IMPL=real MT_IMPL=real TTS_IMPL=real uv run python tools/live_loopback.py \
+        --join --a-lang mr-IN --b-lang hi-IN    # the stage QR path (token sockets)
     uv run python tools/live_loopback.py --fake          # all fakes, no network
 
 The app runs in-process (uvicorn on a free port, in a thread). The tool creates a loopback
@@ -32,10 +34,12 @@ import asyncio
 import base64
 import contextlib
 import hashlib
+import html
 import json
 import logging
 import math
 import os
+import re
 import socket
 import sys
 import threading
@@ -45,6 +49,7 @@ from collections.abc import Callable, Iterator
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
+from urllib.parse import parse_qs, urlparse
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
@@ -82,6 +87,42 @@ SCRIPT: tuple[Line, ...] = (
 )
 VOICES = {"a": "bulbul:hi-male-1", "b": "bulbul:kn-female-1"}
 
+# Stage demo pair (docs/plan/demo-script.md, "Stage demo"): the same delivery call with a
+# Marathi rider (A, male) and a Hindi customer (B, female). MARATHI LINES: NATIVE REVIEW.
+SCRIPT_MR_HI: tuple[Line, ...] = (
+    Line("a", "नमस्कार, मी डिलिव्हरी घेऊन आलो आहे. तुमचं घर कुठे आहे?", review=True),
+    Line("b", "हम सी ब्लॉक में हैं, तीसरी मंज़िल पर। लिफ़्ट बंद है।"),
+    Line("a", "ठीक आहे, मी जिन्याने वर येतो. दोन मिनिटं लागतील.", review=True),
+    Line("b", "ठीक है, सीढ़ियाँ बाईं तरफ़ हैं।"),
+    Line("a", "ऑर्डर देण्यासाठी मला ओटीपी सांगा.", review=True),
+    Line("b", "ओटीपी है चार सात दो नौ।"),
+)
+SCRIPT_MR_EN: tuple[Line, ...] = (
+    SCRIPT_MR_HI[0],
+    Line("b", "We are in C block, on the third floor. The lift is not working."),
+    SCRIPT_MR_HI[2],
+    Line("b", "Okay, the stairs are on the left."),
+    SCRIPT_MR_HI[4],
+    Line("b", "The OTP is four seven two nine."),
+)
+SCRIPTS: dict[tuple[str, str], tuple[Line, ...]] = {
+    ("hi-IN", "kn-IN"): SCRIPT,
+    ("mr-IN", "hi-IN"): SCRIPT_MR_HI,
+    ("mr-IN", "en-IN"): SCRIPT_MR_EN,
+}
+
+
+def script_for(a_lang: str, b_lang: str) -> tuple[Line, ...]:
+    try:
+        return SCRIPTS[(a_lang, b_lang)]
+    except KeyError:
+        raise SystemExit(f"no script for {a_lang} -> {b_lang}; have {list(SCRIPTS)}") from None
+
+
+def voice_for(side: str, lang: str) -> str:
+    """A speaks with a male voice, B with a female one, in the line's own language."""
+    return f"bulbul:{lang.split('-')[0]}-{'male' if side == 'a' else 'female'}-1"
+
 
 @dataclass
 class Utt:
@@ -100,6 +141,7 @@ class Opts:
     turn_timeout_s: float = 12.0
     opening: str = "play"  # "play": wait it out like a person; "skip": drop it once received
     opening_timeout_s: float = 20.0
+    join: bool = False  # start from the stage host page (POST /join), QR-token sockets
 
 
 # --- audio helpers ----------------------------------------------------------------------
@@ -362,20 +404,48 @@ class Server:
         return getattr(getattr(session, "clock", None), "_t0", None)
 
 
+async def _start_join(
+    srv: Server, http: httpx.AsyncClient, opts: Opts
+) -> tuple[str, dict[str, str]]:
+    """Start the call like the stage host page and read the QR URLs off it. Returns the
+    call id and each side's socket URL carrying that side's join token."""
+    if opts.pair:
+        raise SystemExit("--join picks the pair by languages (find_pair); drop --pair")
+    form = {"a_lang": opts.a_lang, "b_lang": opts.b_lang, "record": "true"}
+    r = await http.post("/join", data=form, headers=srv.headers_console)
+    if r.status_code != 303:
+        raise RuntimeError(f"POST /join: {r.status_code} {r.text[:200]}")
+    call_id = r.headers["location"].rsplit("/", 1)[1]
+    page = await http.get(r.headers["location"], headers=srv.headers_console)
+    page.raise_for_status()
+    found = re.findall(r'<figure class="qr" data-side="(\w)" data-url="([^"]+)"', page.text)
+    sockets = {}
+    for side, url in found:
+        token = parse_qs(urlparse(html.unescape(url)).query)["t"][0]
+        sockets[side] = f"{srv.ws_base}/ws/loopback?call={call_id}&side={side}&t={token}"
+    if set(sockets) != {"a", "b"}:
+        raise RuntimeError("host page did not show two QR codes")
+    return call_id, sockets
+
+
 async def run_call(srv: Server, utts: list[Utt], opts: Opts) -> dict[str, Any]:
     body: dict[str, Any] = {"a_lang": opts.a_lang, "b_lang": opts.b_lang, "record": True}
     if opts.pair:
         body["pair"] = opts.pair
     async with httpx.AsyncClient(base_url=srv.base, timeout=30) as http:
-        r = await http.post("/loopback/calls", json=body, headers=srv.headers_console)
-        r.raise_for_status()
-        call_id = r.json()["call_id"]
+        if opts.join:
+            call_id, sockets = await _start_join(srv, http, opts)
+        else:
+            r = await http.post("/loopback/calls", json=body, headers=srv.headers_console)
+            r.raise_for_status()
+            call_id = r.json()["call_id"]
+            url = f"{srv.ws_base}/ws/loopback?call={call_id}"
+            sockets = {"a": f"{url}&side=a", "b": f"{url}&side=b"}
         session_t0 = srv.session_t0(call_id)
 
-        url = f"{srv.ws_base}/ws/loopback?call={call_id}"
         async with (
-            websockets.connect(f"{url}&side=a", max_size=None) as wa,
-            websockets.connect(f"{url}&side=b", max_size=None) as wb,
+            websockets.connect(sockets["a"], max_size=None) as wa,
+            websockets.connect(sockets["b"], max_size=None) as wb,
         ):
             tabs = {"a": Tab("a", wa), "b": Tab("b", wb)}
             for side, ws in (("a", wa), ("b", wb)):
@@ -421,6 +491,7 @@ async def run_call(srv: Server, utts: list[Utt], opts: Opts) -> dict[str, Any]:
     return {
         "call_id": call_id,
         "pair": call.get("pair") or opts.pair,
+        "sockets": sockets,
         "status": call.get("status"),
         "opening": opening,
         "rows": rows,
@@ -556,7 +627,7 @@ def write_outputs(result: dict[str, Any], summary: dict[str, Any], out: Path) ->
     cid = result["call_id"]
     for side, pcm in result["rec"].items():
         write_wav(out / f"{cid}_{side}.wav", pcm)
-    doc = {k: v for k, v in result.items() if k not in ("rec", "rows")}
+    doc = {k: v for k, v in result.items() if k not in ("rec", "rows", "sockets")}
     doc["rows"] = [asdict(r) | {"stages": stages(r.server[0]) if r.server else None}
                    for r in result["rows"]]  # fmt: skip
     doc["summary"] = summary
@@ -624,7 +695,8 @@ async def synth_script(lines: tuple[Line, ...], langs: dict[str, str], out: Path
     tts: BulbulTTS | None = None
     try:
         for line in lines:
-            voice, lang = VOICES[line.side], langs[line.side]
+            lang = langs[line.side]
+            voice = VOICES[line.side] if lines is SCRIPT else voice_for(line.side, lang)
             h = hashlib.sha1(f"{voice}|{lang}|{line.text}".encode()).hexdigest()[:10]
             path = out / f"utt_{lang}_{h}.wav"
             if not path.exists():
@@ -671,7 +743,8 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--pair", default=None, help="pairs.yaml key (default: by languages)")
     p.add_argument("--a-lang", default="hi-IN")
     p.add_argument("--b-lang", default="kn-IN")
-    p.add_argument("--n", type=int, default=len(SCRIPT), help="script lines to play")
+    p.add_argument("--n", type=int, default=6, help="script lines to play")
+    p.add_argument("--join", action="store_true", help="stage path: POST /join, token sockets")
     p.add_argument("--fake", action="store_true", help="fake providers, fake utterances")
     p.add_argument("--out", type=Path, default=OUT)
     p.add_argument("--pause-ms", type=int, default=800)
@@ -681,8 +754,8 @@ def main(argv: list[str] | None = None) -> int:
     handler.setFormatter(logging.Formatter("%(relativeCreated)8.0f %(levelname)s %(message)s"))
     logging.getLogger("dubhash").addHandler(handler)
     logging.getLogger("dubhash").setLevel(a.log.upper())
-    lines = SCRIPT[: a.n]
-    opts = Opts(pair=a.pair, a_lang=a.a_lang, b_lang=a.b_lang, pause_ms=a.pause_ms)
+    lines = script_for(a.a_lang, a.b_lang)[: a.n]
+    opts = Opts(pair=a.pair, a_lang=a.a_lang, b_lang=a.b_lang, pause_ms=a.pause_ms, join=a.join)
     if a.fake:
         utts = fake_utts(lines)
         kw: dict[str, Any] = {"dubhash_env": "test"}

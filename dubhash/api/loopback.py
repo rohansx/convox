@@ -7,6 +7,8 @@
   GET  /loopback/new              tiny HTML form; POST /loopback/new creates a call and
                                   shows the two links (open one per tab or device)
   WS   /ws/loopback?call=&side=   the page's socket, wrapped in WebRtcLeg and attached
+                                  &t=<join token> (dubhash/join): a phone's auth; a bad
+                                  or foreign token closes with 4401
 
 Nothing is dialed and the no-answer rule does not apply (people need time to open tabs).
 Disabled (404) when ENABLE_WEBRTC_LEG is false. Behind the console's auth (off in test):
@@ -40,6 +42,7 @@ from dubhash.api.deps import get_session_factory, get_session_registry, require_
 from dubhash.api.legs_ws import (
     CLOSE_BAD_REQUEST,
     CLOSE_CONFLICT,
+    CLOSE_UNAUTHORIZED,
     CLOSE_UNKNOWN_CALL,
     close_ws,
     serve_leg,
@@ -52,6 +55,7 @@ from dubhash.api.schemas import (
 )
 from dubhash.config.pairs import PairConfig, find_pair
 from dubhash.config.settings import Settings
+from dubhash.join.tokens import verify_join_token
 from dubhash.legs.webrtc import WebRtcLeg
 
 PAGE = Path(__file__).resolve().parent.parent / "legs" / "static" / "loopback.html"
@@ -224,9 +228,12 @@ async def loopback_new_submit(
 async def loopback_socket(ws: WebSocket, sessions: Sessions, book: Book) -> None:
     call_id = ws.query_params.get("call") or ""
     side = ws.query_params.get("side")
+    token = ws.query_params.get("t")
     await ws.accept()
     if side not in ("a", "b"):
         return await close_ws(ws, CLOSE_BAD_REQUEST)
+    if token is not None and not verify_join_token(ws.app.state.settings, token, call_id, side):
+        return await close_ws(ws, CLOSE_UNAUTHORIZED)
     session = sessions.get(call_id) if call_id else None
     if session is None:
         return await close_ws(ws, CLOSE_UNKNOWN_CALL)

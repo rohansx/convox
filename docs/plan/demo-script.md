@@ -63,6 +63,37 @@ sequenceDiagram
     D-->>C: SSE turns + latency
 ```
 
+## Stage demo (no telephony)
+
+Two people use their own phones' browsers. Nothing is dialled, so this works whatever Exotel decides. The laptop on the projector shows two QR codes, each person scans one, and the call is interpreted through the same CallSession, floor controller and mixer as a phone call. Only the leg is different (`WebRtcLeg`, websocket PCM).
+
+**Setup (once, 30 minutes before the slot)**
+
+1. Run the app on the VM or the laptop, and expose it over **https**. Phones block the microphone on plain http (only localhost is exempt). Set `PUBLIC_BASE_URL` to the https host (the cloudflared tunnel or the VM's domain). The QR codes always encode `PUBLIC_BASE_URL`, not the address the laptop used, so the laptop can stay on `localhost`.
+2. On the laptop, open `https://<host>/join` (console password). Pick the pair and press **Start call**. Offered pairs are the ones `config/pairs.yaml` resolves: मराठी ⇄ हिन्दी, मराठी ⇄ English, हिन्दी ⇄ ಕನ್ನಡ, हिन्दी ⇄ தமிழ்.
+3. Each person scans the QR code under their own language and taps **Tap to start**. The tap is needed: iOS and Android unlock the microphone and audio only from a tap. Allow the microphone. The badge under each code turns to **joined**, both phones hear the opening line, and the codes shrink so the transcript gets the screen.
+4. Phones: volume up, screen on (the page asks for a wake lock where the browser supports it), not on silent. Hold the phone like a walkie-talkie, about 20 cm away. The two phones should be a few metres apart, or the second phone's mic hears the first phone's speaker.
+5. The join links work for 2 hours, and only for that call and that side. When either phone leaves (red **Leave call**, a reload or a locked screen), the call ends for both. Press **Start again** on the laptop, which makes new codes, and scan again.
+
+**What to say (step 2 of the 3-minute script, 70 s)**
+
+- "Two phones, two languages, no app: scan and talk." Ask the two people to scan while you say it (about 10 s).
+- "She speaks Marathi, he speaks Hindi (or English). Each one hears the other in their own language, about two seconds later, after a short tone." Prompt short sentences.
+- While they talk, point at the laptop: each turn appears in both columns with its latency, and the badge shows who holds the floor.
+- Close: "On a phone call this is the same server. Only the leg changes: Exotel streams the call audio to us instead of a browser."
+
+**Measured (live, scripted phones through the token sockets, 21 Oct, open question L4):** first-audio p50/p95 **1634 / 1730 ms** for मराठी ⇄ English, and **2283 / 2424 ms** for मराठी ⇄ हिन्दी. MT makes the difference (705 ms against 1375 ms at p50). **If the Hindi speaker also speaks English, use मराठी ⇄ English on stage.**
+
+**Fallback order for the live call**
+
+1. PSTN through Exotel (the main script above).
+2. PSTN through Plivo.
+3. **This stage demo** on the venue Wi-Fi or a phone hotspot.
+4. The same stage demo with **both phones' pages opened on the laptop** if a phone refuses the mic: open each QR's URL (printed under the code) in two browser tabs with a headset.
+5. The backup video.
+
+Known limits: phones do not barge in. While a phone plays a translation it sends silence (so its own speaker is not heard as speech), and `?duplex=1` on the phone URL turns that off. iOS can route audio quietly while the mic is open, so turn the volume all the way up. The loopback socket still accepts connections with no token (dev tools use that). Only a token that is present is checked.
+
 ## Fallback plans
 
 Decide on the fallback before going on stage, using the live-check result from 30 minutes before the slot. Do not decide mid-demo.
@@ -70,7 +101,7 @@ Decide on the fallback before going on stage, using the live-check result from 3
 | Failure | Detect | Fallback | Script change |
 |---|---|---|---|
 | **Exotel voicebot access never landed, or Exotel down on the day** | No applet by D4, or live-check call fails | **Plivo audio streaming** legs (same `LegTransport`, provider switched in config / `"provider": "plivo"`) | None on stage; step 4 still shows the Exotel applet config ("this is the Exotel flow; today's call ran on Plivo, same interface") |
-| **Both Exotel and Plivo unavailable** | Live-check fails on both | **WebRTC browser legs** (`WebRtcLeg`): two phones open the browser leg page, with the Exotel applet config on screen | Step 2 says "browser legs today; on PSTN this is the Exotel number". Show PSTN latency numbers from the turn log of earlier real calls |
+| **Both Exotel and Plivo unavailable** | Live-check fails on both | **Stage demo** (`/join`, see [Stage demo (no telephony)](#stage-demo-no-telephony)): two phones scan QR codes and join a browser-leg call, with the Exotel applet config on screen | Step 2 says "browser legs today; on PSTN this is the Exotel number". Show PSTN latency numbers from the turn log of earlier real calls |
 | **One vendor (STT, MT or TTS) down or rate-limited** | Provider errors in console | Switch the provider in `pairs.yaml` (Deepgram for an en/Hinglish leg; ElevenLabs ⇄ Bulbul for the target) and restart | None |
 | **Judge's language not supported** | Asked before dialling | Teammate with Kannada or Tamil takes phone A; judge listens on the speakers | "We only demo pairs we have measured." |
 | **Call connects but quality is bad (8k, noise)** | First turn misheard | Continue for 2 turns, then DTMF 1 to replay; if still bad, switch to the backup video | Mention honestly: "8 kHz phone audio; this is why we publish numbers on real PSTN" |
