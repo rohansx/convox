@@ -144,3 +144,25 @@ def test_works_without_writer_or_bus():
     log = TurnLog("c_x", providers=providers(), clock=FakeClock())
     log.on_played(tr("a", 0, **TIMES))
     assert len(log.turns) == 1
+
+
+def test_interpreter_flags_are_kept_beside_the_turn():
+    """L10: phrase/cache/number flags and stt_open_ms are not `turns` columns; they ride
+    on the turn event and in TurnLog.flags (GET /v1/calls/{id}/turns shows them)."""
+    log, bus, _ = make()
+    flags = {"phrase_hit": 1, "ack": 1, "mt_cache_hit": 1, "tts_cache_hit": 1, "stt_open_ms": 3}
+    t = log.on_played(tr("a", 0, **TIMES, **flags))
+    assert log.flags[t.seq] == flags
+    (ev,) = bus.kinds("turn")
+    assert ev.payload["flags"] == flags
+    b = log.on_backchannel("b", src_text="haan")
+    assert log.flags.get(b.seq) is None
+
+
+def test_turns_endpoint_shows_the_flags():
+    from dubhash.api.calls import turn_json
+
+    log, _, _ = make()
+    t = log.on_played(tr("a", 0, **TIMES, phrase_hit=1))
+    assert turn_json(t, False, log.flags.get(t.seq))["flags"] == {"phrase_hit": 1}
+    assert "flags" not in turn_json(t, False)

@@ -81,6 +81,7 @@ EventKind = Literal[
     "crosstalk",  # {side, reason: level|lang|echo, stage: frame|eou}: speech dropped
     "prompt_cut",  # {side, tag, sent_ms}: a translation cut the opening line short (L7)
     "lang",  # {side, lang, state, confidence, source[, menu]}: lang "auto" (language.py)
+    "number_fix",  # {side, missing, replaced, appended}: the number read-back changed MT (L10)
 ]
 
 

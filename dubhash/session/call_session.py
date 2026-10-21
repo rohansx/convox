@@ -37,6 +37,19 @@ it. At STT end() the gate judges the whole utterance; cross-talk returns an empt
 without waiting for the vendor (the stream settles in the background, keeping its socket
 warm), so the interpreter discards it. On co-located calls a final whose detected language
 is the other side's is discarded too. Each decision is published as a "crosstalk" event.
+
+Phrases (L10): with a `vertical`, the call's phrase pack (config/phrases/<vertical>.yaml) is
+prefilled into the MT and TTS caches in the background from call creation
+(session/prefill.py, at providers.prefill_rps, pausing while a turn is in flight), and the
+interpreters match finals against it. An ack counts as a turn only if, at its speech start,
+nothing was playing or queued, the floor was free (or already the speaker's) and the other
+side had no utterance in flight; otherwise it stays a backchannel. With the pack's
+numbers_readback, every translation goes through the number read-back
+(interp/numbers.py); a change is published as a "number_fix" event.
+
+Next-turn prewarm (L10): when a translation starts playing to a leg, that leg is likely to
+answer, so its STT socket (in its language) and the TTS socket that will voice its reply
+(the speaker's side) are prewarmed in the background.
 """
 
 from __future__ import annotations
@@ -59,6 +72,8 @@ from dubhash.config.pairs import PairConfig, SideConfig, default_side, effective
 from dubhash.events import EventBus
 from dubhash.interp.contracts import STT, VAD, STTStream
 from dubhash.interp.langid import LangGuess
+from dubhash.interp.numbers import readback as number_readback
+from dubhash.interp.phrases import load_pack
 from dubhash.interp.pipeline import BACKCHANNEL_MAX_WORDS, Interpreter
 from dubhash.legs.base import LegTransport
 from dubhash.session.crosstalk import CrosstalkGate, Verdict
@@ -71,6 +86,7 @@ from dubhash.session.language import (
     LangUpdate,
     indic_share,
 )
+from dubhash.session.prefill import PrefillStats, prefill_phrases
 from dubhash.session.prompts import (
     auto_opening_text,
     language_menu_text,
@@ -489,6 +505,8 @@ class CallSession:
         co_located: bool = False,
         duck_original: bool | None = None,
         auto: AutoLang | None = None,
+        vertical: str | None = None,
+        next_turn_prewarm: bool = True,
     ) -> None:
         """co_located: both phones are in one room (/join, loopback), so each mic also
         hears the other speaker: the cross-talk gate is on, and by default the listener
@@ -526,6 +544,10 @@ class CallSession:
         self.end_reason: str | None = None
 
         self.gate = CrosstalkGate(co_located=co_located)
+        self.vertical = vertical
+        self.phrases = load_pack(vertical) if vertical else None
+        self.next_turn_prewarm = next_turn_prewarm
+        readback = self.phrases is not None and self.phrases.numbers_readback
         self.turn_log = TurnLog(
             call_id, providers=providers, clock=self.clock, bus=bus, writer=writer, record=record
         )
@@ -571,6 +593,9 @@ class CallSession:
                     self._sink.vads[s],  # type: ignore[arg-type]
                     self.clock,
                     self._sink,
+                    phrases=self.phrases,
+                    ack_ok=functools.partial(self._ack_ok, s),
+                    readback=functools.partial(self._readback, s) if readback else None,
                 )
         if self.resolvers:
             self._retarget()
@@ -588,6 +613,9 @@ class CallSession:
         self._t_end: int | None = None
         self._t_bypass: int | None = None
         self.prewarm_task: asyncio.Task[None] | None = None
+        self.prefill_task: asyncio.Task[PrefillStats] | None = None
+        self.prefill_stats = PrefillStats()
+        self._warm_next: set[asyncio.Task[Any]] = set()
 
     def start_prewarm(self) -> None:
         """Open the provider sockets now (call creation), in the background, so the first
@@ -602,6 +630,21 @@ class CallSession:
                     {s: self._stt_lang(s) for s in self.resolvers} or None,
                 ),
                 name=f"{self.call_id}-prewarm",
+            )
+        if self.phrases is not None and self.prefill_task is None and self.providers.prefill_rps:
+            self.prefill_task = asyncio.get_running_loop().create_task(
+                prefill_phrases(
+                    self.phrases,
+                    self.pair,
+                    self.providers,
+                    clock=self.clock,
+                    rps=self.providers.prefill_rps,
+                    busy=lambda: self.status == "active" and not self.idle,
+                    readback=self._prefill_readback if self.phrases.numbers_readback else None,
+                    stats=self.prefill_stats,
+                    call_id=self.call_id,
+                ),
+                name=f"{self.call_id}-prefill",
             )
 
     # --- public API ------------------------------------------------------------------------
@@ -846,11 +889,13 @@ class CallSession:
             )
 
     async def _stop_prewarm(self) -> None:
-        task, self.prewarm_task = self.prewarm_task, None
-        if task is not None and not task.done():
-            task.cancel()
-            with contextlib.suppress(BaseException):
-                await task
+        tasks = [self.prewarm_task, self.prefill_task, *self._warm_next]
+        self.prewarm_task = None
+        for task in tasks:
+            if task is not None and not task.done():
+                task.cancel()
+                with contextlib.suppress(BaseException):
+                    await task
 
     async def _aclose_providers(self) -> None:
         p = self.providers
@@ -874,6 +919,8 @@ class CallSession:
     # --- audio -----------------------------------------------------------------------------
 
     def _render(self, tr: Translation) -> AsyncIterator[bytes]:
+        if self.next_turn_prewarm and self.status == "active":
+            self._prewarm_next(other(tr.side), tr.side)
         source = tr.source_audio if self.duck_original else b""
         frames = self._render_partial(tr.audio, source_audio=source)
         return self._echo_tap(other(tr.side), frames)
@@ -895,6 +942,60 @@ class CallSession:
             if aclose is not None:
                 with contextlib.suppress(Exception):
                     await aclose()
+
+    def _prewarm_next(self, listener: Side, speaker: Side) -> None:
+        """The listener will likely answer: open its STT socket and the TTS socket for its
+        reply's voice (the speaker's language) now, while it listens (L10)."""
+        jobs: list[Any] = []
+        stt_warm = getattr(self.providers.stt[listener], "prewarm", None)
+        if stt_warm is not None:
+            jobs.append(stt_warm(self.pair.side(listener).lang))
+        tts_warm = getattr(self.providers.tts[speaker], "prewarm", None)
+        if tts_warm is not None:
+            interp = self.interpreters.get(listener)
+            gender = interp.gender if interp is not None else None
+            jobs.append(tts_warm(self.pair.side(speaker).voice(gender or "f")))
+        if not jobs:
+            return
+
+        async def run() -> None:
+            res = await asyncio.gather(*jobs, return_exceptions=True)
+            for r in res:
+                if isinstance(r, BaseException):
+                    log.warning(
+                        "provider.prewarm_failed",
+                        extra={"call_id": self.call_id, "stage": "next_turn", "error": repr(r)},
+                    )
+
+        task = asyncio.get_running_loop().create_task(run(), name=f"{self.call_id}-warm-next")
+        self._warm_next.add(task)
+        task.add_done_callback(self._warm_next.discard)
+
+    def _ack_ok(self, side: Side) -> bool:
+        """At an utterance's speech start: may a short ack from `side` be a real turn?"""
+        f = self.floor
+        return (
+            f.state in ("IDLE", "A_SPEAKING" if side == "a" else "B_SPEAKING")
+            and f.playing is None
+            and not f.queue
+            and not self._sink.utts[other(side)]
+        )
+
+    def _readback(self, side: Side, src: str, tgt: str) -> str:
+        fixed, fix = number_readback(src, tgt, self.pair.side(other(side)).lang)
+        if fix is not None:
+            payload = {
+                "side": side,
+                "missing": len(fix.missing),
+                "replaced": fix.replaced,
+                "appended": fix.appended,
+            }
+            log.info("interp.number_fix", extra={"call_id": self.call_id, **payload})
+            self._publish("number_fix", payload)
+        return fixed
+
+    def _prefill_readback(self, side: Side, src: str, tgt: str) -> str:
+        return number_readback(src, tgt, self.pair.side(other(side)).lang)[0]
 
     def _on_played(self, tr: Translation) -> None:
         self.gate.playback_end(other(tr.side), self.clock.now_ms())

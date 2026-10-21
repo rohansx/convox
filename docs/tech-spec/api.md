@@ -77,6 +77,7 @@ Content-Type: application/json
 | `escape_dtmf` | string, one digit | no | `"0"` | digit that switches to bypass (plain bridge) for the rest of the call |
 | `webhook` | URL | no | none | where dubhash POSTs `call.started`, `turn`, `call.ended` |
 | `record` | boolean | no | `false` | if `true`, `src_text`/`tgt_text` are retained. Otherwise they are nulled after metrics are computed. See [data model](data-model.md#text-retention) |
+| `vertical` | `"delivery"` \| `"clinic"` (a file in `config/phrases/`) | no | `delivery` | the phrase pack the call prefills into its MT and TTS caches and matches acks against ([configuration](configuration.md#configphrasesverticalyaml-phrase-packs-l10), [L10](../plan/open-questions.md#answer-log)). Also accepted by `POST /loopback/calls` and the `/join` form. Unknown → `400 invalid_body` |
 
 The language pair `{a.lang[:2]}-{b.lang[:2]}` (e.g. `hi-kn`) must exist in `config/pairs.yaml`, in either orientation. See [configuration](configuration.md).
 

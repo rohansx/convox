@@ -1,0 +1,55 @@
+# Delivery phrase pack (L10): short lines a rider and a customer repeat. Per call the session
+# prefills the MT and TTS caches with the canonical (first) text in the language each side's
+# STT outputs: English on the pivot sides (stt: sarvam-translate), else the side's own
+# language. A final that matches a line after normalisation (interp/phrases.py) is served
+# from those caches; acks ("ack: true") on an idle floor become real turns.
+#
+# TODO(native review): every hi, mr, gu, kn and ta text below was written by us and needs
+# a native speaker's check (spelling as STT writes it, register, gender: the rider lines
+# are in the masculine). The texts are SOURCE lines only; translations always come from MT.
+# Extra texts on a line are other spellings of the same words (romanised, contractions,
+# digits), never synonyms: a match is voiced as the line's first text.
+vertical: delivery
+numbers_readback: true  # a number in a turn must survive translation (interp/numbers.py)
+native_review_todo: [hi, mr, gu, kn, ta]
+lines:
+  - {id: ok, ack: true, en: [Okay], hi: [ठीक है, theek hai], mr: [ठीक आहे, theek aahe], gu: [સારું], kn: [ಸರಿ, sari], ta: [சரி]}
+  - {id: yes, ack: true, en: [Yes], hi: [हाँ, haan], mr: [हो, ho], gu: [હા], kn: [ಹೌದು], ta: [ஆமாம்]}
+  - {id: no, ack: true, en: ["No"], hi: [नहीं, nahi], mr: [नाही], gu: [ના], kn: [ಇಲ್ಲ], ta: [இல்லை]}
+  - {id: yes_sir, ack: true, en: [Yes sir], hi: [हाँ जी, haan ji], mr: [हो सर], gu: [હા સાહેબ]}
+  - {id: thanks, ack: true, en: [Thank you], hi: [धन्यवाद], mr: [धन्यवाद], gu: [આભાર]}
+  - {id: hello, ack: true, en: [Hello], hi: [हैलो, hello], mr: [हॅलो], gu: [હેલો]}
+  - {id: bye, ack: true, en: ["Okay, bye"], hi: [ठीक है बाय], mr: [ठीक आहे बाय], gu: [સારું બાય]}
+  - {id: sorry, ack: true, en: [Sorry], hi: [सॉरी], mr: [सॉरी], gu: [સોરી]}
+  - {id: one_min, en: [One minute], hi: [एक मिनट, ek minute], mr: [एक मिनिट], gu: [એક મિનિટ]}
+  - {id: two_min, en: [2 minutes, Two minutes], hi: [2 मिनट, do minute], mr: [2 मिनिटं], gu: [2 મિનિટ]}
+  - {id: five_min, en: [5 minutes, Five minutes], hi: [5 मिनट], mr: [5 मिनिटं], gu: [5 મિનિટ]}
+  - {id: coming, en: [I am coming, "I'm coming"], hi: [आ रहा हूँ], mr: [येतोय], gu: [આવું છું]}
+  - {id: at_gate, en: [I am outside the main gate, "I'm outside the main gate"], hi: [मैं मेन गेट के बाहर हूँ, main gate ke bahar hoon], mr: [मी मेन गेटच्या बाहेर आहे], gu: [હું મેન ગેટની બહાર છું]}
+  - {id: reached, en: [I have reached, "I've reached"], hi: [मैं पहुँच गया हूँ], mr: [मी पोहोचलो आहे], gu: [હું પહોંચી ગયો છું]}
+  - {id: tell_otp, en: [Tell me the OTP], hi: [OTP बताइए, OTP batao], mr: [OTP सांगा], gu: [OTP કહો]}
+  - {id: what_otp, en: ["What is the OTP?"], hi: ["OTP क्या है?"], mr: ["OTP काय आहे?"], gu: ["OTP શું છે?"]}
+  - {id: lift_broken, en: [The lift is not working], hi: [लिफ्ट काम नहीं कर रही, lift kaam nahi kar rahi], mr: [लिफ्ट चालू नाही], gu: [લિફ્ટ ચાલતી નથી]}
+  - {id: which_floor, en: ["Which floor?"], hi: ["कौन सी मंज़िल?"], mr: ["कितवा मजला?"], gu: ["કયો માળ?"]}
+  - {id: which_building, en: ["Which building?"], hi: ["कौन सी बिल्डिंग?"], mr: ["कोणती बिल्डिंग?"], gu: ["કઈ બિલ્ડિંગ?"]}
+  - {id: come_up, en: [Please come upstairs], hi: [ऊपर आ जाइए], mr: [वर या], gu: [ઉપર આવો]}
+  - {id: coming_down, en: [I am coming down, "I'm coming down"], hi: [मैं नीचे आ रहा हूँ], mr: [मी खाली येतोय], gu: [હું નીચે આવું છું]}
+  - {id: leave_door, en: [Leave it at the door], hi: [दरवाज़े पर रख दीजिए], mr: [दारात ठेवा], gu: [દરવાજે મૂકી દો]}
+  - {id: security, en: [Leave it with the security guard], hi: [सिक्योरिटी के पास छोड़ दीजिए], mr: [सिक्युरिटीकडे ठेवा], gu: [સિક્યુરિટી પાસે મૂકી દો]}
+  - {id: call_again, en: [Please call again], hi: [फिर से कॉल कीजिए], mr: [परत कॉल करा], gu: [ફરી ફોન કરો]}
+  - {id: cant_hear, en: ["I can't hear you"], hi: [आवाज़ नहीं आ रही], mr: [आवाज येत नाहीये], gu: [અવાજ નથી આવતો]}
+  - {id: speak_louder, en: [Please speak louder], hi: [ज़ोर से बोलिए], mr: [मोठ्याने बोला], gu: [જોરથી બોલો]}
+  - {id: wait, en: [Please wait], hi: [रुकिए], mr: [थांबा], gu: [રાહ જુઓ]}
+  - {id: cod, en: [Cash on delivery], hi: [कैश ऑन डिलीवरी], mr: [कॅश ऑन डिलिव्हरी], gu: [કેશ ઓન ડિલિવરી]}
+  - {id: paid, en: [It is already paid online], hi: [ऑनलाइन पेमेंट हो गया है], mr: [ऑनलाइन पेमेंट झालं आहे], gu: [ઓનલાઇન પેમેન્ટ થઈ ગયું છે]}
+  - {id: change, en: ["Do you have change?"], hi: ["छुट्टे हैं?"], mr: ["सुट्टे आहेत का?"], gu: ["છુટ્ટા છે?"]}
+  - {id: upi, en: ["Can I pay by UPI?"], hi: ["UPI से दे सकते हैं?"], mr: ["UPI ने देऊ शकतो का?"], gu: ["UPI થી આપી શકું?"]}
+  - {id: location, en: [Please send your location], hi: [लोकेशन भेजिए], mr: [लोकेशन पाठवा], gu: [લોકેશન મોકલો]}
+  - {id: not_home, en: [I am not at home, "I'm not at home"], hi: [मैं घर पर नहीं हूँ], mr: [मी घरी नाही], gu: [હું ઘરે નથી]}
+  - {id: tomorrow, en: [Come tomorrow], hi: [कल आइए], mr: [उद्या या], gu: [કાલે આવજો]}
+  - {id: parcel_here, en: [Your parcel is here], hi: [आपका पार्सल आ गया है], mr: [तुमचं पार्सल आलं आहे], gu: [તમારું પાર્સલ આવી ગયું છે]}
+  - {id: wrong_address, en: [The address is wrong], hi: [पता गलत है], mr: [पत्ता चुकीचा आहे], gu: [સરનામું ખોટું છે]}
+  - {id: landmark, en: ["What is the landmark?"], hi: ["लैंडमार्क क्या है?"], mr: ["लँडमार्क काय आहे?"], gu: ["લેન્ડમાર્ક શું છે?"]}
+  - {id: stairs, en: [Take the stairs], hi: [सीढ़ियों से आइए], mr: [जिन्याने या], gu: [દાદરથી આવો]}
+  - {id: left, en: [On the left side], hi: [बाईं तरफ़], mr: [डावीकडे], gu: [ડાબી બાજુ]}
+  - {id: right, en: [On the right side], hi: [दाईं तरफ़], mr: [उजवीकडे], gu: [જમણી બાજુ]}

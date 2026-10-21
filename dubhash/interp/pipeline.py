@@ -43,6 +43,17 @@ translation always covers the complete utterance.
 - timings gain early_final_used (0/1), early_final_restarts (count) and, when used,
   t_early_final (when end() was sent; t_stt_final may then precede t_eou). With
   early_final_ms = 0 the timings are exactly as before.
+
+Phrases (L10, interp/phrases.py; set by the session from the call's vertical): each final
+is matched, exactly after normalisation, against the pack's lines in the language the STT
+outputs (mt_lang). A match is translated (and voiced) as the line's canonical text, so a
+prefilled MT and TTS cache serve it with no vendor call. Instant acknowledgements: a short
+final (the backchannel rule) that matches the pack is a real turn, not a backchannel, when
+ack_ok() said the floor was free at the utterance's speech start (no playback, nobody else
+holding it); otherwise it is discarded as before. readback(src, tgt) runs on every MT
+result (the number read-back, interp/numbers.py). timings gain stt_open_ms always, and
+phrase_hit / ack (with a pack), mt_cache_hit / tts_cache_hit (cache-wrapped providers)
+and number_fix (with readback), as 0/1.
 """
 
 from __future__ import annotations
@@ -51,7 +62,7 @@ import asyncio
 import contextlib
 import inspect
 import logging
-from collections.abc import AsyncIterator, Awaitable
+from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import Any, Literal, Protocol, runtime_checkable
 
@@ -60,6 +71,7 @@ from dubhash.config.pairs import PairConfig
 from dubhash.interp.contracts import MT, STT, TTS, VAD, STTStream
 from dubhash.interp.endpoint import Discard, Endpointer, EndpointEvent, SpeechStart, Utterance
 from dubhash.interp.gender import detect_gender
+from dubhash.interp.phrases import PhrasePack
 from dubhash.interp.speculate import SpecOutcome, Speculator
 from dubhash.types import Side, Translation, other
 
@@ -128,6 +140,7 @@ class _Ready:
     rest: AsyncIterator[bytes]
     spec: SpecOutcome
     spec_eligible: bool
+    extra: dict[str, int] = field(default_factory=dict)  # phrase/cache/number flags
 
 
 @dataclass(slots=True, eq=False)
@@ -141,6 +154,7 @@ class _Job:
     task: asyncio.Task[None] | None = None
     spec: Speculator | None = None
     early_pending: bool = False  # an early final was requested and speech has not resumed
+    ack_ok: bool = False  # the floor was free at speech start: an ack may be a turn (L10)
 
 
 class Interpreter:
@@ -156,6 +170,10 @@ class Interpreter:
         clock: Clock,
         sink: InterpreterSink,
         gender: Gender | None = None,
+        *,
+        phrases: PhrasePack | None = None,
+        ack_ok: Callable[[], bool] | None = None,
+        readback: Callable[[str, str], str] | None = None,
     ) -> None:
         self.call_id = call_id
         self.side = side
@@ -167,6 +185,9 @@ class Interpreter:
         self.clock = clock
         self.sink = sink
         self.gender: Gender | None = gender
+        self.phrases = phrases
+        self.ack_ok = ack_ok
+        self.readback = readback
         self.src_lang = pair.side(side).lang
         self.tgt = pair.side(other(side))
         # The STT already outputs the target language (e.g. Marathi speech -> English final
@@ -278,6 +299,7 @@ class Interpreter:
         for ev in events:
             if isinstance(ev, SpeechStart):
                 job = _Job(t_speech_start=ev.t, prev=self._last_done)
+                job.ack_ok = self.ack_ok is not None and self.ack_ok()  # before the floor hears
                 if self.pair.spec_mt and not self.mt_skip:
                     job.spec = Speculator(
                         self._translate,
@@ -325,7 +347,9 @@ class Interpreter:
         tr: Translation | None = None
         try:
             try:
+                t_open = self.clock.now_ms()
                 stream = await self.stt.open(self.src_lang)
+                stt_open_ms = self.clock.now_ms() - t_open
                 pump = asyncio.create_task(self._pump_partials(stream, job))
                 while (item := await job.queue.get()) is not None:
                     if isinstance(item, bytes):
@@ -380,6 +404,8 @@ class Interpreter:
                     "t_tts_ttfb": ready.t_tts_ttfb,
                     "spec_hit": int(ready.spec.hit),
                     "spec_used": int(ready.spec.text is not None),
+                    "stt_open_ms": stt_open_ms,
+                    **ready.extra,
                 }
                 if early_on:
                     if from_early:
@@ -486,21 +512,38 @@ class Interpreter:
     ) -> _Ready:
         """STT final -> MT -> TTS first chunk. Raises _Discarded for empty/backchannel."""
         words = len(final.split())
-        if not final or (short and words <= BACKCHANNEL_MAX_WORDS):
+        if not final:
             raise _Discarded
+        src_lang = self.pair.side(self.side).mt_lang
+        match = self.phrases.match(final, src_lang) if self.phrases is not None else None
+        ack = short and words <= BACKCHANNEL_MAX_WORDS
+        if ack and not (match is not None and job.ack_ok):
+            raise _Discarded
+        extra: dict[str, int] = {}
+        if self.phrases is not None:
+            extra["phrase_hit"], extra["ack"] = int(match is not None), int(ack)
+        text = match.text if match is not None else final  # the line's canonical form
 
         if self.mt_skip:
-            spec, tgt_text, t_mt = SpecOutcome(None, False), final, t_stt_final
+            spec, tgt_text, t_mt = SpecOutcome(None, False), text, t_stt_final
         else:
             stage.name, stage.provider = "mt", self.mt.name
+            if (has := getattr(self.mt, "has", None)) is not None:
+                extra["mt_cache_hit"] = int(has(text, src_lang, self.tgt.lang))
             spec = await job.spec.take(final) if job.spec else SpecOutcome(None, False)
-            tgt_text = spec.text if spec.text is not None else await self._translate(final)
+            tgt_text = spec.text if spec.text is not None else await self._translate(text)
+            if self.readback is not None:
+                fixed = self.readback(final, tgt_text)
+                extra["number_fix"] = int(fixed != tgt_text)
+                tgt_text = fixed
             t_mt = self.clock.now_ms()
 
         stage.name, stage.provider = "tts", self.tts.name
         if self.gender is None:
             self.gender = detect_gender(audio)
         voice = self.tgt.voice(self.gender)
+        if (has := getattr(self.tts, "has", None)) is not None:
+            extra["tts_cache_hit"] = int(has(tgt_text, voice, self.tgt.lang))
         it = aiter(self.tts.synth(tgt_text, voice, self.tgt.lang))
         try:
             first = await anext(it)
@@ -530,6 +573,7 @@ class Interpreter:
             rest=it,
             spec=spec,
             spec_eligible=job.spec is not None,
+            extra=extra,
         )
 
     def _discard(self, early: asyncio.Task[_Ready]) -> None:
