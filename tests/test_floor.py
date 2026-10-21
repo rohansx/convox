@@ -3,12 +3,15 @@
 
 from __future__ import annotations
 
+import asyncio
+
 from dubhash.audio.frames import FRAME_BYTES
 from tests.floor_helpers import (
     LINE_CHECK_MARKER,
     FeedAudio,
     Rig,
     check_all_ended,
+    failing_tts,
     frames_of,
     settle,
 )
@@ -537,4 +540,133 @@ async def test_trace_6_5_escape():
     assert rig.bus.kinds("bypass") and rig.bypassed == 1
     await fc.forward("a", b"\x05" * FRAME_BYTES)
     assert rig.legs["b"].entries("send")[-1].data[0] == 5
+    check_all_ended(rig)
+
+
+# --- chaos, concurrency, shutdown -------------------------------------------------------
+
+
+async def test_provider_socket_killed_mid_utterance_does_not_deadlock():
+    rig = Rig()
+    fc = rig.fc
+    a1 = rig.tr("a", 1, audio=failing_tts(frames_of(1, 3)))
+    await rig.hand(a1)
+    assert [e.tag for e in rig.legs["b"].entries("mark")] == ["a:1"]
+    b1 = rig.tr("b", 1)
+    await rig.hand(b1)
+    assert list(fc.queue) == [b1]
+    await rig.finish()
+    assert a1.clipped_ms == 60  # ended, but cut short by the provider
+    assert fc.playing is b1
+    await rig.finish()
+    assert fc.state == "IDLE" and b1.clipped_ms is None
+    check_all_ended(rig)
+
+
+async def test_leg_send_failure_does_not_deadlock():
+    rig = Rig()
+    fc = rig.fc
+    leg = rig.legs["b"]
+    real_send, real_mark = leg.send, leg.mark
+
+    async def broken(*_: object) -> None:
+        raise ConnectionError("leg gone")
+
+    leg.send = broken  # type: ignore[method-assign]
+    leg.mark = broken  # type: ignore[method-assign]
+    a1 = rig.tr("a", 1)
+    a2 = rig.tr("a", 2)
+    await rig.hand(a1)
+    await rig.hand(a2)
+    assert a1 in rig.played and a1.clipped_ms == 0
+    leg.send, leg.mark = real_send, real_mark  # type: ignore[method-assign]
+    await rig.step()
+    # a2 started while the leg was still broken, so it is abandoned too; a3 plays
+    a3 = rig.tr("a", 3)
+    await rig.hand(a3)
+    assert fc.playing is a3
+    await rig.finish()
+    assert fc.state == "IDLE"
+    check_all_ended(rig)
+
+
+async def test_handlers_from_many_tasks_never_interleave():
+    rig = Rig()
+    fc = rig.fc
+    trs = [rig.tr("a" if i % 2 else "b", i) for i in range(1, 11)]
+    rig.handed.extend(trs)
+    await asyncio.gather(
+        *(fc.on_translation(t) for t in trs),
+        *(fc.on_speech_start(s) for s in "abab"),
+        *(fc.on_speech_end(s) for s in "abab"),
+        fc.tick(),
+        fc.tick(),
+    )
+    await rig.step()
+    while fc.playing is not None:
+        await rig.finish()
+    assert [t.tag for t in rig.played] == [t.tag for t in trs]
+    check_all_ended(rig)
+
+
+async def test_aclose_ends_playing_and_queued_as_clipped():
+    rig = Rig()
+    fc = rig.fc
+    feed = FeedAudio()
+    a1 = rig.tr("a", 1, audio=feed)
+    feed.push(*frames_of(1, 5))
+    await rig.hand(a1)
+    b1 = rig.tr("b", 1)
+    await rig.hand(b1)
+    await fc.start()
+    await fc.aclose()
+    assert a1.clipped_ms == 100 and b1.clipped_ms == 0
+    check_all_ended(rig)
+
+
+async def test_trace_6_1_delivery_call_simplified():
+    rig = Rig()
+    fc = rig.fc
+    clock = rig.clock
+    clock.set(5000)
+    await fc.on_speech_start("a")
+    assert fc.state == "A_SPEAKING"
+    await rig.advance(1000)
+    await fc.on_speech_end("a")
+    await rig.advance(600)  # 6.6 s
+    a1 = rig.tr("a", 1)
+    await rig.hand(a1)
+    assert fc.state == "PLAYING_AB"
+    await rig.advance(1000)
+    await rig.finish()
+    assert fc.state == "IDLE"
+    clock.set(8200)
+    await fc.on_speech_start("b")
+    assert fc.state == "B_SPEAKING"
+    await rig.advance(800)
+    await fc.on_speech_end("b")
+    await rig.advance(700)  # 9.7 s
+    b1 = rig.tr("b", 1)
+    await rig.hand(b1)
+    assert fc.state == "PLAYING_BA"
+    await rig.advance(1300)  # 11.0 s: A says "theek hai, 2 minute" over b1
+    await fc.on_speech_start("a")
+    await rig.advance(900)
+    await fc.on_speech_end("a")
+    assert fc.state == "PLAYING_BA" and rig.legs["a"].entries("clear") == []
+    a2 = rig.tr("a", 2)
+    await rig.hand(a2)  # arrives before the mark: queued
+    assert list(fc.queue) == [a2]
+    await rig.finish()  # mark(a) for b1, a2 dequeued
+    assert fc.state == "PLAYING_AB" and fc.playing is a2
+    await rig.advance(700)  # 13.0 s: B backchannels "sari"
+    await fc.on_speech_start("b")
+    await rig.advance(400)
+    await fc.on_speech_end("b")
+    assert fc.state == "PLAYING_AB" and rig.legs["b"].entries("clear") == []
+    await rig.finish()
+    assert fc.state == "IDLE"
+    assert [t.tag for t in rig.played] == ["a:1", "b:1", "a:2"]
+    assert all(t.clipped_ms is None for t in rig.played)  # 0 clips
+    assert rig.bus.kinds("barge_in") == [] and not fc.bypass
     check_all_ended(rig)

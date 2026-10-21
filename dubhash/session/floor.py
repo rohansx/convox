@@ -396,15 +396,31 @@ class FloorController:
                     pb.audio += chunk
             except asyncio.CancelledError:
                 raise
-            except Exception as e:  # TTS died mid-utterance: end what was sent
+            except Exception as e:  # TTS or leg died mid-utterance: end what was sent
                 pb.failed = True
-                log.warning("floor.render_error", extra={"tag": tr.tag, "error": repr(e)})
-            await leg.mark(tr.tag)
+                log.warning("floor.play_error", extra={"tag": tr.tag, "error": repr(e)})
+            try:
+                await leg.mark(tr.tag)
+            except asyncio.CancelledError:
+                raise
+            except Exception as e:  # no mark will ever come: end it here
+                pb.failed = True
+                log.warning("floor.mark_error", extra={"tag": tr.tag, "error": repr(e)})
+                self._spawn(self._abandon(pb))
         finally:
             aclose = getattr(stream, "aclose", None)
             if aclose is not None:
                 with contextlib.suppress(Exception):
                     await aclose()
+
+    async def _abandon(self, pb: _Playback) -> None:
+        async with self._lock:
+            if self._pb is not pb:
+                return
+            self._playback_ended(pb)
+            self._end(pb.tr, clipped_ms=bytes_to_ms(pb.sent))
+            if not self._drain():
+                self._set_state("IDLE")
 
     async def _stop_task(self, pb: _Playback) -> None:
         task = pb.task
