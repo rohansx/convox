@@ -34,6 +34,8 @@ class PairConfig:
     backchannel_max_ms: int = 600
     barge_in_min_ms: int = 1200
     duck_db: float = -14.0
+    spec_mt: bool = True  # speculative MT on the latest STT partial during the EOU wait
+    spec_after_ms: int = 200  # silence before speculating
 
     def side(self, side: Side) -> SideConfig:
         return self.a if side == "a" else self.b
@@ -51,6 +53,8 @@ def load_pairs(path: Path) -> dict[str, PairConfig]:
             backchannel_max_ms=int(cfg.get("backchannel_max_ms", 600)),
             barge_in_min_ms=int(cfg.get("barge_in_min_ms", 1200)),
             duck_db=float(cfg.get("duck_db", -14)),
+            spec_mt=bool(cfg.get("spec_mt", True)),
+            spec_after_ms=int(cfg.get("spec_after_ms", 200)),
         )
     return out
 
