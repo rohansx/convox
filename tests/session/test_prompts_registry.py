@@ -8,7 +8,7 @@ from dubhash.session.registry import SessionRegistry, new_call_id
 
 def test_hindi_opening_line_names_the_other_language():
     assert opening_text("hi-IN", "kn-IN") == (
-        "aap hindi mein chhote vaakya boliye, saamne wala kannada mein sunega."
+        "aap hindi mein chhote vaakya boliye, woh kannada mein sunenge."
     )
     assert "tamil" in opening_text("hi-IN", "ta-IN")
     assert "marathi" in opening_text("hi-IN", "mr-IN")
@@ -28,7 +28,8 @@ LANGS = ["hi-IN", "kn-IN", "ta-IN", "mr-IN", "en-IN"]
 @pytest.mark.parametrize("lang", LANGS)
 @pytest.mark.parametrize("other", LANGS)
 def test_opening_line_is_one_short_sentence(lang, other):
-    """About 3 s of Bulbul speech: one sentence, at most ~70 characters (it was 7-9 s)."""
+    """About 3-4 s of Bulbul speech (L4: 3.2-4.3 s live; it was 7-9 s): one sentence, at
+    most ~70 code points."""
     if lang == other:
         return
     text = opening_text(lang, other)
@@ -37,13 +38,9 @@ def test_opening_line_is_one_short_sentence(lang, other):
 
 
 def test_marathi_and_english_openings_for_the_marathi_pairs():
-    assert opening_text("mr-IN", "en-IN") == (
-        "तुम्ही मराठीत छोटी वाक्ये बोला, समोरची व्यक्ती इंग्रजीत ऐकेल."
-    )
-    assert opening_text("mr-IN", "hi-IN").endswith("समोरची व्यक्ती हिंदीत ऐकेल.")
-    assert opening_text("en-IN", "mr-IN") == (
-        "Please speak English in short sentences; the other person hears Marathi."
-    )
+    assert opening_text("mr-IN", "en-IN") == ("मराठीत छोटी वाक्ये बोला, ते इंग्रजीत ऐकतील.")
+    assert opening_text("mr-IN", "hi-IN") == "मराठीत छोटी वाक्ये बोला, ते हिंदीत ऐकतील."
+    assert opening_text("en-IN", "mr-IN") == ("Speak short English sentences; they hear Marathi.")
     assert line_check_text("en-IN") == "Are you still on the line?"
     assert line_check_text("mr-IN") == "तुम्ही लाइनवर आहात का?"
 

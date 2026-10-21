@@ -3,10 +3,11 @@ sentences") and the line check ("aap line par hain?"). Each is in the listener's
 language and is synthesised with that side's TTS voice.
 
 The opening line is ONE short sentence (about 3 s of Bulbul speech; the two-sentence
-version ran 7-9 s and held up the first translation, L2/L4). The Hindi line folds the
-spec's "chhote vaakya boliye" into the spec's first sentence; the Kannada line is the
-spec's sentence (docs/tech-spec/security-privacy.md). Everything else is an unverified
-draft.
+version ran 7-9 s and held up the first translation, L2/L4). Live Bulbul lengths (L4):
+hi 3.7 s, mr 3.4-3.7 s, en 3.2 s, kn 4.3 s. The Hindi line folds the spec's "chhote vaakya
+boliye" into a shortened form of its first sentence; the Kannada line is the spec's
+sentence (docs/tech-spec/security-privacy.md). Everything else is an unverified draft.
+With record=true the "text is being saved" sentence is appended (about 3 s more).
 TODO(PQ5): native-speaker and counsel review of every kn/ta/mr string below, and of the
 proposed "automatic interpreter / press 0" disclosure sentence (open question G17).
 """
@@ -28,7 +29,7 @@ _EN_NAMES = {"hi": "Hindi", "kn": "Kannada", "ta": "Tamil", "mr": "Marathi", "en
 
 _LANGS: dict[str, _Lang] = {
     "hi": _Lang(
-        opening="aap {self} mein chhote vaakya boliye, saamne wala {other} mein sunega.",
+        opening="aap {self} mein chhote vaakya boliye, woh {other} mein sunenge.",
         names={"hi": "hindi", "kn": "kannada", "ta": "tamil", "mr": "marathi", "en": "angrezi"},
         line_check="aap line par hain?",
         record=" is baatcheet ka text save kiya ja raha hai.",  # TODO(PQ5): verify wording
@@ -62,7 +63,7 @@ _LANGS: dict[str, _Lang] = {
     # TODO(PQ5): native Marathi review of the whole set ("speak short sentences in Marathi,
     # the other person will hear it in Hindi/English").
     "mr": _Lang(
-        opening="तुम्ही {self} छोटी वाक्ये बोला, समोरची व्यक्ती {other} ऐकेल.",
+        opening="{self} छोटी वाक्ये बोला, ते {other} ऐकतील.",
         names={
             "mr": "मराठीत",
             "hi": "हिंदीत",
@@ -74,7 +75,7 @@ _LANGS: dict[str, _Lang] = {
         record=" या संभाषणाचा मजकूर जतन केला जात आहे.",
     ),
     "en": _Lang(
-        opening="Please speak {self} in short sentences; the other person hears {other}.",
+        opening="Speak short {self} sentences; they hear {other}.",
         names=_EN_NAMES,
         line_check="Are you still on the line?",
         record=" The text of this conversation is being saved.",
