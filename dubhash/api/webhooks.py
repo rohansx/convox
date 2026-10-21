@@ -183,6 +183,12 @@ async def plivo_answer(request: Request, sessions: Sessions) -> Response:
     return Response(xml, media_type="application/xml")
 
 
+def _mask(value: str) -> str:
+    """Phone-number-like values keep their last 4 digits only (conventions: never log numbers)."""
+    digits = sum(ch.isdigit() for ch in value)
+    return "*" * (len(value) - 4) + value[-4:] if digits >= 7 and len(value) > 4 else value
+
+
 @router.api_route("/telephony/exotel/stream", methods=["GET", "POST"])
 async def exotel_stream_url(request: Request, book: Book, sessions: Sessions) -> JSONResponse:
     """Dynamic Voicebot applet URL (see dubhash/telephony/exotel_api.py docstring)."""
@@ -192,6 +198,15 @@ async def exotel_stream_url(request: Request, book: Book, sessions: Sessions) ->
     target = target or parse_custom_field(params.get("CustomField"))
     if target is None and params.get("CallSid"):
         target = book.find_sid(params["CallSid"])
+    # Exotel does not document what it sends here (open question): log the shape.
+    log.info(
+        "exotel.stream_url_request",
+        extra={
+            "method": request.method,
+            "fields": {k: _mask(str(v)) for k, v in params.items()},
+            "resolved": f"{target[0]}:{target[1]}" if target else None,
+        },
+    )
     if target is None or sessions.get(target[0]) is None:
         log.warning("exotel.stream_url_unresolved", extra={"call_sid": params.get("CallSid")})
         return JSONResponse({"error": "unknown call"}, status_code=404)

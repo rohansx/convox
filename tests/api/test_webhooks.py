@@ -319,3 +319,19 @@ async def test_create_call_with_webhook_starts_notifier():
 class _Leg:
     async def close(self):
         pass
+
+
+async def test_exotel_stream_url_logs_request_shape_with_numbers_masked(caplog):
+    env = Env()
+    caplog.set_level("INFO", logger="dubhash.api.webhooks")
+    async with env.client() as c:
+        await c.post(
+            "/telephony/exotel/stream",
+            data={"CallSid": "sid-a", "From": "09172522532", "CustomField": "c_w:a"},
+        )
+    rec = next(r for r in caplog.records if r.getMessage() == "exotel.stream_url_request")
+    assert rec.method == "POST"
+    assert set(rec.fields) == {"CallSid", "From", "CustomField"}
+    assert rec.fields["From"] == "*******2532"
+    assert "09172522532" not in str(rec.__dict__)
+    assert rec.resolved == "c_w:a"
