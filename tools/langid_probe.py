@@ -3,6 +3,8 @@
     uv run python tools/langid_probe.py                      # full run (cached clips)
     uv run python tools/langid_probe.py --langs hi-IN mr-IN --n 3 --no-realtime
     uv run python tools/langid_probe.py --models saaras:v3 saaras:v4 --conds pstn
+    uv run python tools/langid_probe.py --replay out/langid/results.json \
+        out/langid/results-v4.json --models saaras:v3 saaras:v4 --tag all   # no calls
 
 Corpus: 10 short, hard sentences per supported language (CORPUS), parallel across
 languages (OTP / lift / flat / parcel / doctor / plumber / cash on delivery), so Hindi,
@@ -223,6 +225,32 @@ def sweep(
 
 def _count(dets: Sequence[tuple[str, str | None, float]], truth: str, pred: str) -> int:
     return sum(1 for t, p, _ in dets if t == truth and p == pred)
+
+
+def vote_rows(rows: list[dict[str, Any]], primary: str, second: str) -> list[dict[str, Any]]:
+    """SarvamLID(model=primary, second_model=second) on the same clips, replayed offline
+    with its own decide(): engine "vote", raw = the decided language (None = rejected),
+    ms = the slower of the two parallel calls."""
+    from dubhash.providers.sarvam_lid import Detection, decide
+
+    def key(r: dict[str, Any]) -> tuple:
+        return (r["lang"], r["idx"], r["voice"], r["cond"], r["window_ms"])
+
+    seconds = {key(r): r for r in rows if r["engine"] == "rest" and r["model"] == second}
+    out = []
+    for p in rows:
+        s = seconds.get(key(p))
+        if p["engine"] != "rest" or p["model"] != primary or s is None:
+            continue
+        g = decide(
+            Detection(p.get("raw"), float(p.get("conf") or 0.0), "", 0),
+            Detection(s.get("raw"), float(s.get("conf") or 0.0), "", 0),
+            SUPPORTED_LANGS,
+        )
+        ms = [m for m in (p.get("ms"), s.get("ms")) if m is not None]
+        out.append(p | {"engine": "vote", "model": f"{primary}+{second}", "raw": g.lang,
+                        "conf": g.confidence, "ms": max(ms) if ms else None})  # fmt: skip
+    return out
 
 
 def summarise(
@@ -506,6 +534,8 @@ async def main_async(opts: argparse.Namespace) -> int:
         extra["long_clip_ms"] = {"min": ldurs[0], "p50": pct(ldurs, 50), "max": ldurs[-1]}
         clips |= longs
     rows = await run_rest(key, clips, opts.conds, opts.models)
+    if len(opts.models) >= 2:  # the engine's two-model vote, from the same answers
+        rows += vote_rows(rows, opts.models[0], opts.models[1])
     if opts.realtime:
         rows += await run_realtime(key, clips, opts.rt_conds)
         hi = clips.get(("hi-IN", 5, "female"))
@@ -515,9 +545,28 @@ async def main_async(opts: argparse.Namespace) -> int:
         rows += await run_text(
             key, [r for r in rows if r["engine"] == "rest" and r["cond"] == "pstn"]
         )
+    _write(rows, extra, opts.tag)
+    return 0
+
+
+def replay(paths: Sequence[str], models: Sequence[str], tag: str) -> int:
+    """Re-analyse saved results files (no vendor calls), adding the two-model vote."""
+    rows: list[dict[str, Any]] = []
+    extra: dict[str, Any] = {"replayed": list(paths)}
+    for p in paths:
+        saved = json.loads(Path(p).read_text())
+        rows += [r for r in saved["rows"] if r["engine"] != "vote"]
+        extra |= {k: v for k, v in saved.get("extra", {}).items() if k not in extra}
+    if len(models) >= 2:
+        rows += vote_rows(rows, models[0], models[1])
+    _write(rows, extra, tag)
+    return 0
+
+
+def _write(rows: list[dict[str, Any]], extra: dict[str, Any], tag: str) -> None:
     analysis = analyse(rows)
     OUT.mkdir(parents=True, exist_ok=True)
-    tag = f"-{opts.tag}" if opts.tag else ""
+    tag = f"-{tag}" if tag else ""
     res, summ = OUT / f"results{tag}.json", OUT / f"summary{tag}.md"
     res.write_text(
         json.dumps(
@@ -528,7 +577,6 @@ async def main_async(opts: argparse.Namespace) -> int:
     summ.write_text(md)
     print(md.split("\n## ")[0])
     print(f"wrote {res} and {summ}")
-    return 0
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -542,7 +590,11 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--no-text", dest="text", action="store_false")
     p.add_argument("--no-long", dest="long", action="store_false", help="skip joined pairs")
     p.add_argument("--tag", default="", help="suffix for results/summary file names")
-    return asyncio.run(main_async(p.parse_args(argv)))
+    p.add_argument("--replay", nargs="+", metavar="RESULTS", help="re-analyse saved results")
+    opts = p.parse_args(argv)
+    if opts.replay:
+        return replay(opts.replay, opts.models, opts.tag)
+    return asyncio.run(main_async(opts))
 
 
 if __name__ == "__main__":

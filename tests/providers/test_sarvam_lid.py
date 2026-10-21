@@ -32,6 +32,7 @@ def _form(req: httpx.Request) -> tuple[dict[str, str], bytes]:
 
 
 def _lid(handler, **kw) -> SarvamLID:
+    kw.setdefault("second_model", None)  # one model unless a test asks for the vote
     client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
     return SarvamLID(api_key="sk-test", client=client, base_url="https://mock.sarvam", **kw)
 
@@ -219,6 +220,23 @@ async def test_second_model_failure_falls_back_to_the_primary_alone():
     assert await lid.identify(SEC, HI_MR) == LangGuess("mr-IN", 0.75, "lid")
     lid = _lid(_two_models(("mr-IN", 0.5), None), second_model="saaras:v4")
     assert (await lid.identify(SEC, HI_MR)).lang is None
+
+
+async def test_agreement_on_english_still_needs_the_primary_at_0_9():
+    """L8, wideband audio: both models said en-IN for Tamil "Cash on delivery ₹400"
+    (v3 0.83) and Hindi "Flat number 302" (v3 0.66)."""
+    en = ["en-IN", "ta-IN"]
+    unsure = _lid(_two_models(("en-IN", 0.83), ("en-IN", 0.99)), second_model="saaras:v4")
+    assert (await unsure.identify(SEC, en)).lang is None
+    sure = _lid(_two_models(("en-IN", 0.92), ("en-IN", 0.99)), second_model="saaras:v4")
+    assert (await sure.identify(SEC, en)).lang == "en-IN"
+
+
+def test_the_default_engine_is_the_measured_v3_plus_v4_vote():
+    lid = SarvamLID("sk")
+    assert (lid.model, lid.second_model, lid.window_ms) == ("saaras:v3", "saaras:v4", 2000)
+    assert lid.threshold == 0.7 and lid.lang_thresholds == {"en-IN": 0.95}
+    assert lid.vote_floors == {"en-IN": 0.9}
 
 
 def test_decide_is_the_shared_rule():

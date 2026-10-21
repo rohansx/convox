@@ -41,6 +41,10 @@ DEFAULT_MODEL = "saaras:v3"
 DEFAULT_SECOND_MODEL = "saaras:v4"
 DEFAULT_THRESHOLD = 0.7
 DEFAULT_LANG_THRESHOLDS: dict[str, float] = {"en-IN": 0.95}
+# The primary's minimum confidence for a language both models agree on. Agreement was
+# never wrong on 8 kHz audio; on wideband both said en-IN for loanword-only Indic lines
+# (v3 at 0.66-0.83), so an agreed English still needs v3 at 0.9.
+DEFAULT_VOTE_FLOORS: dict[str, float] = {"en-IN": 0.9}
 DEFAULT_WINDOW_MS = 2000
 KEEPALIVE_S = 60.0  # as SarvamMT: keep the TLS connection between turns
 
@@ -62,10 +66,17 @@ def decide(
     *,
     threshold: float = DEFAULT_THRESHOLD,
     lang_thresholds: Mapping[str, float] = DEFAULT_LANG_THRESHOLDS,
+    vote_floors: Mapping[str, float] = DEFAULT_VOTE_FLOORS,
 ) -> LangGuess:
-    """Both models name the same candidate -> that language (confidence: the higher of
-    the two). Otherwise the primary alone, if it clears its language's threshold."""
-    if second is not None and primary.lang is not None and primary.lang == second.lang:
+    """Both models name the same candidate (and the primary clears that language's vote
+    floor, default 0) -> that language, confidence the higher of the two. Otherwise the
+    primary alone, if it clears its language's threshold."""
+    if (
+        second is not None
+        and primary.lang is not None
+        and primary.lang == second.lang
+        and primary.confidence >= vote_floors.get(primary.lang, 0.0)
+    ):
         agreed = pick(primary.lang, max(primary.confidence, second.confidence), candidates,
                       threshold=0.0)  # fmt: skip
         if agreed.lang is not None:
@@ -84,9 +95,10 @@ class SarvamLID:
         client: httpx.AsyncClient | None = None,
         base_url: str = DEFAULT_BASE_URL,
         model: str = DEFAULT_MODEL,
-        second_model: str | None = None,
+        second_model: str | None = DEFAULT_SECOND_MODEL,
         threshold: float = DEFAULT_THRESHOLD,
         lang_thresholds: dict[str, float] | None = None,
+        vote_floors: dict[str, float] | None = None,
         window_ms: int | None = DEFAULT_WINDOW_MS,
         text_check: bool = False,
         timeout_s: float = 5.0,
@@ -104,6 +116,7 @@ class SarvamLID:
         self.lang_thresholds = dict(
             DEFAULT_LANG_THRESHOLDS if lang_thresholds is None else lang_thresholds
         )
+        self.vote_floors = dict(DEFAULT_VOTE_FLOORS if vote_floors is None else vote_floors)
         self.window_ms = window_ms
         self.text_check = text_check
 
@@ -126,7 +139,8 @@ class SarvamLID:
         second = results[1] if len(results) > 1 else None
         second = second if isinstance(second, Detection) else None
         guess = decide(first, second, candidates, threshold=self.threshold,
-                       lang_thresholds=self.lang_thresholds)  # fmt: skip
+                       lang_thresholds=self.lang_thresholds,
+                       vote_floors=self.vote_floors)  # fmt: skip
         if guess.lang is not None and self.text_check and first.transcript.strip():
             try:
                 text_lang = await self.text_lid(first.transcript)
