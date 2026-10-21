@@ -37,7 +37,7 @@ def test_pairs_load():
 
 def test_all_bulbul_test_pair_for_live_bench():
     pairs = load_pairs(Settings().pairs_file)
-    p = pairs["hi-kn-bulbul"]
+    p = pairs["hi-kn-direct"]
     assert (p.a.lang, p.b.lang) == ("hi-IN", "kn-IN")
     assert p.a.tts == p.b.tts == "bulbul"
     assert find_pair(pairs, "hi-IN", "kn-IN") is pairs["hi-kn"]

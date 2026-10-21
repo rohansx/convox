@@ -62,7 +62,7 @@ LANGS: dict[str, tuple[str, str]] = {
     "od-IN": ("Odia", "ଓଡ଼ିଆ"),
     "en-IN": ("English", "English"),
 }
-ELEVEN_LANGS = frozenset({"hi", "en"})  # everything else is spoken by Bulbul (conventions §6)
+ELEVEN_LANGS: frozenset[str] = frozenset()  # Bulbul speaks every language (21 Oct decision)
 
 
 def lang_label(code: str) -> str:

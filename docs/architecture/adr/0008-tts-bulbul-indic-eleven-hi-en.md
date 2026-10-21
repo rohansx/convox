@@ -46,3 +46,13 @@ hi-kn:
 - [configuration.md](../../tech-spec/configuration.md)
 - [ADR 0012](0012-no-voice-cloning-v1.md)
 - [latency-engineering.md](../../engineering/latency-engineering.md)
+
+## Amendment (21 Oct 2026): Bulbul for Hindi too
+
+**Status:** Accepted (Rohan). Bulbul now speaks every target language, Hindi included. ElevenLabs stays wired (`tts: eleven`) and can be selected per pair, but is off the default path.
+
+- The ElevenLabs account is on the free tier, which cannot use library voices over the API (HTTP 402 `paid_plan_required`).
+- Bulbul Hindi measured live: first byte 214–386 ms, similar to or better than Flash's ~300 ms. Sarvam is India-hosted, which fits the data-residency claim, and it means one vendor fewer.
+- Voice cloning (v2) would still need ElevenLabs or another cloning vendor; see [ADR 0012](0012-no-voice-cloning-v1.md).
+
+The same day, `hi-kn` switched its Hindi side to the speech→English pivot (`stt: sarvam-translate`, `mt_src: en-IN`), ~670 ms faster at p50. The direct route is `hi-kn-direct`. See [open questions](../../plan/open-questions.md), L1.

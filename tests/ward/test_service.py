@@ -34,8 +34,8 @@ def test_ward_pair_defaults_to_marathi_hindi_from_pairs_yaml():
     pair = ward_pair("mr-IN", "hi-IN")
     assert isinstance(pair, PairConfig)
     assert pair.a.lang == "mr-IN" and pair.b.lang == "hi-IN"
-    assert pair.a.tts == "bulbul" and pair.b.tts == "eleven"
-    assert pair.b.voice_m == "eleven:hi-male-1"
+    assert pair.a.tts == "bulbul" and pair.b.tts == "bulbul"
+    assert pair.b.voice_m == "bulbul:hi-male-1"
 
 
 def test_ward_pair_builds_sides_for_reversed_and_unlisted_orders():
@@ -49,7 +49,7 @@ def test_ward_pair_synthesises_a_language_missing_from_pairs_yaml():
     pair = ward_pair("gu-IN", "en-IN")
     assert pair.a.stt == "sarvam" and pair.a.tts == "bulbul"
     assert pair.a.voice_m == "bulbul:gu-male-1"
-    assert pair.b.tts == "eleven" and pair.b.voice_f == "eleven:en-female-1"
+    assert pair.b.tts == "bulbul" and pair.b.voice_f == "bulbul:en-female-1"
 
 
 def test_ward_pair_rejects_same_or_unknown_language():
@@ -103,7 +103,7 @@ async def test_handle_utterance_returns_texts_audio_and_timings():
     assert {"stt_ms", "mt_ms", "tts_ttfb_ms", "tts_ms", "first_audio_ms"} <= set(turn.timings)
     # side a speaks Marathi, the TTS of side b's language (Hindi) speaks it
     tts_b = p.tts["b"]
-    assert tts_b.requests == [("2 गोळ्या 8 वाजता", "eleven:hi-male-1", "hi-IN")]
+    assert tts_b.requests == [("2 गोळ्या 8 वाजता", "bulbul:hi-male-1", "hi-IN")]
     assert p.tts["a"].requests == []
     assert p.stt["a"].langs == ["mr-IN"]
 

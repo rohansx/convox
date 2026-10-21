@@ -14,7 +14,7 @@ from dubhash.types import Translation
 from tests.audio_fixtures import conversation, frames, harmonic, silence
 
 PAIRS = load_pairs(Path(__file__).resolve().parent.parent / "dubhash" / "config" / "pairs.yaml")
-PAIR = PAIRS["hi-kn"]
+PAIR = PAIRS["hi-kn-direct"]  # plain route: MT source = side lang
 SPEC_ON = dataclasses.replace(PAIR, spec_mt=True, spec_after_ms=200)
 SPEC_OFF = dataclasses.replace(PAIR, spec_mt=False)
 
@@ -603,7 +603,7 @@ class _SpyMT(FakeMT):
 async def test_mt_source_language_comes_from_mt_src_when_set():
     clock = FakeClock()
     mt = _SpyMT()
-    pivot = PAIRS["hi-kn-pivot"]
+    pivot = PAIRS["hi-kn"]
     interp = Interpreter(
         call_id="c_test",
         side="a",

@@ -50,8 +50,8 @@ def test_real_names_follow_the_pair_per_side(monkeypatch):
     monkeypatch.setattr(providers_mod, "build_tts", rec("tts"))
     monkeypatch.setattr(providers_mod, "build_mt", rec("mt"))
     build_providers(PAIRS["hi-kn"], settings(stt_impl="real", mt_impl="real", tts_impl="real"))
-    assert built["stt"] == ["sarvam", "sarvam"]
-    assert built["tts"] == ["eleven", "bulbul"]  # tts["a"] speaks hi, tts["b"] speaks kn
+    assert built["stt"] == ["sarvam-translate", "sarvam"]  # hi side pivots via English
+    assert built["tts"] == ["bulbul", "bulbul"]  # tts["a"] speaks hi, tts["b"] speaks kn
     assert built["mt"] == ["sarvam"]
 
 
