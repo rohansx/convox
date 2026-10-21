@@ -22,6 +22,17 @@ def test_measure_finds_the_earcon_behind_an_opening_still_playing():
     assert row.heard_ms == (12 + len(EARCON) // FRAME_BYTES + 1 - 5) * 20
 
 
+def test_measure_finds_an_earcon_off_the_frame_grid():
+    """The earcon lands mid-frame when the opening's last chunk was not a whole frame."""
+    voice = b"\x00\x10" * (FRAME_BYTES // 2)
+    rec = voice * 12 + b"\x00\x10" * 100 + EARCON + ll.SILENCE + voice * 3
+    rec = rec + b"\x00" * (-len(rec) % FRAME_BYTES)
+    row = ll.TurnRow(0, "a", "x", n_start=0, n_voice_end=5, n_next=len(rec) // FRAME_BYTES)
+    ll.measure(row, rec)
+    assert row.earcon_ms == (12 - 5) * 20 + 20  # 100 samples into frame 12: frame 13 on
+    assert row.heard_ms is not None and row.heard_ms >= row.earcon_ms + 120
+
+
 def test_room_noise_is_snr_below_the_speech_and_continuous():
     utts = [ll.Utt("a", speech(1000)), ll.Utt("b", speech(800, f0=200))]
     noise = ll.room_noise(utts, snr_db=15, ms=2000, seed=1)

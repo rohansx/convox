@@ -413,26 +413,36 @@ class TurnRow:
 def measure(row: TurnRow, rec: bytes) -> None:
     """Latencies are from the end of speech; the window opens when the line starts, so a
     translation that starts before the speaker finished shows up as a negative number."""
-    frames = frames_of(rec[row.n_start * FRAME_BYTES : row.n_next * FRAME_BYTES])
+    win = rec[row.n_start * FRAME_BYTES : row.n_next * FRAME_BYTES]
+    frames = frames_of(win)
     hits = [k for k, f in enumerate(frames) if voiced(f)]
     if not hits:
         return
-    k = hits[0]
     end = row.n_voice_end - row.n_start
-    # an opening line may still be playing when the window opens (--speak-at-start): the
-    # translation starts at its earcon, wherever that is
-    ear = next((i for i in hits if frames[i] == EARCON[:FRAME_BYTES]), None)
-    if ear is not None:
-        k = ear
-        hits = [h for h in hits if h >= ear]
-    row.heard_audio_ms = len(hits) * FRAME_MS
-    row.heard_span_ms = (hits[-1] - k + 1) * FRAME_MS
-    speech_from = k
-    if frames[k] == EARCON[:FRAME_BYTES]:
+    # The translation starts at its earcon, wherever that is: an opening line may still be
+    # playing when the window opens (--speak-at-start), and after an opening whose last
+    # chunk was not a whole frame the earcon is off the 20 ms grid.
+    o = find_earcon(win)
+    if o is not None:
+        k = -(-o // FRAME_BYTES)  # the first whole frame of earcon
+        speech_from = -(-(o + len(EARCON)) // FRAME_BYTES)
+        hits = [h for h in hits if h >= o // FRAME_BYTES]
         row.earcon_ms = (k - end) * FRAME_MS
-        speech_from = k + EARCON_FRAMES
+    else:
+        k = speech_from = hits[0]
+    row.heard_audio_ms = len(hits) * FRAME_MS
+    row.heard_span_ms = (hits[-1] - min(k, hits[-1]) + 1) * FRAME_MS
     after = [h for h in hits if h >= speech_from]
     row.heard_ms = (after[0] - end) * FRAME_MS if after else None
+
+
+def find_earcon(pcm: bytes) -> int | None:
+    """Byte offset (sample aligned) of the earcon's first frame in pcm, or None."""
+    needle = EARCON[:FRAME_BYTES]
+    i = pcm.find(needle)
+    while i >= 0 and i % 2:
+        i = pcm.find(needle, i + 1)
+    return None if i < 0 else i
 
 
 STAGES = (
