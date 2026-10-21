@@ -62,6 +62,8 @@ class LoopbackCallRequest(BaseModel):
     a_lang: str = Field(pattern=BCP47)
     b_lang: str = Field(pattern=BCP47)
     mode: Literal["interpret", "bridge"] = "interpret"
+    record: bool = False  # keep src_text/tgt_text in the turn log (dev and live tools)
+    pair: str | None = None  # pairs.yaml key, e.g. "hi-kn-direct"; default: by languages
 
 
 class LoopbackCallResponse(BaseModel):

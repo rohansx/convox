@@ -1,7 +1,9 @@
 """Loopback: the no-telephony dev path and last-resort demo (leg-transports.md section 5).
 
   GET  /loopback                  the browser leg page (dubhash/legs/static/loopback.html)
-  POST /loopback/calls            {a_lang, b_lang, mode} -> 201 {call_id, a_url, b_url}
+  POST /loopback/calls            {a_lang, b_lang, mode, record?, pair?}
+                                  -> 201 {call_id, a_url, b_url}; `pair` names a
+                                  pairs.yaml key (e.g. hi-kn-direct), `record` keeps text
   GET  /loopback/new              tiny HTML form; POST /loopback/new creates a call and
                                   shows the two links (open one per tab or device)
   WS   /ws/loopback?call=&side=   the page's socket, wrapped in WebRtcLeg and attached
@@ -88,18 +90,25 @@ def create_loopback_call(
     pairs: dict[str, PairConfig],
 ) -> LoopbackCallResponse:
     settings: Settings = request.app.state.settings
-    pair = find_pair(pairs, req.a_lang, req.b_lang)
+    if req.pair is not None:
+        pair = pairs.get(req.pair)
+        if pair is None or (pair.a.lang, pair.b.lang) != (req.a_lang, req.b_lang):
+            raise ApiError(
+                422, "unsupported_pair", f"no pair {req.pair!r} for {req.a_lang}-{req.b_lang}"
+            )
+    else:
+        pair = find_pair(pairs, req.a_lang, req.b_lang)
     if pair is None:
         raise unsupported_pair(req.a_lang, req.b_lang)
     call_id = new_call_id()
-    session = factory(call_id, pair, mode=req.mode)
+    session = factory(call_id, pair, mode=req.mode, record=req.record)
     sessions.create(call_id, session)
     handle = CallHandle(
         call_id=call_id,
         session=session,
         provider="webrtc",
         mode=req.mode,
-        record=False,
+        record=req.record,
         legs={"a": LegState(req.a_lang), "b": LegState(req.b_lang)},
     )
     book.add(handle)
