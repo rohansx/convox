@@ -42,14 +42,14 @@ def gain_db(pcm: bytes, db: float) -> bytes:
     return np.rint(x).astype(np.int16).tobytes()
 
 
-async def run(inbound, *, b_script=(B_SAYS,), **kw):
+async def run(inbound, *, b_script=(B_SAYS,), vad=EnergyVAD, **kw):
     clock = FakeClock()
     bus = RecordingBus()
     prov = Providers(
         stt={"a": FakeSTT(script=[A_SAYS]), "b": FakeSTT(script=list(b_script))},
         mt=FakeMT(),
         tts={"a": FakeTTS(), "b": FakeTTS()},
-        vad_factory=EnergyVAD,
+        vad_factory=vad,
     )
     legs = {s: FakeLeg(s, clock=clock) for s in ("a", "b")}
     session = CallSession("c_xt", PAIR, prov, bus=bus, clock=clock, opening_line=False, **kw)
@@ -105,15 +105,30 @@ async def test_two_real_speakers_at_similar_levels_keep_the_normal_floor():
     assert bus.kinds("crosstalk") == []
 
 
+TTS_DBFS = 20 * np.log10(FakeTTS.AMPLITUDE / np.sqrt(2) / 32768)  # about -27.3
+
+
+def sensitive_vad() -> EnergyVAD:
+    return EnergyVAD(threshold_dbfs=-55.0)  # hears the quiet echo as speech
+
+
 async def test_echo_of_the_playback_on_the_listeners_mic_never_barges_in():
-    """A's translation plays to B from about 2.4 s; B's mic picks it up 10 dB down."""
-    echo = tone(1500, hz=FakeTTS.TONE_HZ, amp=FakeTTS.AMPLITUDE // 3)
+    """A's translation plays to B from about 2.4 s; B's mic picks it up 14 dB down."""
+    echo = tone(1500, hz=FakeTTS.TONE_HZ, amp=FakeTTS.AMPLITUDE // 5)
     b_mic = silence(2700) + echo + silence(2000)
-    session, bus, legs = await run({"a": A_VOICE, "b": b_mic})
+    session, bus, legs = await run({"a": A_VOICE, "b": b_mic}, vad=sensitive_vad)
     assert turns(session) == [("a", A_SAYS, None)]  # played in full, no B turn
     assert bus.kinds("barge_in") == []
     assert [e for e in legs["b"].log if e[0] == "clear"] == []
     assert {e.payload["reason"] for e in bus.kinds("crosstalk")} == {"echo"}
+
+
+async def test_quiet_speech_over_the_playback_still_barges_in():
+    """A caller 8 dB under the playback level is a person, not echo (PSTN speech levels)."""
+    b_mic = silence(2700) + at_dbfs(speech(2000, f0=230.0), TTS_DBFS - 8) + silence(3000)
+    session, bus, _ = await run({"a": A_VOICE, "b": b_mic}, vad=sensitive_vad)
+    assert bus.kinds("barge_in")
+    assert ("b", B_SAYS) in [(s, t) for s, t, _ in turns(session)]
 
 
 async def test_loud_speech_over_the_playback_still_barges_in():

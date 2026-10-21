@@ -51,6 +51,7 @@ from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass
 from typing import Any, Literal, Protocol
 
+from dubhash.audio.earcon import EARCON
 from dubhash.audio.frames import FRAME_BYTES, bytes_to_ms
 from dubhash.audio.mixer import render_playback
 from dubhash.clock import Clock, MonotonicClock
@@ -730,11 +731,16 @@ class CallSession:
         return self._echo_tap(other(tr.side), frames)
 
     async def _echo_tap(self, listener: Side, frames: AsyncIterator[bytes]) -> AsyncIterator[bytes]:
-        """The listener's outbound frames, as the echo guard's reference level."""
+        """The listener's outbound frames, as the echo guard's reference level (the
+        translation's, so the earcon frames are left out)."""
         self.gate.playback_start(listener)
+        skip = len(EARCON) // FRAME_BYTES
         try:
             async for f in frames:
-                self.gate.playback_frame(listener, f)
+                if skip:
+                    skip -= 1
+                else:
+                    self.gate.playback_frame(listener, f)
                 yield f
         finally:
             aclose = getattr(frames, "aclose", None)

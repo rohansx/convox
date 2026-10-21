@@ -23,10 +23,12 @@ mics and decides at three points:
 
 Echo (every call): a leg hearing a translation can pick it up on its own mic (a phone's
 loudspeaker, or line echo on PSTN). While playback to a side runs, and for echo_tail_ms
-after it, a mic frame more than echo_margin_db under the playback's level counts as echo
-and is fed to the endpointer as silence, so echo never starts speech or a barge-in. The
-default 6 dB is the minimum echo return loss of G.168 line echo cancellers; speech into
-the handset is normally louder than that, so barge-in still works. The phone page also
+after it, a mic frame more than echo_margin_db under the playback's level (the TTS, not the
+earcon) counts as echo and is fed to the endpointer as silence, so echo never starts speech
+or a barge-in. The default 10 dB: line echo after a network echo canceller is normally
+30 dB or more down, and a browser's echo cancellation removes most loudspeaker echo, while
+a caller talking over a translation (Bulbul plays at about -18 dBFS) is rarely more than
+10 dB under it, so barge-in still works. Tune it on PSTN. The phone page also
 sends silence while playing (half-duplex); this covers ?duplex=1 and PSTN.
 
 Levels are compared, never absolute: AGC differs per phone, but both copies of one voice
@@ -52,7 +54,7 @@ LEVEL_WINDOW_MS = 300  # the other side's level when gating one frame
 ONSET_WINDOW_MS = 100  # this side's level when gating one frame
 RECENT_VOICED_MS = 200  # the other side counts as talking now
 PROVISIONAL_MIN_FRAMES = 5  # matched frames before a suspect utterance is cleared
-ECHO_MARGIN_DB = 6.0
+ECHO_MARGIN_DB = 10.0
 ECHO_TAIL_MS = 300  # buffered playout and room reverb after the playback ends
 HISTORY_MS = 30_000
 SILENT_DBFS = -100.0
