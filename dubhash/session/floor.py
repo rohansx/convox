@@ -511,7 +511,9 @@ class FloorController:
             if tr is None:
                 return False
             self._queue.remove(tr)
-        if not tr.final_chunk:
+        if id(tr) in self._internal:  # a DTMF replay is no part of an utterance
+            pass
+        elif not tr.final_chunk:
             self._holder = tr.side
         elif self._holder == tr.side:
             self._holder = None

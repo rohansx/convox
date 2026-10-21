@@ -151,6 +151,21 @@ async def test_held_floor_with_a_lost_final_chunk_is_rescued_after_4s():
     check_all_ended(rig)
 
 
+async def test_a_dtmf_replay_does_not_end_the_chunked_hold():
+    rig = Rig()
+    fc = rig.fc
+    await fc.on_speech_start("a")
+    await rig.hand(chunk(rig, "a", 0, 0, final=False))
+    await rig.finish()
+    await fc.on_dtmf("b", "1")  # B asks to hear chunk 0 again
+    await rig.step()
+    await rig.finish()  # the replay played
+    assert fc.state == "A_SPEAKING"  # A's utterance still holds the floor
+    b1 = rig.tr("b", 0)
+    await rig.hand(b1)
+    assert fc.playing is None and list(fc.queue) == [b1]
+
+
 async def test_two_chunked_utterances_back_to_back_keep_order():
     rig = Rig()
     fc = rig.fc
