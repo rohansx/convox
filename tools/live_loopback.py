@@ -440,7 +440,9 @@ async def _opening(tabs: dict[str, Tab], ticker: Ticker, opts: Opts) -> dict[str
             t.played += len(t.buf)
             t.buf.clear()
     else:
-        await _until(lambda: all(t.quiet_for(300) for t in tabs.values()), opts.opening_timeout_s)
+        await _until(
+            lambda: all(t.quiet_for(opts.quiet_ms) for t in tabs.values()), opts.opening_timeout_s
+        )
     await ticker.wait_ticks(opts.pause_ms // FRAME_MS)
     return {
         "received": got,
