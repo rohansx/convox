@@ -79,6 +79,7 @@ EventKind = Literal[
     "call",  # {status}
     "line_check",  # {sides}: "aap line par hain?" played after 10 s silence
     "crosstalk",  # {side, reason: level|lang|echo, stage: frame|eou}: speech dropped
+    "prompt_cut",  # {side, tag, sent_ms}: a translation cut the opening line short (L7)
 ]
 
 

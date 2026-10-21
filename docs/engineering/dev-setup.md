@@ -30,7 +30,7 @@ cp .env.example .env
 | `make test-live` | `uv run pytest -m live -s` (each test skips when its key is missing) |
 | `make lint` | `uv run ruff check .` and `uv run ruff format --check .` (what CI runs) |
 | `make fmt` | `ruff check --fix` and `ruff format` |
-| `make dev` | `uv run uvicorn dubhash.api.app:app --host 127.0.0.1 --port 8000 --reload` |
+| `make dev` | `uv run uvicorn dubhash.api.app:app --host 127.0.0.1 --port 8000 --reload --ws-per-message-deflate false` |
 | `make up` / `make down` | `docker compose up -d postgres redis` / `docker compose down` |
 | `make bench` | `uv run python -m tools.bench $(BENCH_ARGS)` |
 | `make smoke` | `uv run python tools/smoke.py $(SMOKE_ARGS)` |

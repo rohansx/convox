@@ -3,6 +3,18 @@
 // Android), then mic -> 16 kHz PCM16 over the websocket, and translations played back.
 // The protocol is WebRtcLeg's (legs/webrtc.py): binary audio both ways, {"type":"mark"}
 // acked when playout reaches it, {"type":"clear"} flushes the queue.
+//
+// Telemetry (L7), on the same socket, so a test call shows what the phone really did:
+//   {"type":"telemetry","kind":"play_start","tag","client_ms","audio_ctx_ms"}  first
+//       sample of a translation (or the opening line) played; tag = the server's mark
+//   {"type":"telemetry","kind":"play_end", ...same fields}  playout reached its mark
+//       (plus "cleared": true when a clear cut it)
+//   {"type":"telemetry","kind":"mic_level","rms","client_ms"}  every 500 ms, mean RMS of
+//       the mic (0..1, before the half-duplex gate; plus "gated" while it was gated)
+//   {"type":"telemetry","kind":"pong","server_ms","client_ms"}  answers {"type":"ping"}
+// client_ms is epoch ms (performance.timeOrigin + performance.now()). For play_* it is
+// when the sample left the speaker: the audio context time is mapped through
+// getOutputTimestamp(), which includes the device's output latency.
 (function () {
   "use strict";
 
@@ -16,6 +28,7 @@
   const GATE_TAIL_MS = 300; // room echo after the last played sample
   const MAX_LINES = 4;
   const TALK_PEAK = 0.06;
+  const MIC_LEVEL_FRAMES = 25; // 500 ms of 20 ms mic frames
 
   const tap = $("tap"), orb = $("orb"), orbText = $("orb-text"), leave = $("leave");
   const statusEl = $("status"), linesEl = $("lines");
@@ -23,6 +36,40 @@
   let ctx = null, stream = null, capture = null, player = null, ws = null, wakeLock = null;
   let started = false, ended = false, callActive = false, playing = false, talking = false;
   let gateTimer = null, talkUntil = 0;
+  let micSumsq = 0, micFrames = 0, micGated = false;
+
+  function nowMs() { return performance.timeOrigin + performance.now(); }
+
+  function sendJson(msg) {
+    if (ws && ws.readyState === 1) ws.send(JSON.stringify(msg));
+  }
+
+  function telemetry(kind, fields) {
+    sendJson(Object.assign({ type: "telemetry", kind }, fields));
+  }
+
+  // audio context time (ms) of a rendered sample -> epoch ms when it is heard
+  function heardAt(ctxMs) {
+    const ts = ctx && ctx.getOutputTimestamp ? ctx.getOutputTimestamp() : null;
+    if (ts && ts.contextTime > 0 && ts.performanceTime > 0) {
+      return performance.timeOrigin + ts.performanceTime + (ctxMs - ts.contextTime * 1000);
+    }
+    const lat = ctx ? (ctx.outputLatency || ctx.baseLatency || 0) * 1000 : 0;
+    return nowMs() + (ctxMs - (ctx ? ctx.currentTime * 1000 : ctxMs)) + lat;
+  }
+
+  function onMicFrame(rms, gated) {
+    const now = nowMs();
+    micSumsq += rms * rms;
+    micFrames++;
+    micGated = micGated || gated;
+    if (micFrames >= MIC_LEVEL_FRAMES) {
+      const fields = { rms: Math.sqrt(micSumsq / micFrames), client_ms: now };
+      if (micGated) fields.gated = true;
+      telemetry("mic_level", fields);
+      micSumsq = 0; micFrames = 0; micGated = false;
+    }
+  }
 
   function setStatus(text) { statusEl.textContent = text || ""; }
 
@@ -172,6 +219,7 @@
       try { m = JSON.parse(e.data); } catch { return; }
       if (m.type === "clear") player.port.postMessage({ type: "clear" });
       else if (m.type === "mark") player.port.postMessage({ type: "mark", name: m.name });
+      else if (m.type === "ping") telemetry("pong", { server_ms: m.server_ms, client_ms: nowMs() });
     };
     ws.onclose = (e) => {
       if (e.code === 4401) setStatus("This link has expired. Scan the code again.");
@@ -180,7 +228,8 @@
     };
     capture.port.onmessage = (e) => {
       if (e.data.type !== "frame") return;
-      if (ws && ws.readyState === 1) ws.send(e.data.pcm);
+      if (ws && ws.readyState === 1) ws.send(e.data.pcm); // one 20 ms frame, sent at once
+      if (typeof e.data.rms === "number") onMicFrame(e.data.rms, e.data.gated);
       const now = performance.now();
       if (!e.data.gated && e.data.peak > TALK_PEAK) talkUntil = now + 400;
       const t = now < talkUntil;
@@ -189,7 +238,12 @@
     };
     player.port.onmessage = (e) => {
       if (e.data.type === "mark") {
-        if (ws && ws.readyState === 1) ws.send(JSON.stringify({ type: "mark", name: e.data.name }));
+        sendJson({ type: "mark", name: e.data.name });
+      } else if (e.data.type === "play_start" || e.data.type === "play_end") {
+        const d = e.data;
+        const fields = { tag: d.name, client_ms: heardAt(d.ctx_ms), audio_ctx_ms: d.ctx_ms };
+        if (d.cleared) fields.cleared = true;
+        telemetry(d.type, fields);
       } else if (e.data.type === "playing") {
         playing = e.data.on;
         setGate(playing);

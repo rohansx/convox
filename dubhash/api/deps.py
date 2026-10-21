@@ -236,7 +236,7 @@ def get_session_registry(conn: HTTPConnection) -> Any:
 
 
 def get_session_factory(conn: HTTPConnection) -> Callable[..., Any]:
-    """factory(call_id, pair, *, mode, escape_dtmf, record, co_located) -> CallSession."""
+    """factory(call_id, pair, *, mode, escape_dtmf, record, co_located, opening_line)."""
     state = conn.app.state
 
     def make(
@@ -247,11 +247,12 @@ def get_session_factory(conn: HTTPConnection) -> Callable[..., Any]:
         escape_dtmf: str = "0",
         record: bool = False,
         co_located: bool = False,
+        opening_line: Literal["short", "full", "off"] = "full",
     ) -> Any:
         from dubhash.session.call_session import CallSession
         from dubhash.session.providers import build_providers
 
-        return CallSession(
+        session = CallSession(
             call_id,
             pair,
             build_providers(pair, state.settings),
@@ -261,6 +262,9 @@ def get_session_factory(conn: HTTPConnection) -> Callable[..., Any]:
             escape_dtmf=escape_dtmf,
             record=record,
             co_located=co_located,
+            opening_line=opening_line,
         )
+        session.start_prewarm()  # STT/TTS/MT sockets open while the phones join (L7)
+        return session
 
     return make

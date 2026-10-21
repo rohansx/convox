@@ -31,6 +31,7 @@ Per pair (top-level key `{x}-{y}`, two-letter codes):
 | `barge_in_min_ms` | int, ms | `1200` | listener speech during playback longer than this is a real interruption: `clear()` the listener leg, mark the playing translation clipped, switch floor | floor controller |
 | `duck_db` | int, dB | `-14` | level of the speaker's original audio mixed under the TTS in the listener's stream | `audio/mixer.py` |
 | `early_final_ms` | int, ms | `200` | end the STT stream after this much silence, before EOU, so MT/TTS overlap the EOU wait. `0` = off (the default). On for `hi-kn`, `mr-hi`, `mr-en`, `gu-hi`, `gu-en` ([L3, L4, L6](../plan/open-questions.md#answer-log)) | `interp/pipeline.py` |
+| `max_utterance_ms` | int, ms | `7000` | an utterance that has run this long ends at the next low-energy dip (a pause, or a frame 12 dB under the last 500 ms' peak), at the latest 1 s later; `0` = off ([L7](../plan/open-questions.md#answer-log)) | `interp/endpoint.py` |
 | `spec_mt`, `spec_after_ms` | bool, int ms | `false`, `200` | speculative MT on STT partials during the EOU wait. Off everywhere ([L1a](../plan/open-questions.md#answer-log)) | `interp/speculate.py` |
 
 Per side (`a` / `b`):
@@ -162,6 +163,8 @@ Every component is behind an interface with a fake, and the pipeline must run en
 | `CALL_RECORDING` | `true` \| `false`; unset = `true` only when `DUBHASH_ENV=dev` | per-call recording (`store/recorder.py`): `a_in/b_in.wav` (each mic), `a_out/b_out.wav` (what each leg was sent, on the same timeline), `events.jsonl` (every CallEvent plus leg marks, clears, DTMF), `client.jsonl` (phone telemetry) and `summary.json`. Read one with `tools/call_report.py <call_id>`. **Dev and test only**: it stores both callers' voices, so it needs their consent (DPDP) and is never on by default in prod. Transcript text is kept only when the call has `record: true` |
 | `CALL_RECORDING_DIR` | `out/calls` | recordings land in `<dir>/<YYYY-MM-DD>/<call_id>/` (gitignored, never commit them) |
 | `LOG_FILE` | `logs/dubhash.log` | the app also writes its log as JSON lines here (with `call_id` when known), rotating at 10 MB, 5 files kept, appended across restarts. Empty = stdout only. Not written in `DUBHASH_ENV=test` |
+| `LOOPBACK_OPENING_LINE` | `short` (default) \| `full` \| `off` | the opening line of `/loopback` and `/join` calls; a loopback request may pass `opening_line` itself (L7) |
+| `PSTN_OPENING_LINE` | `full` (default) \| `short` \| `off` | the opening line of `POST /v1/calls` calls (`full` = the disclosure sentence, plus the record sentence with `record: true`) |
 
 ### Global constants (defaults from the spec)
 

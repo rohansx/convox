@@ -33,7 +33,7 @@ fmt: ## autofix lint and format
 	uv run ruff format .
 
 dev: ## API on :8000 with reload (one worker: both legs of a call share a process)
-	uv run uvicorn dubhash.api.app:app --host $(HOST) --port $(PORT) --reload
+	uv run uvicorn dubhash.api.app:app --host $(HOST) --port $(PORT) --reload --ws-per-message-deflate false
 
 up: ## start postgres + redis (docker compose)
 	docker compose up -d postgres redis

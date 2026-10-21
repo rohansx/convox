@@ -132,6 +132,14 @@ class WebRtcLeg:
                 on_ping(server_ms)
             await asyncio.sleep(interval_s)
 
+    async def ping(self, server_ms: int) -> None:
+        """Ask the page for {"type":"telemetry","kind":"pong","server_ms","client_ms"}."""
+        if self.closed:
+            return
+        async with self._lock:
+            msg = json.dumps({"type": "ping", "server_ms": server_ms})
+            await self._send(self.ws.send_text, msg)
+
     async def run(self) -> None:
         try:
             while not self.closed:

@@ -73,4 +73,4 @@ def test_vad_falls_back_to_energy_when_silero_cannot_load(monkeypatch):
 
     monkeypatch.setattr(providers_mod, "SileroVAD", broken)
     p = build_providers(PAIRS["fake-fake"], settings())
-    assert isinstance(p.vad_factory(), EnergyVAD)
+    assert isinstance(p.vad_factory().inner, EnergyVAD)  # behind the noise-floor gate

@@ -11,13 +11,20 @@
                                   or foreign token closes with 4401
 
 Nothing is dialed and the no-answer rule does not apply (people need time to open tabs).
+The socket pings the page every PING_INTERVAL_S with the session clock ({"type":"ping",
+"server_ms"}, call-relative like the turn log's t_* fields) and logs every telemetry message
+the page sends as `leg.telemetry` (kind, tag, client_ms, ...; pongs add rtt_ms), so a phone
+test can be lined up with the turn log (L7).
 Disabled (404) when ENABLE_WEBRTC_LEG is false. Behind the console's auth (off in test):
 loopback pages carry live audio and are not for the open internet.
 """
 
 from __future__ import annotations
 
+import asyncio
+import contextlib
 import html
+import logging
 from pathlib import Path
 from typing import Annotated, Any
 from urllib.parse import parse_qsl, quote, urlencode
@@ -59,6 +66,10 @@ from dubhash.join.tokens import verify_join_token
 from dubhash.legs.webrtc import WebRtcLeg
 
 PAGE = Path(__file__).resolve().parent.parent / "legs" / "static" / "loopback.html"
+PING_INTERVAL_S = 2.0
+_TELEMETRY_FIELDS = ("tag", "client_ms", "audio_ctx_ms", "rms", "gated", "cleared")
+
+log = logging.getLogger(__name__)
 
 
 def require_enabled(conn: HTTPConnection) -> None:
@@ -107,7 +118,10 @@ def create_loopback_call(
         raise unsupported_pair(req.a_lang, req.b_lang)
     call_id = new_call_id()
     # both phones in one room (/join, loopback): cross-talk gate on, no ducked original
-    session = factory(call_id, pair, mode=req.mode, record=req.record, co_located=True)
+    opening = req.opening_line or settings.loopback_opening_line
+    session = factory(
+        call_id, pair, mode=req.mode, record=req.record, co_located=True, opening_line=opening
+    )
     sessions.create(call_id, session)
     handle = CallHandle(
         call_id=call_id,
@@ -242,4 +256,33 @@ async def loopback_socket(ws: WebSocket, sessions: Sessions, book: Book) -> None
     if not book.leg_attached(call_id, side):
         return await close_ws(ws, CLOSE_CONFLICT)
     leg = WebRtcLeg(side, ws)
-    await serve_leg(ws, session, side, leg, book, call_id)
+    clock = getattr(session, "clock", None) or leg.clock
+    leg.on_telemetry(_telemetry_logger(call_id, side, clock))
+    pinger = asyncio.create_task(_ping(leg, clock), name=f"{call_id}-ping-{side}")
+    try:
+        await serve_leg(ws, session, side, leg, book, call_id)
+    finally:
+        pinger.cancel()
+        with contextlib.suppress(BaseException):
+            await pinger
+
+
+async def _ping(leg: WebRtcLeg, clock: Any) -> None:
+    while not leg.closed:
+        await leg.ping(clock.now_ms())
+        await asyncio.sleep(PING_INTERVAL_S)
+
+
+def _telemetry_logger(call_id: str, side: str, clock: Any) -> Any:
+    def cb(msg: dict[str, Any]) -> None:
+        now = clock.now_ms()
+        extra: dict[str, Any] = {"call_id": call_id, "side": side, "kind": msg.get("kind")}
+        extra.update({k: msg[k] for k in _TELEMETRY_FIELDS if k in msg})
+        extra["t_server"] = now
+        sent = msg.get("server_ms")
+        if msg.get("kind") == "pong" and isinstance(sent, int | float):
+            extra["ping_server_ms"] = sent
+            extra["rtt_ms"] = now - sent
+        log.info("leg.telemetry", extra=extra)
+
+    return cb

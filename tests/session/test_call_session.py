@@ -290,7 +290,7 @@ async def test_record_flag_reaches_the_writer():
     assert w.records == [True] and w.finished == 1
 
 
-# --- opening line: marked, and holds that leg's interpretation playback (L4) ----------
+# --- opening line: marked; a translation for a leg still hearing it cuts it (L4, L7) ---
 
 
 def _opening_ms(tts: FakeTTS, side: str) -> int:
@@ -298,20 +298,21 @@ def _opening_ms(tts: FakeTTS, side: str) -> int:
     return len(opening_text(PAIR.side(side).lang, PAIR.side(other).lang)) * tts.ms_per_char
 
 
-async def test_opening_is_marked_and_translation_waits_until_it_has_played():
+async def test_opening_is_marked_and_a_translation_cuts_it():
     tts = {"a": FakeTTS(), "b": FakeTTS(ms_per_char=90)}  # b's opening: ~4 s
     session, legs, clock, bus = make(prov=providers(tts=tts), opening_line=True)
     await attach_both(session, legs)
     pcm = conversation([("silence", 300), ("speech", 1200), ("silence", 8000)])
     await drive_lockstep(session, legs, clock, {"a": pcm})
     await session.wait_closed()
-    marks = [e[1][0] for e in legs["b"].log if e[0] == "mark"]
-    assert marks == ["opening", "a:0"]
+    ops = [e[0] if e[0] != "mark" else e[1][0] for e in legs["b"].log if e[0] != "send"]
+    assert ops[:3] == ["opening", "clear", "a:0"]  # the phone's queued opening is dropped
     (turn,) = session.turn_log.turns
     b_opening_ms = _opening_ms(tts["b"], "b")
-    assert turn.t_eou < b_opening_ms  # ready while B still heard the opening
-    assert turn.t_play_start >= b_opening_ms  # ... but played only after it
+    assert turn.t_play_start < b_opening_ms  # not held behind the opening
+    assert turn.t_play_start - turn.t_eou <= 100
     assert turn.clipped_ms is None
+    assert [e.payload["side"] for e in bus.kinds("prompt_cut")] == ["b"]
 
 
 async def test_speech_during_the_opening_is_interpreted_not_dropped():
@@ -325,7 +326,7 @@ async def test_speech_during_the_opening_is_interpreted_not_dropped():
     await session.wait_closed()
     (turn,) = session.turn_log.turns
     assert turn.t_speech_start <= 300  # heard from the start, during synthesis
-    assert turn.t_play_start >= 800 + _opening_ms(session.providers.tts["b"], "b")
+    assert turn.t_play_start < 800 + _opening_ms(session.providers.tts["b"], "b")
 
 
 class _NoOpeningMarkLeg(FakeLeg):
@@ -336,7 +337,7 @@ class _NoOpeningMarkLeg(FakeLeg):
             await super().mark(tag)
 
 
-async def test_opening_mark_that_never_returns_times_out():
+async def test_opening_mark_that_never_returns_does_not_hold_the_translation():
     from dubhash.session.floor import PROMPT_GRACE_MS
 
     session, legs, clock, bus = make(opening_line=True)
@@ -347,4 +348,4 @@ async def test_opening_mark_that_never_returns_times_out():
     await session.wait_closed()
     (turn,) = session.turn_log.turns
     limit = _opening_ms(session.providers.tts["b"], "b") + PROMPT_GRACE_MS
-    assert limit <= turn.t_play_start <= limit + 100
+    assert turn.t_play_start < limit and turn.t_play_start - turn.t_eou <= 100

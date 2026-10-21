@@ -58,6 +58,10 @@ class Settings(BaseSettings):
     tts_impl: Literal["real", "fake"] = "fake"
     enable_webrtc_leg: bool = True
     bench_realtime: bool = False
+    # The opening line per call kind (L7): "short" = the two language names and "speak"
+    # (~1.5-2 s), "full" = the disclosure sentence (+ record sentence), "off" = none.
+    loopback_opening_line: Literal["short", "full", "off"] = "short"  # /loopback and /join
+    pstn_opening_line: Literal["short", "full", "off"] = "full"  # POST /v1/calls
 
     # Per-call recording for diagnosis (dubhash/store/recorder.py): mic and playout wavs,
     # every CallEvent, client telemetry and a summary under call_recording_dir. Dev and

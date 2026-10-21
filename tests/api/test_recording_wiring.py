@@ -135,7 +135,7 @@ async def test_nothing_is_recorded_when_call_recording_is_off(tmp_path):
             await asyncio.sleep(0.3)
         await asyncio.gather(*readers)
         await asyncio.sleep(0.3)
-        assert not any(m.get("type") == "ping" for m in got)
+        # pings still flow (phone telemetry goes to the server log, L7); only disk writes stop
         assert not list(tmp_path.iterdir())
     finally:
         srv.should_exit = True

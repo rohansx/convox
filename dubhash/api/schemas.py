@@ -64,6 +64,8 @@ class LoopbackCallRequest(BaseModel):
     mode: Literal["interpret", "bridge"] = "interpret"
     record: bool = False  # keep src_text/tgt_text in the turn log (dev and live tools)
     pair: str | None = None  # pairs.yaml key, e.g. "hi-kn-direct"; default: by languages
+    # default: settings.loopback_opening_line ("short")
+    opening_line: Literal["short", "full", "off"] | None = None
 
 
 class LoopbackCallResponse(BaseModel):

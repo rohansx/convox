@@ -62,8 +62,8 @@ from dubhash.interp.pipeline import BACKCHANNEL_MAX_WORDS, Interpreter
 from dubhash.legs.base import LegTransport
 from dubhash.session.crosstalk import CrosstalkGate, Verdict
 from dubhash.session.floor import FloorController
-from dubhash.session.prompts import line_check_text, opening_text
-from dubhash.session.providers import SIDES, Providers
+from dubhash.session.prompts import line_check_text, opening_text, short_opening_text
+from dubhash.session.providers import SIDES, Providers, prewarm
 from dubhash.session.turn_log import TurnLog
 from dubhash.types import CallEvent, EventKind, Side, Translation, other
 
@@ -71,6 +71,20 @@ log = logging.getLogger(__name__)
 
 Status = Literal["ringing", "active", "ended"]
 Mode = Literal["interpret", "bridge"]
+# "full": the disclosure sentence (+ the record sentence), PSTN's default. "short": the two
+# language names and "speak" (~1.5-2 s), loopback's and /join's default. "off": none (L7).
+OpeningLine = Literal["short", "full", "off"]
+OPENING_LINES: tuple[OpeningLine, ...] = ("short", "full", "off")
+
+
+def opening_mode(value: bool | str) -> OpeningLine:
+    """Normalise an opening_line setting; True/False (the old flag) mean full/off."""
+    if value is True or value is False:
+        return "full" if value else "off"
+    if value not in OPENING_LINES:
+        raise ValueError(f"opening_line must be one of {OPENING_LINES}, not {value!r}")
+    return value  # type: ignore[return-value]
+
 
 PROMPT_TIMEOUT_S = 10.0
 SPEECH_END_HANGOVER_MS = 200  # silence after which the floor hears "speech ended"
@@ -385,7 +399,7 @@ class CallSession:
         escape_dtmf: str = "0",
         record: bool = False,
         tick_ms: int = 20,
-        opening_line: bool = True,
+        opening_line: bool | OpeningLine = "full",
         co_located: bool = False,
         duck_original: bool | None = None,
     ) -> None:
@@ -403,7 +417,7 @@ class CallSession:
         self.mode: Mode = mode
         self.record = record
         self.tick_ms = tick_ms
-        self.opening_line = opening_line
+        self.opening_line: OpeningLine = opening_mode(opening_line)
         self.co_located = co_located
         self.duck_original = (not co_located) if duck_original is None else duck_original
         self.status: Status = "ringing"
@@ -470,6 +484,17 @@ class CallSession:
         self._t_active: int | None = None
         self._t_end: int | None = None
         self._t_bypass: int | None = None
+        self.prewarm_task: asyncio.Task[None] | None = None
+
+    def start_prewarm(self) -> None:
+        """Open the provider sockets now (call creation), in the background, so the first
+        utterance does not pay the STT/TTS/MT handshakes (L7). Done again at activation."""
+        if self.mode != "interpret" or self.status == "ended":
+            return
+        if self.prewarm_task is None or self.prewarm_task.done():
+            self.prewarm_task = asyncio.get_running_loop().create_task(
+                prewarm(self.providers, self.pair), name=f"{self.call_id}-prewarm"
+            )
 
     # --- public API ------------------------------------------------------------------------
 
@@ -495,6 +520,8 @@ class CallSession:
             for side, leg in list(self.legs.items()):
                 await self._close_leg(side, leg)
                 self._publish("leg", {"side": side, "status": "closed"})
+            await self._stop_prewarm()
+            await self._aclose_providers()  # prewarmed sockets
             await self._finish()
             return
         self._stop.set()
@@ -548,6 +575,7 @@ class CallSession:
                 self._tg = tg
                 tg.create_task(self._watch_stop(), name=f"{self.call_id}-stop")
                 self.floor.quiet_from(self._t_active)  # not from when the call was created
+                self.start_prewarm()  # sockets warmed at creation may have gone stale
                 await self.floor.start()
                 for s in SIDES:
                     tg.create_task(self._pump(s), name=f"{self.call_id}-pump-{s}")
@@ -559,7 +587,7 @@ class CallSession:
                                 self._interpret(s), name=f"{self.call_id}-interp-{s}"
                             )
                     self._interpreting = not self._forwarding
-                    if self.opening_line:
+                    if self.opening_line != "off":
                         await self._play_opening()
         except* _Stop:
             pass
@@ -668,6 +696,7 @@ class CallSession:
         await self._close_interpreters()
         for side, leg in list(self.legs.items()):
             await self._close_leg(side, leg)
+        await self._stop_prewarm()
         await self._aclose_providers()
         await self._finish()
 
@@ -703,6 +732,13 @@ class CallSession:
             log.warning(
                 "leg.close_error", extra={"call_id": self.call_id, "side": side, "error": repr(e)}
             )
+
+    async def _stop_prewarm(self) -> None:
+        task, self.prewarm_task = self.prewarm_task, None
+        if task is not None and not task.done():
+            task.cancel()
+            with contextlib.suppress(BaseException):
+                await task
 
     async def _aclose_providers(self) -> None:
         p = self.providers
@@ -786,9 +822,11 @@ class CallSession:
 
     async def _play_opening(self) -> None:
         async def one(side: Side) -> None:
-            text = opening_text(
-                self.pair.side(side).lang, self.pair.side(other(side)).lang, record=self.record
-            )
+            me, them = self.pair.side(side).lang, self.pair.side(other(side)).lang
+            if self.opening_line == "short":
+                text = short_opening_text(me, them)
+            else:
+                text = opening_text(me, them, record=self.record)
             async with asyncio.timeout(PROMPT_TIMEOUT_S):
                 sent = await self.floor.play_prompt(
                     side, self._prompt_chunks("opening", side, text)
