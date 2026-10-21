@@ -25,6 +25,11 @@
 # rarely a cancelled MT call).
 # max_utterance_ms (default 7000, not set below): an utterance that has run this long ends at
 # the next pause between words (L7), so a noisy room or a monologue is never held back.
+# chunking (default false, not set below), chunk_pause_ms (300), chunk_min_ms (1200):
+# chunked interpretation (L9). A pause of chunk_pause_ms after chunk_min_ms of speech
+# commits the clause so far (>= 4 words, not ending in a number) and plays its translation
+# while the speaker goes on. Off on every pair until it is measured live per pair (meaning
+# of the English pivot and numbers intact for verb-final hi/mr/gu).
 
 hi-kn:
   a: { lang: hi-IN, stt: sarvam-translate, mt_src: en-IN, tts: bulbul, voice_m: "bulbul:hi-male-1", voice_f: "bulbul:hi-female-1" }

@@ -159,8 +159,23 @@ A backchannel is "haan", "hmm", "sari", "ok": a short acknowledgement that must 
 | Owner | P2 |
 
 - **Warm sockets.** Sarvam websocket connect plus auth costs 150 to 300 ms, so keep one open per leg. Whether a stream can stay open across utterances with a reset, or must reconnect, is unknown. A Pipecat issue reports SarvamSTT dying after 60 s of silence, which suggests a keepalive is needed (**TBD — see [open questions](../plan/open-questions.md)**).
-- Partials go to the console over SSE ([console.md](console.md)). They are never sent to MT in v1. Clause-level partial start is v2.
+- Partials go to the console over SSE ([console.md](console.md)). They are never sent to MT in v1 (speculation on partials, `spec_mt`, hit 1/8 live, L1a). Clause-level interpretation is built on STT *finals* instead: see [§3.4.1](#341-chunked-interpretation-l9).
 - **Chaos requirement:** if a provider socket is killed mid-utterance, the interpreter must reconnect, and the controller must not deadlock ([testing-strategy.md](../engineering/testing-strategy.md)).
+
+#### 3.4.1 Chunked interpretation (L9)
+
+Latency is felt from when the speaker *starts*: a 5 s sentence translated after EOU is heard about 6.4 s after its first word, while first-audio (from speech end) says 1.4 s. With `chunking: true` on a pair (`interp/chunker.py`, used by `interp/pipeline.py`), an utterance is interpreted clause by clause, on the early-final machinery (L3):
+
+| Step | What happens |
+|---|---|
+| cut | after `min(early_final_ms, chunk_pause_ms)` of silence inside the utterance, the STT stream is ended (`end()`), as an early final |
+| commit request | when the pause reaches `chunk_pause_ms` (300) and the chunk so far has `chunk_min_ms` (1200) of speech, counted from the utterance start or the first speech after the last commit |
+| guard | the chunk's STT final must have **at least 4 words** and must **not end with a digit, a number word** (en/hi/mr/gu/kn), **an unclosed quantity** (`OTP`, `flat`, `number`, `₹`, `Rs.`, `pin`, `code`…) or a dangling English function word (`at`, `the`, `to`…) |
+| commit | if speech resumes and the guard passed: the chunk is translated, synthesised and handed to the floor (`final_chunk=False`) as soon as it is ready; the utterance continues in a **fresh STT stream fed only from the pause on** (200 ms of it as pre-roll), never the committed audio |
+| no commit | guard failed, or the pause was shorter: the early final is discarded and the stream restarted on the whole buffered chunk (replay), as L3 |
+| last chunk | delivered at EOU exactly as before (`final_chunk=True`); a pause that ends in EOU is a plain early final |
+
+Each chunk has its own `seq`; the chunks of one utterance share `utterance_id` and count `chunk` 0, 1, …; deliveries keep order through a per-utterance chain (after the previous utterance, then each chunk). A chunk's `t_speech_start`/`t_speech_end` are its own speech, its `t_eou` is its commit time, and `t_utt_start` is the utterance's start (set on unchunked turns too). The backchannel rule applies only to whole utterances. Only chunk 0 gets the earcon. With `early_final_ms: 0` the cut happens at `chunk_pause_ms` (so the last chunk is then an early final too). Off by default; see [L9](../plan/open-questions.md#answer-log) for measurements and which pairs have it on.
 
 ### 3.5 translate
 
@@ -225,8 +240,11 @@ Turn row (from the schema in [data-model.md](data-model.md)):
 ```
 turns(id, call_id, side, seq, t_speech_start, t_speech_end, t_eou, t_stt_final, t_mt, t_tts_ttfb,
       t_play_start, t_play_end, src_text, tgt_text, backchannel, clipped_ms,
-      stt_provider, mt_provider, tts_provider, voice)
+      stt_provider, mt_provider, tts_provider, voice,
+      utterance_id, chunk, t_utt_start)            -- L9, nullable
 ```
+
+With chunking, one utterance is one row per chunk. A database created before L9 needs `ALTER TABLE turns ADD COLUMN utterance_id integer, ADD COLUMN chunk integer, ADD COLUMN t_utt_start integer` (the dev schema is `create_all`, no migrations).
 
 `src_text`/`tgt_text` are kept only if the call was created with `record: true` or the platform opted in. Otherwise they are nulled after latency metrics are computed.
 
@@ -244,6 +262,7 @@ turns(id, call_id, side, seq, t_speech_start, t_speech_end, t_eou, t_stt_final, 
 | tts | `t_tts_ttfb` (turns), `t_tts_done` (bench report only) | turns, bench report |
 | mix / play | `t_play_start`, `t_play_end`, clipping flag, `clipped_ms` (barge-in) | turns |
 | headline | first-audio = `t_play_start − t_speech_end`: p50 under 1.5 s, p95 under 2.0 s on PSTN | `calls.p50_first_audio_ms`, `p95_first_audio_ms` |
+| felt (L9) | per utterance: speech start → first heard, ear-voice span, first audio (speech end → last chunk) | `store/timeline.utterance_metrics`: recorder summary, `call_report`, `bench`, `live_loopback` |
 
 Headline latency figures must come from two real phones through Exotel or Plivo. 8 kHz codec audio changes STT latency and accuracy, and provider playout buffering does not show up in loopback. See [evaluation-and-metrics.md](../engineering/evaluation-and-metrics.md).
 

@@ -97,6 +97,11 @@ The code comments in the spec leave three transitions implicit. These readings k
 1. **`on_translation` plays immediately when nothing is playing and the floor is the source's.** That is `state ∈ {IDLE, src_SPEAKING}`. "If IDLE" in the spec has to include `src_SPEAKING`: the translation arrives about 1.2 s after EOU, while the source side still holds the floor. If the *listener* holds the floor (`dst_SPEAKING`), the translation is enqueued, so we never talk over someone who is speaking.
 2. **`X_SPEAKING → IDLE` when X's utterance produces no translation** (tagged backchannel, empty STT final, or shorter than 300 ms). Entering `IDLE` drains the queue as `on_mark` would.
 3. **The barge-in timer runs only for the listener.** During `PLAYING_AB`, speech from B (the listener) starts the timer. Speech from A (the speaker, continuing) does not. A's new utterance is translated and enqueued.
+4. **Chunked utterances (L9).** With `chunking` on, a `Translation` may be one chunk of A's utterance that A is still speaking (`final_chunk=False`). Rule 1 above already plays it at once (`A_SPEAKING` is the source's floor), so B hears it **while A talks**. Once a chunk of A's has started, A is the floor's *holder* until A's final chunk starts:
+   - a playback that ends with nothing of A's queued goes to `A_SPEAKING`, not `IDLE` (more of A's utterance is coming);
+   - only A's next chunk may start, so chunk n+1 plays right behind chunk n and a translation from B (queued meanwhile) waits until A's utterance is complete, never in the middle of it;
+   - the hold ends when A's final chunk starts, when the rest of A's utterance is discarded (`A_SPEAKING → IDLE`, rule 2), when B barges in on A's chunk (rule 4: B takes the floor, A's remaining chunks queue in arrival order), on bypass, or by the 4 s rescue (rule 5) if A's final chunk is lost. A DTMF replay does not end it.
+   Each chunk is its own playback (earcon only on chunk 0, mark, barge-in, clip), so invariants 1, 2 and 4 hold per chunk.
 
 ---
 
@@ -175,6 +180,11 @@ Test approach: drive the controller with **scripted event sequences** against tw
 | DTMF 1 on leg A mid-PLAYING_AB | Replay of A's last-heard translation queued. Plays after the current item. |
 | DTMF 0 while playing with 2 queued | Playing clipped, 2 queued clipped (0 ms), mixer passthrough, interpreters stopped. |
 | Provider socket killed mid-utterance (chaos) | Controller does not deadlock. Later translations still play. |
+| Chunks a0 (not final), a1 (final) while A talks (`tests/session/test_floor_chunks.py`) | a0 plays to B at once; after its mark `A_SPEAKING`; a1 plays; then `IDLE`. |
+| a1 arrives while a0 plays | queued; starts in a0's mark handler, no `IDLE` between. |
+| b1 arrives between A's chunks | waits until A's final chunk has played. |
+| B barges in on a0 | a0 clipped, `B_SPEAKING`; A's later chunks queue in arrival order. |
+| Rest of A's utterance discarded / final chunk lost | hold released at once / by the 4 s rescue. |
 
 ---
 
@@ -278,6 +288,8 @@ Two people genuinely talking over each other are each near their own phone, so t
 **Echo (every call).** A leg playing a translation can hear it on its own mic: a phone's loudspeaker (`?duplex=1`; the phone page otherwise sends silence while it plays) or line echo on PSTN. While playback to a leg runs, and for 300 ms after its mark, a mic frame more than **10 dB** under the playback's level (power mean of the translation's rendered frames, the earcon left out) goes to the endpointer as silence. Echo then never starts speech or the barge-in timer. Line echo after a network echo canceller is normally 30 dB or more down and browser echo cancellation removes most loudspeaker echo, while a caller talking over a translation (Bulbul plays at about −18 dBFS) is rarely more than 10 dB under it, so a real barge-in still works (`test_quiet_speech_over_the_playback_still_barges_in`: 8 dB under). `ECHO_MARGIN_DB` needs a check on real PSTN levels.
 
 **Measured (live, 21 Oct, `tools/live_loopback.py --join --a-lang mr-IN --b-lang hi-IN --room-db -12`: real Sarvam/Bulbul, two scripted phones whose mics each carry the other's voice 12 dB down and 40 ms late, 7 script lines).** Before the gate: **14 server turns** for 7 lines (every line also became a junk turn on the other side), queue wait p95 **3925 ms**, first-audio p50/p95 1317 / **5256 ms**. With it: **7 turns**, queue p95 1 ms, first-audio p50/p95 1409 / 1557 ms. At `--room-db -6` (the margin itself) still 7 of 7; with no room, 7 of 7 and p50/p95 1444 / 2044 ms, so genuine turns are kept. The junk turns queueing ahead of the real ones are one cause of the "5 seconds" heard on the stage test.
+
+**With chunking (L9)** a chunk of A's utterance plays to B while A is still talking. The gate is unchanged: B's mic hearing A is still gated at frame level (A has an open utterance and is voiced), and B's mic hearing the chunk it is being played is the echo guard's case. Every chunk's STT stream is bound to the same session utterance, so the cross-talk judge at `end()` sees the whole utterance so far; a cross-talk chunk gets an empty final, fails the 4-word guard and is never committed (`tests/session/test_chunked_session.py`). Not covered: on co-located phones, A's own mic hearing B's phone play the chunk while A continues (A's utterance is open, so the frame gate does not apply); it is quieter than A's own voice at A's mic, but it is mixed into A's STT stream.
 
 Every drop is published as an event of kind `crosstalk` with `{side, reason: level | lang | echo, stage: frame | eou}` (one per run of gated frames), and logged as `crosstalk.drop`.
 
