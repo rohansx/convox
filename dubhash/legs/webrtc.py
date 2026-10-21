@@ -5,9 +5,13 @@ Despite the name this is plain websocket PCM, not WebRTC (static/loopback.html):
                  {"type": "hello", "side": "a", "lang": "hi"}   (optional, recorded)
                  {"type": "dtmf", "digit": "1"}                 (on-page buttons)
                  {"type": "mark", "name": tag}                  (playout reached our mark)
+                 {"type": "telemetry", "kind": ...}             (the phone page, L7: kind
+                     play_start/play_end {tag, client_ms, audio_ctx_ms}, mic_level {rms,
+                     client_ms}, pong {server_ms, client_ms}); handed to on_telemetry
   us -> browser: binary = PCM16 LE mono 16 kHz to queue for playout
                  {"type": "mark", "name": tag}                  (ack it when played)
                  {"type": "clear"}                              (flush the playout queue)
+                 {"type": "ping", "server_ms": n}               (ping(): answered by a pong)
 
 Marks fire from a playout estimate on the server clock (the browser plays at real time)
 until the page has acked one; from then on acks win, and the estimate only fires a mark
@@ -50,6 +54,7 @@ class WebRtcLeg:
         self._pending: set[str] = set()
         self._mark_cbs: list[Callable[[str], None]] = []
         self._dtmf_cbs: list[Callable[[str], None]] = []
+        self._telemetry_cbs: list[Callable[[dict[str, Any]], None]] = []
         self._closed_evt = asyncio.Event()
         self._lock = asyncio.Lock()
 
@@ -88,6 +93,18 @@ class WebRtcLeg:
 
     def on_dtmf(self, cb: Callable[[str], None]) -> None:
         self._dtmf_cbs.append(cb)
+
+    def on_telemetry(self, cb: Callable[[dict[str, Any]], None]) -> None:
+        """cb(msg) for every {"type": "telemetry"} message from the page."""
+        self._telemetry_cbs.append(cb)
+
+    async def ping(self, server_ms: int) -> None:
+        """Ask the page for {"type":"telemetry","kind":"pong","server_ms","client_ms"}."""
+        if self.closed:
+            return
+        async with self._lock:
+            msg = json.dumps({"type": "ping", "server_ms": server_ms})
+            await self._send(self.ws.send_text, msg)
 
     async def run(self) -> None:
         try:
@@ -142,6 +159,14 @@ class WebRtcLeg:
             self._fire(str(msg["name"]))
         elif kind == "hello":
             self.hello = msg
+        elif kind == "telemetry":
+            for tcb in self._telemetry_cbs:
+                try:
+                    tcb(msg)
+                except Exception as e:  # a recorder bug must not drop the call
+                    log.warning(
+                        "leg.telemetry_error", extra={"side": self.leg_id, "error": repr(e)}
+                    )
 
     def _estimated_done(self, tag: str) -> None:
         if tag not in self._pending:
