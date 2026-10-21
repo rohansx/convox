@@ -17,7 +17,7 @@ from typing import Any
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
-from dubhash.api import calls, console, health, legs_ws, loopback, webhooks
+from dubhash.api import calls, console, health, legs_ws, login, loopback, webhooks
 from dubhash.api.deps import CallRegistry, InMemoryCallRegistry
 from dubhash.api.schemas import ApiError, api_error_handler
 from dubhash.config.settings import Settings, get_settings
@@ -91,6 +91,7 @@ def create_app(
     app.state.engine = None
 
     app.include_router(health.router)
+    app.include_router(login.router)
     app.include_router(console.router)
     app.include_router(calls.router)
     app.include_router(legs_ws.router)
