@@ -1,149 +1,175 @@
 # Dev setup
 
-This document gets a new engineer from a clean laptop to running the dubhash pipeline. It covers wav files through FakeLegs first, then two browser tabs through the loopback WebRTC harness, without spending any telephony minutes. The repo is empty right now, so **every command here is proposed**. It describes what the Day 1 scaffolding should make true. Whoever lands the scaffolding PR updates this doc so the commands match what actually works.
+This document gets a new engineer from a clean laptop to a running dubhash: the offline tests on fakes, the API with the console, the live vendor smoke test, and the eval tools, without spending any telephony minutes. Every command here exists in the repo today. Where something lands later in the build (the session API, `tools/bench.py`, the loopback call), it says so. If you change a command, change this doc in the same PR; `tests/tools/test_repo_files.py` checks that its links resolve and that the main commands are still mentioned.
 
 ## Prerequisites
 
 | Tool | Version | Why |
 |---|---|---|
-| Python | 3.12 | asyncio app, every vendor ships Python first |
-| uv (preferred) or pip + venv | recent | dependency install; `uv` is faster, pip works |
-| Docker + Docker Compose | recent | Postgres and Redis locally; same compose file as the VM |
-| Chrome or Firefox | recent | WebRtcLeg loopback harness (mic access on `localhost`) |
-| sox / ffmpeg (optional) | any | converting and inspecting wav fixtures |
+| Python | 3.12 (uv installs it if missing) | asyncio app, every vendor ships Python first |
+| [uv](https://docs.astral.sh/uv/) | recent | dependency install and running everything (`uv run ...`) |
+| make | any | the shortcuts below; each target is a one-line `uv run` you can type yourself |
+| Docker + Docker Compose | recent, optional | Postgres and Redis; the app and tests run without them |
+| Chrome or Firefox | recent | WebRTC loopback page (mic access on `localhost`) |
+| sox (optional) | any | inspecting wavs; recording corpus prompts without `sounddevice` |
 
-Hot-path dependencies: numpy, onnxruntime (Silero VAD v5), soxr (resampling). Web: FastAPI, websockets, uvicorn. Storage: SQLAlchemy, a Postgres async driver, a Redis client. Pipecat may be installed so we can borrow its service classes (Silero VAD, Exotel serializer, Sarvam/ElevenLabs clients) as libraries. Do not run its pipeline. See [conventions](conventions.md).
-
-## 1. Clone and install (proposed)
+## 1. Install
 
 ```bash
 git clone <repo-url> dubhash && cd dubhash
-git switch main
-
-# option A: uv
-uv venv --python 3.12
-uv sync                      # installs from pyproject.toml / uv.lock
-
-# option B: pip
-python3.12 -m venv .venv && source .venv/bin/activate
-pip install -e ".[dev]"
+uv sync          # or: make install. Creates .venv from pyproject.toml + uv.lock, dev group included
+cp .env.example .env
 ```
 
-## 2. Start Postgres and Redis (proposed)
+`make help` lists every target.
 
-Locally you only need the two stores. The `app` and `caddy` services are for the VM (see [deployment](deployment.md)).
+| Target | Runs |
+|---|---|
+| `make install` | `uv sync` |
+| `make test` | `uv run pytest -q` (live vendor tests deselected via `addopts = "-m 'not live'"`) |
+| `make test-live` | `uv run pytest -m live -s` (each test skips when its key is missing) |
+| `make lint` | `uv run ruff check .` and `uv run ruff format --check .` (what CI runs) |
+| `make fmt` | `ruff check --fix` and `ruff format` |
+| `make dev` | `uv run uvicorn dubhash.api.app:app --host 127.0.0.1 --port 8000 --reload` |
+| `make up` / `make down` | `docker compose up -d postgres redis` / `docker compose down` |
+| `make bench` | `uv run python -m tools.bench $(BENCH_ARGS)` (bench lands in phase 2) |
+| `make smoke` | `uv run python tools/smoke.py $(SMOKE_ARGS)` |
+| `make fixtures` | `uv run python tools/gen_fixtures.py` |
+| `make label` | `uv run python tools/label.py $(TURNS) --rater "$(RATER)"` |
 
-```bash
-docker compose up -d postgres redis
-docker compose ps
-```
+Override variables on the command line: `make dev PORT=8080 HOST=0.0.0.0`, `make smoke SMOKE_ARGS="--only mt,tts"`.
 
-The pipeline itself does not need either store. Nothing in the hot path touches Postgres or Redis. FakeLeg runs and unit tests should pass with both stopped. Only the turn writer, `GET /v1/calls/{id}/turns` and the call registry need them.
+## 2. Environment variables
 
-## 3. Environment variables (proposed)
-
-Copy `.env.example` to `.env`. `config/settings.py` reads these. The names are a proposal. Vendor-specific credential shapes are whatever each vendor's console issues. This doc does not specify them beyond what the spec says.
-
-The canonical list of variable names, with examples, is in [configuration](../tech-spec/configuration.md#configsettingspy-environment-variables). The ones you need locally:
+`dubhash/config/settings.py` reads `.env` (pydantic-settings). The full list with examples is in `.env.example` and in [configuration](../tech-spec/configuration.md#configsettingspy-environment-variables). Missing vendor keys never crash startup: the provider just can't be selected and the fakes keep working.
 
 | Variable | Needed for | Notes |
 |---|---|---|
-| `DUBHASH_ENV` | all | `dev` \| `test` \| `prod` (`test` forces fakes) |
-| `DATABASE_URL` | turn writer, API reads | e.g. `postgresql+asyncpg://dubhash:dubhash@localhost:5432/dubhash` |
-| `REDIS_URL` | call registry | e.g. `redis://localhost:6379/0` |
-| `PUBLIC_BASE_URL` | platform API, webhook and Passthru callbacks | `https://api.dubhash.in` in prod |
-| `EDGE_WSS_BASE` | outbound call setup | `wss://edge.dubhash.in` in prod; the leg URL is `{base}/ws/leg?call=…&side=…&sample-rate=16000` |
-| `PAIRS_FILE` | interpreters | defaults to `config/pairs.yaml` (inside the `dubhash/` package) |
-| `SARVAM_API_KEY` | Sarvam STT (Saarika/Saaras), Mayura translate, Bulbul TTS | |
+| `DUBHASH_ENV` | all | `dev` \| `test` \| `prod`. `test` forces fakes and turns console auth off (CI sets it) |
+| `STT_IMPL`, `MT_IMPL`, `TTS_IMPL` | provider registry | `fake` (default) \| `real`. Set all three to `real` to use the vendors in the app |
+| `SARVAM_API_KEY` | Sarvam STT, Mayura translate, Bulbul TTS | |
 | `ELEVENLABS_API_KEY` | ElevenLabs Flash v2.5 (hi, en targets) | |
-| `ANTHROPIC_API_KEY` | LLM idiom repair (v2) | off unless `LLM_REPAIR_ENABLED=true` |
-| `DEEPGRAM_API_KEY` | Deepgram Nova (English/Hinglish fallback) | optional; empty means Sarvam STT on every leg |
-| `EXOTEL_ACCOUNT_SID`, `EXOTEL_API_KEY`, `EXOTEL_API_TOKEN` | ExotelLeg call setup | used for `POST /v1/Accounts/{sid}/Calls/connect` |
-| `EXOTEL_EXOPHONE` | ExotelLeg | the ExoPhone used as `CallerId` |
-| `EXOTEL_FLOW_URL` | ExotelLeg | applet-flow URL whose Voicebot applet points at `/ws/leg` |
-| `PLIVO_AUTH_ID`, `PLIVO_AUTH_TOKEN`, `PLIVO_NUMBER` | PlivoLeg | used for `POST /v1/Account/{id}/Call/` |
-| `DEFAULT_PROVIDER` | default provider | `exotel` \| `plivo`; `POST /v1/calls` can override per call |
-| `STT_IMPL`, `MT_IMPL`, `TTS_IMPL` | fakes | `real` \| `fake` |
+| `DEEPGRAM_API_KEY` | Deepgram Nova fallback | optional; expected to be empty for now |
+| `CONSOLE_PASSWORD` | `/console`, `/ward` | HTTP Basic, any username |
+| `DATABASE_URL`, `REDIS_URL` | turn writer, registry | the app logs `store.unavailable` and carries on if the DB does not answer within 3 s |
+| `PAIRS_FILE` | interpreters | leave unset to use the packaged `dubhash/config/pairs.yaml` (see troubleshooting) |
+| `EXOTEL_*`, `PLIVO_*` | telephony legs | fill in when access lands |
 
-Rules:
+Rules: `.env` is gitignored, only `.env.example` is committed. Share keys through a password manager, never chat or git.
 
-- `.env` is gitignored. Only `.env.example` is committed, with placeholder values.
-- Missing vendor keys must not crash startup. The corresponding provider just can't be selected, and `FakeSTT`/`FakeMT`/`FakeTTS` keep working.
-
-## 4. Getting vendor keys
+## 3. Vendor keys
 
 | Vendor | Used for | How we get access | Owner |
 |---|---|---|---|
 | Sarvam | STT, translate, Bulbul TTS | buildathon sponsor credits | P2 |
 | ElevenLabs | Flash v2.5 TTS for hi/en | buildathon sponsor | P3 |
-| Deepgram | Nova streaming STT fallback | buildathon sponsor | P2 |
-| Exotel | voicebot applet, two-leg calls | sponsor ask (sent Day 1, via the Bolna Slack). Voicebot applet must be enabled on the account; ask Exotel to IP-allowlist the VM. | Rohan / P3 |
-| Plivo | audio streaming fallback | self-serve, needs Udyam registration (filed Day 1) | P3 |
+| Deepgram | Nova streaming STT fallback | buildathon sponsor (not yet) | P2 |
+| Exotel | voicebot applet, two-leg calls | sponsor ask via the Bolna Slack; access expected in a few days. Ask Exotel to IP-allowlist the VM | Rohan / P3 |
+| Plivo | audio streaming fallback | self-serve, needs Udyam registration | P3 |
 
-Share keys through a password manager, never through chat or git. Each person uses their own key where the vendor allows it, so usage is attributable. Credit amounts and quotas are TBD, see [open questions](../plan/open-questions.md).
-
-## 5. Run the pipeline on FakeLegs (proposed)
-
-This is the Day 2 milestone: wav in, translated wav out, latency printed per stage. See [testing strategy](testing-strategy.md).
+## 4. Tests
 
 ```bash
-# all fakes: no network, no keys. checks wiring, the controller and the mixer.
-python -m tools.bench --pair hi-kn --stt fake --mt fake --tts fake \
-  --a tests/fixtures/hi/gate_bahar.wav --out out/
-
-# real providers, still no telephony
-python -m tools.bench --pair hi-kn --a tests/fixtures/hi/ --b tests/fixtures/kn/ --out out/
+make test                                  # all offline tests: unit, contract, pipeline on fakes
+uv run pytest tests/test_floor.py -q       # one file
+make lint                                  # ruff check + format check
+make test-live                             # real vendors, needs keys in .env
 ```
 
-Expected output: `out/leg_a.wav` and `out/leg_b.wav` (what each listener heard), a per-stage p50/p95 table (`t_eou`, `t_stt_final`, `t_mt`, `t_tts_ttfb`, `t_tts_done`), and a turn log for `tools/label.py`.
+Offline tests need no network, keys, Postgres or Redis. Live tests are marked `@pytest.mark.live`; they never run in CI. CI (`.github/workflows/ci.yml`) runs `uv sync --locked`, `ruff check`, `ruff format --check`, `tools/gen_fixtures.py --check` and `pytest` on every push to `main` and every PR.
 
-## 6. Run the app and the loopback WebRTC harness (proposed)
+Test fixtures: `tests/fixtures/synth_*.wav` are synthetic speech-like bursts (16 kHz, 8 kHz, 8 kHz with a noise floor) made by `make fixtures`; `synth_manifest.json` lists each speech/silence segment's start and end ms for VAD and endpointing tests. The generator is deterministic, so regenerating is a no-op unless you change `SPECS`.
 
-With two browser tabs as two legs (WebRtcLeg), the team can develop without a single telephony minute. This is also the fallback demo if credits fail.
+## 5. Live vendor smoke test
+
+With `SARVAM_API_KEY` and/or `ELEVENLABS_API_KEY` in `.env`:
 
 ```bash
-# run the API with exactly ONE worker: both legs of a call must land in the same process
-uvicorn dubhash.api.app:app --host 0.0.0.0 --port 8000 --workers 1 --reload
-
-# in another shell: create a loopback call and print two tab URLs
-python -m tools.loopback --pair hi-kn
-#   leg a: http://localhost:8000/dev/leg?call=c_dev1&side=a
-#   leg b: http://localhost:8000/dev/leg?call=c_dev1&side=b
-#   console: http://localhost:8000/console
+make smoke                                 # or: uv run python tools/smoke.py
+uv run python tools/smoke.py --only mt     # just translate
+uv run python tools/smoke.py --eou         # + open question 2: when does Sarvam's vad.speech_end fire
+uv run python tools/smoke.py --idle 5,30,70   # + open question 4: does an idle STT socket survive, with and without ping
+uv run python tools/smoke.py --json out/smoke/results.json
 ```
 
-Open each leg URL in its own tab (or on two laptops on the same network), allow the mic, and talk. Open `/console` to watch the turns, the state badge and the stage latencies over SSE.
+It runs Mayura hi→kn on three sentences (and notes if the direct pair was rejected and an English pivot was used), Bulbul kn and ElevenLabs hi TTS twice each (cold, then warm) with time to first byte and total, then Sarvam STT on every TTS wav (final latency after `speech_end`, transcript, similarity to the spoken text). Wavs go to `out/smoke/`; listen to them for open question 3. Vendors without a key are skipped with a message (Deepgram is expected to be). The exit code is 0 when nothing failed, 1 on any failure, 2 when nothing ran.
+
+## 6. Run the app
+
+```bash
+make dev                                   # http://127.0.0.1:8000, one worker, reload
+```
+
+Exactly one worker, always: both legs of a call must land in the same process. `make dev` never passes `--workers`.
+
+| URL | What |
+|---|---|
+| `/healthz` | liveness |
+| `/console` | live console: active calls, turns, state badge, per-stage latency over SSE |
+| `/ward` | ward mode page (one phone, two people) |
+| `/loopback/new` | two browser tabs as two legs (`WebRtcLeg`): open each tab URL, allow the mic, talk. Lands with the phase-2 session/API work |
 
 Loopback latency numbers are for correctness only. Deck numbers come from real PSTN calls. See [latency engineering](latency-engineering.md).
 
-## 7. Tests (proposed)
+### Postgres and Redis (optional)
 
 ```bash
-pytest -q                          # unit + offline pipeline on fakes
-pytest tests/test_floor.py -q      # floor controller invariants
-ruff check . && ruff format --check .
+make up            # docker compose up -d postgres redis
+make down
 ```
 
-## 8. Real phones (once credits exist)
+The compose file is the VM's: it does not publish the Postgres and Redis ports to the host. To reach them from `make dev` on your laptop, add a local, uncommitted `docker-compose.override.yml`:
+
+```yaml
+services:
+  postgres: { ports: ["5432:5432"] }
+  redis: { ports: ["6379:6379"] }
+```
+
+Without it the app starts anyway, logs `store.unavailable`, and runs without a turn log.
+
+## 7. Offline pipeline bench (phase 2)
+
+`tools/bench.py` (owned by the session work) plays wavs through two FakeLegs with the real controller and mixer and writes per-stage p50/p95 and a turn log. Run it as `make bench BENCH_ARGS="..."`; its flags are documented in the tool itself. See [testing strategy](testing-strategy.md).
+
+## 8. Eval tools
+
+```bash
+# meaning rating: local page on :8765, writes ratings.csv, resumes where you stopped
+uv run python tools/label.py out/turns.json --rater asha --ratings out/ratings-hi-kn.csv
+uv run python tools/label.py out/turns.json --ratings out/ratings-hi-kn.csv --summary
+
+# record the bench corpus (30 utterances per language) at 8 kHz from the mic
+uv run --with sounddevice python tools/record_fixtures.py prompts/hi.txt --lang hi --out out/corpus
+```
+
+`tools/label.py` shows one src/tgt pair at a time with kept / partly / lost buttons (keys `1`/`2`/`3`), an entities flag (`e`) and a note (`n`). Its summary gives % kept per pair and says "preliminary, n=…" until a pair has 300 rated turns. The turn-log JSON schema it reads is documented at the top of the file. See [evaluation and metrics](evaluation-and-metrics.md).
+
+`tools/record_fixtures.py` takes a `.txt` (one prompt per line) or `.csv` (`id,lang,text`) prompt list and writes `<out>/<lang>/<id>.wav` plus `manifest.csv` (`id, lang, reference_text, path`). `sounddevice` is optional and not a project dependency: `uv run --with sounddevice` pulls it for one run (it needs PortAudio: `brew install portaudio` or `apt install libportaudio2`). Without it the tool prints a `sox rec` command per prompt; record those, then run with `--manifest-only`. The corpus goes to `out/` (gitignored) until we decide git vs a bucket.
+
+## 9. Real phones (once Exotel access lands)
 
 1. Get a public TLS endpoint. Use the VM (see [deployment](deployment.md)). A local tunnel works for a first smoke test only, because its RTT pollutes latency.
-2. `curl -X POST https://api.dubhash.in/v1/calls -H 'Authorization: Bearer <key>' -H 'Content-Type: application/json' -d '{"a":{"number":"+91…","lang":"hi-IN"},"b":{"number":"+91…","lang":"kn-IN"},"provider":"exotel","caller_id":"+91…","mode":"interpret","escape_dtmf":"0","record":false}'`
+2. Create a call with `POST /v1/calls` (see [api](../tech-spec/api.md)) with both numbers, languages and `"provider": "exotel"`. This endpoint lands with the phase-2 session/API work.
 3. Both phones ring. Interpretation starts once both websockets have sent `start`.
-4. Check the `start` message's `media_format` in the logs. Confirm Exotel actually sends 16 kHz. This is open question 1 and the first thing to test.
+4. Check the `start` message's `media_format` in the logs (`leg.start`, `leg.resample`). Confirm Exotel actually sends 16 kHz. This is open question 1 and the first thing to test.
 
 ## Troubleshooting
 
 | Symptom | Likely cause |
 |---|---|
 | One leg connects, the other never does | more than one uvicorn worker, or the two legs hit different processes |
-| Robotic or chipmunk audio | sample-rate mismatch (8k vs 16k); check `media_format` and the resampler path |
-| STT stops after a quiet stretch | Sarvam stream idle timeout; keepalive needed (open question 4) |
-| Silero errors on frame size | feed 512-sample (≈32 ms) windows with a 20 ms hop, not raw 20 ms frames |
+| Robotic or chipmunk audio | sample-rate mismatch (8k vs 16k); check `media_format` and the `leg.resample` log |
+| STT stops after a quiet stretch | Sarvam idle timeout (close code 1008); the client pings every 10 s. Measure with `tools/smoke.py --idle` |
+| `pairs.yaml` not found | `.env.example` sets `PAIRS_FILE=config/pairs.yaml`, which is relative to the working directory; the file lives at `dubhash/config/pairs.yaml`. Delete the line from `.env` or point it there |
+| `/console` asks for a password | HTTP Basic: any username, password `CONSOLE_PASSWORD` from `.env` |
+| `make smoke` exits 2 | no `SARVAM_API_KEY` or `ELEVENLABS_API_KEY` in `.env`, so nothing ran |
 
 ## Related
 
 - [Repo structure](repo-structure.md)
 - [Testing strategy](testing-strategy.md)
+- [Evaluation and metrics](evaluation-and-metrics.md)
 - [Deployment](deployment.md)
 - [Configuration](../tech-spec/configuration.md)
 - [Leg transports](../tech-spec/leg-transports.md)
