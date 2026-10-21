@@ -7,6 +7,10 @@ This document covers where dubhash's latency comes from, how we cut it, and how 
 | Metric | Definition | Target (v1) |
 |---|---|---|
 | first-audio latency | speaker stops → listener hears the first translated word, on real PSTN legs | **p50 < 1.5 s, p95 < 2.0 s** |
+| speech start → first heard (L9) | speaker **starts** the utterance → listener first hears its translation. This is what the user feels: unchunked it is the utterance's length plus first-audio (a 5 s sentence: about 6.4 s) | no target yet; report p50/p95 |
+| ear-voice span (L9) | mean lag between the speaker saying a part and the listener hearing its translation, per chunk (`t_play_start − chunk t_speech_start`), weighted by each chunk's speech | no target yet; report p50/p95 |
+
+All three are reported per utterance (an utterance = every turn of one `(side, utterance_id)`; with chunking one row per chunk) by `store/timeline.utterance_metrics`: the recorder's `summary.json`, `tools/call_report.py` ("WHAT THE LISTENER FELT"), `tools/bench.py` (`felt`) and `tools/live_loopback.py` (`start`, `evs`, measured on the listener's recording). First audio per utterance is speech end → its **last** chunk heard, so it means what it meant before L9.
 
 Expected: first translated word heard = EOU wait (550 ms to start) + about 1.2 s (STT final + MT + TTS first byte + playout). That is **about 1.4 to 1.8 s**. The p95 target on hi⇄kn is the Day 6 (Mon 26 Oct) milestone in the [10-day plan](../plan/buildathon-10-day-plan.md).
 
@@ -51,12 +55,21 @@ Per the spec's figure 4.1, the post-EOU part is about 1.2 s to first word. STT r
 | **no websocket compression** | permessage-deflate is off (`--ws-per-message-deflate false`): PCM does not compress and every 20 ms frame paid a deflate step both ways | v1 | Rohan |
 | **per-pair EOU tuning** | 550 ms is a guess. On the bench set, measure false-EOU rate (sentence split mid-way) against latency, per language. Tamil speakers pause differently from Hindi speakers. Result goes in `eou_ms` in `pairs.yaml`. | v1 | P2 |
 | **translation cache** | greetings, confirmations and numbers repeat. An exact-match cache per pair skips MT entirely (~200 ms). | v1 | P2 |
+| **TTS audio cache** | built (L10): every call's TTS goes through `CachedTTS`, PCM by (text, voice, lang) in a 64 MB process-wide LRU; phrase-pack audio also on disk (`out/tts_cache/`). A hit's first byte is 0 ms from memory, 13-16 ms from disk (live), against ~200 ms from Bulbul. With the MT cache, a repeated line costs only STT: in the monologue run the second pass of six repeated lines played at server first-audio 554-573 ms, i.e. the EOU wait alone | v1 | P2 / P3 |
+| **phrase packs + prefill** | built (L10): `config/phrases/<vertical>.yaml` (`delivery`, `clinic`, ~40 lines in hi/mr/gu/en), chosen per call (`vertical`). At call creation a background task translates the pack's lines with real MT and voices them in both listener voices (4 requests/s, pauses while a turn is in flight, never blocks the call). A final matching a line after normalisation is served from the caches. Live `phrases-mr-hi` (13 of 15 turns are pack lines): server first-audio p50 **1233 → 562 ms**, heard p50 **1340 → 680 ms**, from speech start p50 **2660 → 2040 ms**. The first prefill of a pair takes ~100 s (80 MT + 160 TTS); the next process ~54 s (MT only, audio from disk); the next call in the process none | v1 | P2 |
+| **instant acknowledgements** | built (L10): a short ack ("haan", "ok", "theek hai", "ho", "hā", "sari") that matches the pack is a real turn when the floor was free at its speech start, and is served from the caches; during the other person's playback it stays a backchannel. Bulbul's own "ठीक है", "हो" and "2 मिनट" have only 220-270 ms of voiced speech, under `min_utterance_ms` (300): they are dropped as noise before STT. Human acks are usually longer; not changed | v1 | P2 |
+| **number read-back** | built (L10, quality, ~0 ms): with the pack's `numbers_readback`, a source number missing from the MT output replaces the wrong one (else is appended), spoken digit by digit in the target language; a `number_fix` event. It cannot fix a number the STT already got wrong (the L6 gu-hi OTP) | v1 | P2 |
+| **next-turn prewarm** | built (L10): when a translation starts playing to a leg, that leg's STT socket and the TTS socket for its reply's voice are prewarmed. Measured: STT open is 0-1 ms with or without it (pinged pool sockets stayed alive 100 s idle); B's TTS first byte after six A lines 336/354 ms off vs 311/199 on (n=2, inconclusive). The STT open that did cost time (207 ms) came from a noise-discarded utterance closing its warm socket; such a stream is now settled in the background and its socket kept | v1 | P2 |
 | **Mumbai colocation** | app in ap-south-1; Sarvam and Exotel are in India. ElevenLabs is not: its RTT from Mumbai is 150 to 250 ms, which is why Bulbul is primary for Indic targets. | v1 | Rohan |
 | **Exotel chunk size** | flush outbound as 100 ms media events (3,200 bytes at 16k, a multiple of 320). Smaller chunks make `clear` more responsive; stay at 100 ms unless tuning on PSTN says otherwise. | v1 | P3 |
 | **avoid resampling when possible** | keep the pipeline at 16 kHz. If Exotel ignores `sample-rate=16000` (open question 1), soxr sits on the hot path in both directions. | v1 | P3 |
-| **clause-level partial start** | when an STT partial ends at a clause boundary with stable text for 400 ms, translate and start TTS on that clause while the speaker continues. Interpreters do this; it is where the next 500 ms lives. | **v2** | P2 |
+| **chunked (clause-level) interpretation** | Built (L9, `interp/chunker.py`, per-pair `chunking` / `chunk_pause_ms` 300 / `chunk_min_ms` 1200, **off by default**). Partials were too unstable to start on (L1a), so a chunk is cut on an STT *final*: at a comma pause ≥ `chunk_pause_ms` after ≥ `chunk_min_ms` of speech the early final is committed (≥ 4 words, not ending in a number or an unclosed quantity), translated and played while the speaker continues; the rest goes on in a fresh stream with no replay. It moves MT/TTS for all but the last clause out of the critical path: speech start → first heard on a 5 s, 3-clause utterance drops from ~6.1 s to ~2.8 s (bench, fakes). The last chunk is still after EOU, so first-audio is unchanged. Verb-final hi/mr/gu chunked before the verb is the quality risk; see [L9](../plan/open-questions.md#answer-log). | v1 (opt-in) | P2 |
 | **LLM low-confidence repair** | quality, not latency; adds latency, so it is off the v1 path | **v2** | — |
 | **Rust hot path** | only if CPU profiling shows the interpreter (not vendors) is the bottleneck; a Rust mixer is a two-day swap | later, profile-driven | Rohan |
+
+## From speech start (L10)
+
+What the speaker feels is the wait from when they **start** talking, not from when they stop: for a 5 s sentence, about 5 s + EOU + the pipeline. `tools/live_loopback.py` reports it as `from_start` (heard latency plus the line's own length). Only shorter utterances (packs of short lines, acks) and less pipeline after EOU (caches) move it; everything after EOU is what the techniques above cut. Live `phrases-mr-hi`, lines of 0.5-2 s: from_start p50 2660 ms cold, 2040 ms warm.
 
 ## Measure on PSTN, not loopback
 
@@ -97,6 +110,8 @@ Every turn records the following, in ms, on one monotonic clock per call (call-r
 | `t_play_start` | controller calls `send()` with the first audio of this Translation (earcon or TTS) | `turns` |
 | `t_play_end` | `mark` callback for this Translation fires (played) or `clear` (clipped) | `turns` |
 | `clipped_ms` | ms played before barge-in clear, null if completed | `turns` |
+| `utterance_id`, `chunk` | L9: the utterance (per direction) a turn belongs to and its chunk index (0 unchunked) | `turns` |
+| `t_utt_start` | L9: the utterance's first speech frame (a chunk's own `t_speech_start` is later) | `turns` |
 
 Derived per turn (computed by the writer or a nightly job):
 
@@ -108,6 +123,8 @@ Derived per turn (computed by the writer or a nightly job):
 | TTS first byte | `t_tts_ttfb − t_mt` |
 | queue wait | `t_play_start − t_tts_ttfb` (non-zero when the floor was busy) |
 | **server first-audio** | `t_play_start − t_speech_end` |
+| **speech start → first heard** (per utterance) | `min(t_play_start) − t_utt_start` over its turns |
+| **ear-voice span** (per utterance) | `Σ wᵢ (t_play_startᵢ − t_speech_startᵢ) / Σ wᵢ`, `wᵢ = t_speech_endᵢ − t_speech_startᵢ` |
 
 Server first-audio does not include provider playout buffering (~200 ms), which is invisible server-side. For deck numbers, either add a calibrated playout offset, or measure heard latency directly by recording both legs (with consent) and aligning the audio. Which method we publish is TBD, see [open questions](../plan/open-questions.md). Per-call `p50_first_audio_ms` / `p95_first_audio_ms` go on the `calls` row. Nightly p50/p95 is computed per stage per pair.
 

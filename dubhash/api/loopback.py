@@ -63,6 +63,7 @@ from dubhash.api.schemas import (
 )
 from dubhash.config.pairs import PairConfig, orient
 from dubhash.config.settings import Settings
+from dubhash.interp.phrases import DEFAULT_VERTICAL
 from dubhash.join.tokens import verify_join_token
 from dubhash.legs.webrtc import WebRtcLeg
 
@@ -132,6 +133,7 @@ def create_loopback_call(
         co_located=True,
         opening_line=opening,
         **auto_kw(auto),
+        vertical=req.vertical or DEFAULT_VERTICAL,
     )
     sessions.create(call_id, session)
     handle = CallHandle(

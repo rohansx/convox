@@ -48,6 +48,28 @@ Real-room variants (L7):
     --opening-line short|full|off
                        the call's opening (default: the server's; /join and loopback calls
                        get "short" since L7, "full" with the record sentence before)
+
+Phrase cache (L10): --vertical delivery|clinic picks the call's phrase pack (default: the
+server's, delivery). --prefill off runs cold (no prefill, no disk cache), wait waits for the
+call's background prefill to finish before the first line (warm), bg (default) lets it run
+alongside. The phrases-mr-hi script is mostly delivery-pack lines and acks. The summary
+adds from_start (heard latency counted from the START of the speaker's line), stt_open,
+the TTS first byte on cache hits and misses, and the phrase / cache hit rates.
+
+    STT_IMPL=real MT_IMPL=real TTS_IMPL=real uv run python tools/live_loopback.py \
+        --script phrases-mr-hi --prefill off      # then --prefill wait
+
+Chunked interpretation (L9): the long-* scripts (long-hi-kn, long-mr-hi, long-mr-en,
+long-gu-en) are 4-7 s lines of two or three clauses with comma pauses. --chunking /
+--no-chunking, --chunk-pause-ms, --chunk-min-ms override pairs.yaml for every pair (a
+copy is written to --out). Per line the table adds "start" (the line's first voiced frame
+to the first translation heard: what the listener feels), "evs" (ear-voice span: the
+server's per-chunk lag, weighted by speech, shifted by the measured server-to-ear offset)
+and "ch" (server turns). The tool waits until the session is idle before the next line,
+so a line's last chunk is always in its own window.
+
+    STT_IMPL=real MT_IMPL=real TTS_IMPL=real uv run python tools/live_loopback.py \
+        --script long-mr-hi --chunking --chunk-pause-ms 300 --chunk-min-ms 1200
 """
 
 from __future__ import annotations
@@ -107,6 +129,15 @@ class Script:
     voices: dict[str, str]  # side -> Bulbul voice the line is spoken in
     lines: tuple[Line, ...]
 
+
+_MONOLOGUE_A = (
+    Line("a", "हॅलो, मी फ्लॅट 302 मधून बोलतेय. माझं पार्सल कुठे आहे?", review=True),
+    Line("a", "बी विंग, तिसरा मजला. लिफ्ट बंद आहे, जिना डावीकडे आहे.", review=True),
+    Line("a", "ओटीपी 4729 आहे.", review=True),
+    Line("a", "मी फ्लॅट 302, शिवाजी नगरमध्ये राहते. औषध घरी पाठवाल का?", review=True),
+    Line("a", "ठीक आहे, मी 6 वाजता घरी असेन.", review=True),
+    Line("a", "लिफ्ट चालू नाही.", review=True),
+)
 
 SCRIPTS: dict[str, Script] = {
     # Rider (A, Hindi, male) and customer (B, Kannada, female). Kannada lines: NATIVE REVIEW.
@@ -184,6 +215,146 @@ SCRIPTS: dict[str, Script] = {
             Line("a", "સારું, હું 6 વાગ્યે ઘરે હોઈશ.", review=True),
         ),
     ),
+    # Phrase-cache run (L10): mostly delivery-pack lines and acks, customer (A, Marathi,
+    # female) and rider (B, Hindi, male). Marathi lines: NATIVE REVIEW.
+    "phrases-mr-hi": Script(
+        "mr-IN",
+        "hi-IN",
+        {"a": "bulbul:mr-female-1", "b": "bulbul:hi-male-1"},
+        (
+            Line("b", "मैं मेन गेट के बाहर हूँ।"),
+            Line("a", "ठीक आहे.", review=True),
+            Line("b", "OTP बताइए।"),
+            Line("a", "ओटीपी 4729 आहे.", review=True),
+            Line("b", "ठीक है।"),
+            Line("a", "लिफ्ट चालू नाही.", review=True),
+            Line("b", "2 मिनट।"),
+            Line("a", "हो.", review=True),
+            Line("b", "धन्यवाद।"),
+            Line("a", "धन्यवाद.", review=True),
+        ),
+    ),
+    # Next-turn prewarm run (L10): six Marathi lines from A before each Hindi reply from B,
+    # so the socket that voices B's reply (tts["a"]) idles past Bulbul's 30 s max_idle_s
+    # unless playback to B prewarms it. Marathi lines: NATIVE REVIEW.
+    "monologue-mr-hi": Script(
+        "mr-IN",
+        "hi-IN",
+        {"a": "bulbul:mr-female-1", "b": "bulbul:hi-male-1"},
+        (
+            *_MONOLOGUE_A,
+            Line("b", "ठीक है, दो मिनट में ऊपर आता हूँ। ओटीपी बता दीजिए।"),
+            *_MONOLOGUE_A,
+            Line("b", "धन्यवाद मैडम, शाम को 6 बजे दूसरा पार्सल भी आएगा।"),
+        ),
+    ),
+    # L9: LONG utterances (4-7 s, two or three clauses with natural comma pauses), to
+    # measure chunked interpretation. Same speakers as above. Non-Hindi/English lines:
+    # NATIVE REVIEW.
+    "long-hi-kn": Script(
+        "hi-IN",
+        "kn-IN",
+        {"a": "bulbul:hi-male-1", "b": "bulbul:kn-female-1"},
+        (
+            Line(
+                "a",
+                "भैया, मैं गेट नंबर दो के बाहर खड़ा हूँ, आपकी बिल्डिंग का नाम सनशाइन अपार्टमेंट है ना?",
+            ),
+            Line(
+                "b",
+                "ಹೌದು, ಸನ್‌ಶೈನ್ ಅಪಾರ್ಟ್‌ಮೆಂಟ್, ಸಿ ಬ್ಲಾಕ್, ಮೂರನೇ ಮಹಡಿ, ಫ್ಲಾಟ್ 302, ಲಿಫ್ಟ್ ಕೆಲಸ ಮಾಡ್ತಿಲ್ಲ.",
+                review=True,
+            ),
+            Line(
+                "a",
+                "ठीक है मैडम, मैं सीढ़ियों से ऊपर आ रहा हूँ, बस दो मिनट लगेंगे, ओटीपी तैयार रखिए।",
+            ),
+            Line(
+                "b",
+                "ಸರಿ, ಓಟಿಪಿ 4729, ಪಾರ್ಸೆಲ್ ಅನ್ನು ಬಾಗಿಲ ಬಳಿ ಇಡಿ, ನಾನು ಈಗಲೇ ಕೆಳಗೆ ಬರುತ್ತೇನೆ.",
+                review=True,
+            ),
+        ),
+    ),
+    "long-mr-hi": Script(
+        "mr-IN",
+        "hi-IN",
+        {"a": "bulbul:mr-female-1", "b": "bulbul:hi-male-1"},
+        (
+            Line(
+                "a",
+                "हॅलो, मी फ्लॅट 302 मधून बोलतेय, बी विंग, तिसरा मजला, लिफ्ट बंद आहे म्हणून जिन्याने वर या.",
+                review=True,
+            ),
+            Line(
+                "b",
+                "ठीक है मैडम, मैं पाँच मिनट में पहुँच जाऊँगा, गेट पर गार्ड को बता दीजिए, और ओटीपी तैयार रखिए।",
+            ),
+            Line(
+                "a",
+                "ओटीपी 4729 आहे, पार्सल दारासमोर ठेवा, आणि संध्याकाळी 6 वाजता दुसरं पार्सल येईल.",
+                review=True,
+            ),
+            Line(
+                "b",
+                "ठीक है, मैं पार्सल दरवाज़े के सामने रख दूँगा, और शाम को 6 बजे दूसरा पार्सल लेकर आऊँगा।",
+            ),
+        ),
+    ),
+    "long-mr-en": Script(
+        "mr-IN",
+        "en-IN",
+        {"a": "bulbul:mr-female-1", "b": "bulbul:en-male-1"},
+        (
+            Line(
+                "a",
+                "डॉक्टर, मला तीन दिवसांपासून ताप आहे, रात्री खोकला वाढतो, आणि कालपासून डोकं पण दुखतंय.",
+                review=True,
+            ),
+            Line(
+                "b",
+                "Take one tablet twice a day, after breakfast and after dinner, and come back "
+                "if the fever lasts more than three days.",
+            ),
+            Line(
+                "a",
+                "ठीक आहे, मी फ्लॅट 302, शिवाजी नगरमध्ये राहते, औषध संध्याकाळी 6 च्या आधी घरी पाठवाल का?",
+                review=True,
+            ),
+            Line(
+                "b",
+                "Yes, your medicine will reach you before 6 pm today, the delivery OTP is 4729, "
+                "so please keep the prescription ready.",
+            ),
+        ),
+    ),
+    "long-gu-en": Script(
+        "gu-IN",
+        "en-IN",
+        {"a": "bulbul:gu-female-1", "b": "bulbul:en-male-1"},
+        (
+            Line(
+                "a",
+                "ડૉક્ટર, મને ત્રણ દિવસથી તાવ છે, રાત્રે ઉધરસ વધી જાય છે, અને ગઈકાલથી માથું પણ દુખે છે.",
+                review=True,
+            ),
+            Line(
+                "b",
+                "Take one tablet twice a day, after breakfast and after dinner, and come back "
+                "if the fever lasts more than three days.",
+            ),
+            Line(
+                "a",
+                "હું ફ્લેટ 302 માં રહું છું, નવરંગપુરામાં, દવા સાંજે 6 વાગ્યા પહેલાં ઘરે મોકલી આપજો.",
+                review=True,
+            ),
+            Line(
+                "b",
+                "Yes, your medicine will reach you before 6 pm today, the delivery OTP is 4729, "
+                "so please keep the prescription ready.",
+            ),
+        ),
+    ),
 }
 DEFAULT_SCRIPT = "delivery-hi-kn"
 SCRIPT: tuple[Line, ...] = SCRIPTS[DEFAULT_SCRIPT].lines
@@ -224,6 +395,9 @@ class Opts:
     auto: str = ""  # sides created with lang "auto" ("a", "b", "ab"); the script keeps its own
     hint: str | None = None  # lang_hint for the auto sides
     menu_digit: str | None = None  # an auto side's tab presses this after hearing the menu
+    vertical: str | None = None  # phrase pack (default: the server's, delivery)
+    prefill: str = "bg"  # off: cold | wait: warm before the first line | bg: alongside
+    prefill_timeout_s: float = 300.0
 
 
 # --- audio helpers ----------------------------------------------------------------------
@@ -453,6 +627,11 @@ class TurnRow:
     # server t_speech_end minus the real end of speech (negative: the VAD ended it early)
     vad_end_lag_ms: int | None = None
     server: list[dict[str, Any]] = field(default_factory=list)
+    # L9: what the listener felt from the speaker's START (first voiced frame of the line)
+    n_voice_start: int = 0  # tick of the line's first voiced frame
+    from_start_ms: int | None = None  # first voiced frame -> first translation heard
+    evs_ms: int | None = None  # ear-voice span over the line's chunks (calibrated)
+    chunks: int = 0  # server turns (chunks) the line became
 
 
 def measure(row: TurnRow, rec: bytes) -> None:
@@ -479,6 +658,26 @@ def measure(row: TurnRow, rec: bytes) -> None:
     row.heard_span_ms = (hits[-1] - min(k, hits[-1]) + 1) * FRAME_MS
     after = [h for h in hits if h >= speech_from]
     row.heard_ms = (after[0] - end) * FRAME_MS if after else None
+    if row.heard_ms is not None:
+        row.from_start_ms = row.heard_ms + (row.n_voice_end - row.n_voice_start) * FRAME_MS
+
+
+def line_felt(row: TurnRow) -> None:
+    """Ear-voice span of one scripted line (L9): the server's per-chunk lags (play start
+    minus the chunk's speech start, weighted by its speech), shifted by what the listener
+    measured against the server for the first chunk (VAD onset lag, transport, earcon)."""
+    from dubhash.store.timeline import utterances
+
+    row.chunks = len(row.server)
+    if not row.server or row.from_start_ms is None:
+        return
+    one = [{**t, "utterance_id": 0, "t_utt_start": None, "chunk": i}
+           for i, t in enumerate(row.server)]  # fmt: skip
+    us = utterances(one)
+    if not us:
+        return
+    (u,) = us
+    row.evs_ms = u["ear_voice_span"] + (row.from_start_ms - u["speech_start_to_first_heard"])
 
 
 def find_earcon(pcm: bytes) -> int | None:
@@ -564,6 +763,20 @@ class Server:
         session = reg.get(call_id) if reg is not None else None
         return getattr(getattr(session, "clock", None), "_t0", None)
 
+    def prefill_stats(self, call_id: str) -> Any:
+        """The session's phrase-prefill stats (in-process only), or None."""
+        reg = getattr(self.app.state, "sessions", None)
+        session = reg.get(call_id) if reg is not None else None
+        return getattr(session, "prefill_stats", None)
+
+    def session_idle(self, call_id: str) -> bool:
+        """The call has nothing in flight (in-process only; True when unknown). With
+        chunked interpretation (L9) a line's first translation can play while its last
+        chunk is still being interpreted, so "the listener went quiet" is not enough."""
+        reg = getattr(self.app.state, "sessions", None)
+        session = reg.get(call_id) if reg is not None else None
+        return bool(getattr(session, "idle", True))
+
 
 async def _start_join(
     srv: Server, http: httpx.AsyncClient, opts: Opts
@@ -619,6 +832,8 @@ async def run_call(srv: Server, utts: list[Utt], opts: Opts) -> dict[str, Any]:
         body["pair"] = opts.pair
     if opts.opening_line:
         body["opening_line"] = opts.opening_line
+    if opts.vertical:
+        body["vertical"] = opts.vertical
     async with httpx.AsyncClient(base_url=srv.base, timeout=30) as http:
         if opts.join:
             call_id, sockets = await _start_join(srv, http, opts)
@@ -629,6 +844,9 @@ async def run_call(srv: Server, utts: list[Utt], opts: Opts) -> dict[str, Any]:
             url = f"{srv.ws_base}/ws/loopback?call={call_id}"
             sockets = {"a": f"{url}&side=a", "b": f"{url}&side=b"}
         session_t0 = srv.session_t0(call_id)
+        if opts.prefill == "wait":
+            stats = srv.prefill_stats(call_id)
+            await _until(lambda: stats is None or stats.done, opts.prefill_timeout_s)
 
         async with (
             websockets.connect(sockets["a"], max_size=None) as wa,
@@ -650,7 +868,9 @@ async def run_call(srv: Server, utts: list[Utt], opts: Opts) -> dict[str, Any]:
             tasks.append(asyncio.create_task(ticker.run()))
             try:
                 opening = await _opening(tabs, ticker, opts)
-                rows = await _script(tabs, ticker, utts, opts)
+                rows = await _script(
+                    tabs, ticker, utts, opts, idle=lambda: srv.session_idle(call_id)
+                )
                 await ticker.wait_ticks(10)
             finally:
                 for t in tasks:
@@ -676,6 +896,7 @@ async def run_call(srv: Server, utts: list[Utt], opts: Opts) -> dict[str, Any]:
     if offset is not None:
         join_server(rows, turns, offset)
         for r_ in rows:
+            line_felt(r_)
             if r_.server and r_.earcon_ms is not None:
                 ear = r_.n_voice_end * FRAME_MS + r_.earcon_ms
                 r_.play_to_ear_ms = round(ear - (r_.server[0]["t_play_start"] + offset))
@@ -697,7 +918,19 @@ async def run_call(srv: Server, utts: list[Utt], opts: Opts) -> dict[str, Any]:
         "legs": call.get("legs") or {},
         "menu_digits": {s: t.digits for s, t in tabs.items() if s in opts.auto},
         "rec": {s: bytes(t.rec) for s, t in tabs.items()},
+        "prefill": _prefill_doc(srv.prefill_stats(call_id)),
     }
+
+
+def _prefill_doc(stats: Any) -> dict[str, Any] | None:
+    if stats is None:
+        return None
+    return {k: getattr(stats, k) for k in stats.__slots__}
+
+
+def prefill_settings(mode: str) -> dict[str, Any]:
+    """Server settings for --prefill: "off" is a cold run (no prefill, no disk cache)."""
+    return {"phrase_prefill": False, "tts_cache_dir": ""} if mode == "off" else {}
 
 
 def _other(side: str) -> str:
@@ -743,17 +976,23 @@ async def _opening(tabs: dict[str, Tab], ticker: Ticker, opts: Opts) -> dict[str
 
 
 async def _script(
-    tabs: dict[str, Tab], ticker: Ticker, utts: list[Utt], opts: Opts
+    tabs: dict[str, Tab],
+    ticker: Ticker,
+    utts: list[Utt],
+    opts: Opts,
+    idle: Callable[[], bool] | None = None,
 ) -> list[TurnRow]:
     rows: list[TurnRow] = []
     for i, u in enumerate(utts):
         spk, lst = tabs[u.side], tabs[_other(u.side)]
         fr = frames_of(u.pcm)
         lv = last_voiced(fr)
+        fv = next((k for k, f in enumerate(fr) if voiced(f)), 0)
         rx0, clears0, m0 = lst.received, lst.clears, len(lst.mark_names)
         n_start = ticker.n + len(spk.mic)
         spk.mic.extend(fr)
         row = TurnRow(i, u.side, u.text, n_start=n_start, n_voice_end=n_start + lv + 1)
+        row.n_voice_start = n_start + fv
         if rows:
             rows[-1].n_next = n_start
         rows.append(row)
@@ -762,6 +1001,9 @@ async def _script(
         # the translation's own mark (an opening still arriving is not the translation)
         await _until(lambda t=lst, k=m0: bool(translation_marks(t, k)), opts.turn_timeout_s)
         await _until(lambda t=lst: t.quiet_for(opts.quiet_ms), opts.turn_timeout_s)
+        if idle is not None and not idle():  # a later chunk is still on its way (L9)
+            await _until(idle, opts.turn_timeout_s)
+            await _until(lambda t=lst: t.quiet_for(opts.quiet_ms), opts.turn_timeout_s)
         row.clears = lst.clears - clears0
         await ticker.wait_ticks(opts.pause_ms // FRAME_MS)
     if rows:
@@ -782,24 +1024,49 @@ async def _until_ended(http: httpx.AsyncClient, call_id: str, headers: dict[str,
 
 def summarize(result: dict[str, Any]) -> dict[str, Any]:
     rows: list[TurnRow] = result["rows"]
-    cols: dict[str, list[int]] = {"heard": [], "earcon": []}
+    cols: dict[str, list[int]] = {"heard": [], "earcon": [], "from_start": [], "evs": []}
     for r in rows:
         if r.heard_ms is not None:
             cols["heard"].append(r.heard_ms)
+        # what the listener waits from the START of the line: the analyzer's exact value
+        # (first voiced frame, L9), else heard + the line's speech length (L10)
+        if r.from_start_ms is not None:
+            cols["from_start"].append(r.from_start_ms)
+        elif r.heard_ms is not None:
+            cols["from_start"].append(r.heard_ms + (r.n_voice_end - r.n_start) * FRAME_MS)
+        if r.evs_ms is not None:
+            cols["evs"].append(r.evs_ms)
         if r.earcon_ms is not None:
             cols["earcon"].append(r.earcon_ms)
         if r.server:
-            for k, v in stages(r.server[0]).items():
+            st = stages(r.server[0])
+            for k, v in st.items():
                 if v is not None:
                     cols.setdefault(k, []).append(v)
+            flags = r.server[0].get("flags") or {}
+            if "stt_open_ms" in flags:
+                cols.setdefault("stt_open", []).append(flags["stt_open_ms"])
+            if "tts_cache_hit" in flags and st.get("tts") is not None:
+                key = "tts_hit" if flags["tts_cache_hit"] else "tts_miss"
+                cols.setdefault(key, []).append(st["tts"])
     return {
         k: {"n": len(v), "p50": pct(v, 50), "p95": pct(v, 95), "max": max(v) if v else None}
         for k, v in cols.items()
     }
 
 
+HIT_FLAGS = ("phrase_hit", "ack", "mt_cache_hit", "tts_cache_hit", "number_fix")
+
+
+def hit_rates(result: dict[str, Any]) -> dict[str, int]:
+    """How many scripted turns the phrase path served (flags of each row's first turn)."""
+    served = [r.server[0].get("flags") or {} for r in result["rows"] if r.server]
+    return {"turns": len(served), **{k: sum(int(f.get(k, 0)) for f in served) for k in HIT_FLAGS}}
+
+
 def table(result: dict[str, Any], summary: dict[str, Any]) -> str:
-    head = ("#", "dir", "earcon", "heard", "eou", "stt", "mt", "tts", "queue", "srv_fa", "audio")
+    head = ("#", "dir", "earcon", "heard", "start", "evs", "ch", "eou", "stt", "mt", "tts",
+            "queue", "srv_fa", "audio")  # fmt: skip
     lines = ["  ".join(f"{h:>6}" for h in head)]
     for r in result["rows"]:
         st = stages(r.server[0]) if r.server else {}
@@ -808,6 +1075,9 @@ def table(result: dict[str, Any], summary: dict[str, Any]) -> str:
             f"{r.side}->{_other(r.side)}",
             r.earcon_ms,
             r.heard_ms,
+            r.from_start_ms,
+            r.evs_ms,
+            r.chunks,
             st.get("eou"),
             st.get("stt"),
             st.get("mt"),
@@ -820,8 +1090,14 @@ def table(result: dict[str, Any], summary: dict[str, Any]) -> str:
         for t in r.server:
             lines.append(f"        src: {t.get('src_text')}")
             lines.append(f"        tgt: {t.get('tgt_text')}")
+            if t.get("flags"):
+                on = [k for k in HIT_FLAGS if t["flags"].get(k)]
+                lines.append(f"        flags: {' '.join(on) or '-'}  "
+                             f"stt_open {t['flags'].get('stt_open_ms')} ms")  # fmt: skip
         if len(r.server) > 1:
-            lines.append(f"        ({len(r.server)} server turns: the utterance was split)")
+            ids = {t.get("utterance_id") for t in r.server}
+            why = "chunks of one utterance" if len(ids) == 1 else "the utterance was split"
+            lines.append(f"        ({len(r.server)} server turns: {why})")
         if (warn := numbers_check(r)) is not None:
             lines.append(f"        !! {warn}")
     lines.append("")
@@ -950,11 +1226,36 @@ def fake_speech(ms: int, f0: float) -> bytes:
     return (x * env).astype(np.int16).tobytes()
 
 
-def fake_utts(lines: tuple[Line, ...], ms: int = 1200) -> list[Utt]:
+def fake_utts(lines: tuple[Line, ...], ms: int = 1200, long: bool = False) -> list[Utt]:
     """Stand-ins for speech (the fake STT counts words by duration). Silero accepts only the
-    first one or two per side reliably, so --fake runs are for plumbing, not numbers."""
-    return [Utt(ln.side, fake_speech(ms, 140.0 if ln.side == "a" else 220.0), ln.text)
-            for ln in lines]  # fmt: skip
+    first one or two per side reliably, so --fake runs are for plumbing, not numbers.
+    long=True: three clauses of `ms` with 350 ms comma pauses (L9)."""
+    out = []
+    for ln in lines:
+        f0 = 140.0 if ln.side == "a" else 220.0
+        pcm = fake_speech(ms, f0)
+        if long:
+            gap = SILENCE * (350 // FRAME_MS)
+            pcm = gap.join(fake_speech(ms, f0 * k) for k in (1.0, 1.05, 0.95))
+        out.append(Utt(ln.side, pcm, ln.text))
+    return out
+
+
+def pairs_override(out: Path, **fields: Any) -> Path:
+    """A copy of config/pairs.yaml with `fields` set on every pair (e.g. chunking=True,
+    chunk_pause_ms=250), for the in-process app's pairs_file."""
+    import yaml
+
+    from dubhash.config.settings import Settings
+
+    raw = yaml.safe_load(Settings(_env_file=None).pairs_file.read_text())  # type: ignore[call-arg]
+    for cfg in raw.values():
+        cfg.update(fields)
+    tag = hashlib.sha1(json.dumps(fields, sort_keys=True).encode()).hexdigest()[:8]
+    out.mkdir(parents=True, exist_ok=True)
+    path = out / f"pairs_{tag}.yaml"
+    path.write_text(yaml.safe_dump(raw, allow_unicode=True, sort_keys=False))
+    return path
 
 
 def script_lines(sc: Script, skip: int = 0, n: int | None = None) -> tuple[Line, ...]:
@@ -998,6 +1299,21 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p.add_argument("--hint", default=None, help="lang_hint for the --auto sides")
     p.add_argument("--menu-digit", default=None, help="an auto tab presses it after the menu")
     p.add_argument("--lang-min-speech-ms", type=int, default=None, help="server LANG_MIN_SPEECH_MS")
+    p.add_argument("--vertical", default=None, help="phrase pack (default: delivery)")
+    p.add_argument(
+        "--prefill",
+        choices=["bg", "wait", "off"],
+        default="bg",
+        help="off: cold caches; wait: prefill before the first line; bg: alongside",
+    )
+    p.add_argument(
+        "--chunking",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="chunked interpretation on every pair (default: pairs.yaml's, L9)",
+    )
+    p.add_argument("--chunk-pause-ms", type=int, default=None)
+    p.add_argument("--chunk-min-ms", type=int, default=None)
     return p.parse_args(argv)
 
 
@@ -1026,6 +1342,8 @@ def main(argv: list[str] | None = None) -> int:
         auto=a.auto,
         hint=a.hint,
         menu_digit=a.menu_digit,
+        vertical=a.vertical,
+        prefill=a.prefill,
     )
     if a.fake:
         utts = fake_utts(lines)
@@ -1041,6 +1359,14 @@ def main(argv: list[str] | None = None) -> int:
         impl = {k: os.environ.get(k) for k in ("STT_IMPL", "MT_IMPL", "TTS_IMPL")}
         if any(v != "real" for v in impl.values()):
             print(f"warning: provider switches are {impl}; set all three to real", file=sys.stderr)
+    kw.update(prefill_settings(a.prefill))
+    over = {
+        k: getattr(a, k)
+        for k in ("chunking", "chunk_pause_ms", "chunk_min_ms")
+        if getattr(a, k) is not None
+    }
+    if over:
+        kw["pairs_file"] = pairs_override(a.out, **over)
     with serve(kw, env_file) as srv:
         result = asyncio.run(run_call(srv, utts, opts))
     summary = summarize(result)
@@ -1053,6 +1379,7 @@ def main(argv: list[str] | None = None) -> int:
     print(f"server turns {by_side} for script lines {lines_by}  room_db {a.room_db}")
     if a.auto:
         print(lang_line(result))
+    print(f"phrase cache ({a.prefill}): {hit_rates(result)}  prefill {result['prefill']}")
     print(f"wrote {write_outputs(result, summary, a.out)}")
     return 0
 

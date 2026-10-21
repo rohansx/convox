@@ -31,8 +31,20 @@ class Driver:
         return out
 
 
-def test_default_is_seven_seconds():
-    assert Endpointer().max_utterance_ms == 7000
+def test_default_is_fifteen_seconds():
+    """7 s cut a live 7.0 s sentence mid-phrase ("so please keep | the prescription
+    ready", L9); long sentences are chunked at clause ends instead. The cap only guards a
+    detector stuck on noise."""
+    assert Endpointer().max_utterance_ms == 15000
+
+
+def test_pair_default_is_fifteen_seconds(tmp_path):
+    from dubhash.config.pairs import load_pairs
+
+    f = tmp_path / "p.yaml"
+    side = "{ lang: hi-IN, stt: fake, tts: fake, voice_m: m, voice_f: f }"
+    f.write_text(f"x:\n  a: {side}\n  b: {side}\n")
+    assert load_pairs(f)["x"].max_utterance_ms == 15000
 
 
 def test_never_ending_speech_is_cut_at_the_first_dip_after_the_limit():
@@ -83,7 +95,7 @@ def test_pair_config_carries_max_utterance_ms(tmp_path):
     from dubhash.config.settings import PACKAGE_DIR
 
     pairs = load_pairs(PACKAGE_DIR / "config" / "pairs.yaml")
-    assert all(p.max_utterance_ms == 7000 for p in pairs.values())
+    assert all(p.max_utterance_ms == 15000 for p in pairs.values())
     y = tmp_path / "p.yaml"
     y.write_text(
         "x:\n  a: {lang: hi-IN, stt: fake, tts: fake, voice_m: m, voice_f: f}\n"

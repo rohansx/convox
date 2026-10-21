@@ -48,6 +48,7 @@ from dubhash.providers.fakes import EnergyVAD, FakeMT, FakeSTT, FakeTTS
 from dubhash.session.call_session import CallSession
 from dubhash.session.providers import Providers, build_providers
 from dubhash.session.registry import new_call_id
+from dubhash.store.timeline import utterance_metrics
 from dubhash.store.writer import percentile
 from dubhash.types import Side, Turn
 
@@ -138,8 +139,24 @@ def _silence(ms: int) -> bytes:
     return b"\x00\x00" * (SAMPLE_RATE * ms // 1000)
 
 
-def synthetic_inbound() -> dict[Side, bytes]:
-    """A asks, B answers, A follows up: three translated turns."""
+def _clauses(ms: Sequence[int], f0: float, pause_ms: int = 350) -> bytes:
+    """One long utterance: clauses of speech separated by comma pauses."""
+    out = b""
+    for i, m in enumerate(ms):
+        out += (_silence(pause_ms) if i else b"") + _speech(m, f0)
+    return out
+
+
+def synthetic_inbound(long: bool = False) -> dict[Side, bytes]:
+    """A asks, B answers, A follows up: three translated turns. long=True (L9): each is a
+    4-5 s utterance of two or three clauses with 350 ms comma pauses."""
+    if long:
+        a1 = _clauses([1800, 1500, 1300], 140)  # 5.3 s
+        b1 = _clauses([1600, 1600], 210)  # 3.55 s
+        a2 = _clauses([1500, 1500, 1200], 140)  # 4.9 s
+        a = _silence(500) + a1 + _silence(15_200) + a2 + _silence(6000)
+        b = _silence(12_000) + b1 + _silence(16_000)
+        return {"a": a, "b": b}
     a = _silence(500) + _speech(1500, 140) + _silence(5000) + _speech(1200, 140) + _silence(4000)
     b = _silence(4500) + _speech(1400, 210) + _silence(6300)
     return {"a": a, "b": b}
@@ -196,6 +213,17 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         default=None,
         help="override the pair's early_final_ms (finalise STT after this silence; 0 = off)",
     )
+    p.add_argument(
+        "--long", action="store_true", help="synthetic: long utterances with comma pauses (L9)"
+    )
+    p.add_argument(
+        "--chunking",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="chunked interpretation (default: the pair's chunking, L9)",
+    )
+    p.add_argument("--chunk-pause-ms", type=int, default=None, help="override chunk_pause_ms")
+    p.add_argument("--chunk-min-ms", type=int, default=None, help="override chunk_min_ms")
     p.add_argument("--fake-mt-ms", type=int, default=0, help="fake MT delay")
     p.add_argument("--fake-stt-final-ms", type=int, default=0, help="fake STT final delay")
     p.add_argument("--fake-tts-ttfb-ms", type=int, default=0, help="fake TTS first-byte delay")
@@ -206,7 +234,12 @@ def _use_fakes(providers: Providers, args: argparse.Namespace, clock: Clock) -> 
     """Swap in fakes that sleep on the bench clock with the requested delays."""
     if args.stt == "fake":
         providers.stt = {
-            s: FakeSTT(final_delay_ms=args.fake_stt_final_ms, ignore_silence=True, clock=clock)
+            s: FakeSTT(
+                final_delay_ms=args.fake_stt_final_ms,
+                ignore_silence=True,
+                clock=clock,
+                lettered=True,  # "w1"-style words end in a digit: never a chunk
+            )
             for s in ("a", "b")
         }
     if args.mt == "fake":
@@ -245,9 +278,12 @@ async def run_bench(args: argparse.Namespace) -> dict[str, Any]:
         pair = dataclasses.replace(pair, spec_after_ms=args.spec_after_ms)
     if args.early_final_ms is not None:
         pair = dataclasses.replace(pair, early_final_ms=args.early_final_ms)
+    for field_ in ("chunking", "chunk_pause_ms", "chunk_min_ms"):
+        if getattr(args, field_) is not None:
+            pair = dataclasses.replace(pair, **{field_: getattr(args, field_)})
     providers = build_providers(pair, settings)
 
-    inbound = synthetic_inbound()
+    inbound = synthetic_inbound(long=args.long)
     if args.a_wav:
         inbound["a"] = read_wav(args.a_wav)
     if args.b_wav:
@@ -298,8 +334,15 @@ async def run_bench(args: argparse.Namespace) -> dict[str, Any]:
             "tts": {s: providers.tts[s].name for s in ("a", "b")},
         },
         "stages": stage_stats(turns),
+        "felt": utterance_metrics([dataclasses.asdict(t) for t in turns]),
         "spec": spec_stats(session, pair),
         "early_final": early_stats(session, pair),
+        "chunking": {
+            "enabled": pair.chunking,
+            "pause_ms": pair.chunk_pause_ms,
+            "min_ms": pair.chunk_min_ms,
+            "committed": sum(i.chunks_committed for i in session.interpreters.values()),
+        },
         "summary": session.summary(),
         "turns": [dataclasses.asdict(t) for t in turns],
         "audio_s": {s: round(len(inbound[s]) / (2 * SAMPLE_RATE), 2) for s in ("a", "b")},
@@ -318,6 +361,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     print(f"call {report['call_id']} ({report['clock']}, pair {report['pair']})")
     for name, st in report["stages"].items():
         print(f"  {name:<12} n={st['n']:<3} p50={_fmt(st['p50'])} ms  p95={_fmt(st['p95'])} ms")
+    print("  per utterance (L9):")
+    for name, st in report["felt"].items():
+        print(f"    {name:<28} n={st['n']:<3} p50={_fmt(st['p50'])} ms  p95={_fmt(st['p95'])} ms")
     sp = report["spec"]
     if sp["enabled"]:
         print(

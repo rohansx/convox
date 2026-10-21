@@ -22,6 +22,16 @@ MIN_HEARD_MS = 100
 SILENCE_PEAK = 64  # ignore_silence: frames whose peak |sample| is below this are silence
 
 
+def _lettered(i: int) -> str:
+    """1 -> "wa", 26 -> "wz", 27 -> "wba": a fake word with no digits."""
+    out = ""
+    while True:
+        i, r = divmod(i - 1, 26)
+        out = chr(ord("a") + r) + out
+        if i == 0:
+            return "w" + out
+
+
 def _word_count(ms: int) -> int:
     return 0 if ms < MIN_HEARD_MS else max(1, ms // MS_PER_WORD)
 
@@ -61,6 +71,9 @@ class FakeSTTStream:
         scripted = self._owner._peek()
         if scripted is not None:
             return " ".join(scripted.split()[:n_words])
+        if self._owner.lettered:
+            # ends a clause like a real final, so the chunker may commit it (L9)
+            return " ".join(_lettered(i) for i in range(1, n_words + 1)) + "."
         return " ".join(f"w{i}" for i in range(1, n_words + 1))
 
     async def push(self, frame: bytes) -> None:
@@ -127,7 +140,9 @@ class FakeSTT:
     voiced frames count towards words. final_delay_ms sleeps on `clock` when given.
     detected: the language reported on each final (stream.detected_lang), in order, or a
     (lang, confidence) pair (also sets detected_confidence); None entries and an exhausted
-    script report None."""
+    script report None.
+    lettered: words are "wa wb wc ..." instead of "w1 w2 w3 ..." (a text ending in a digit
+    is never committed as a chunk, interp/chunker.py)."""
 
     name = "fake"
 
@@ -140,7 +155,9 @@ class FakeSTT:
         ignore_silence: bool = False,
         clock: Any = None,
         detected: list[str | tuple[str, float] | None] | None = None,
+        lettered: bool = False,
     ) -> None:
+        self.lettered = lettered
         self._script: deque[str] = deque(script or [])
         self._detected: deque[str | tuple[str, float] | None] = deque(detected or [])
         self.final_delay_ms = final_delay_ms

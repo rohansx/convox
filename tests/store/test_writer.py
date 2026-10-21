@@ -210,3 +210,14 @@ async def test_close_drains_pending_rows(sm):
         w.enqueue_turn(turn(i), record=False)
     await asyncio.wait_for(w.close(), timeout=2)
     assert await count(sm, TurnRow) == 3
+
+
+async def test_chunk_fields_are_stored(sm):
+    """L9: utterance_id / chunk / t_utt_start are turns columns (nullable)."""
+    w = await started(sm, flush_ms=10)
+    w.enqueue_turn(turn(1, utterance_id=3, chunk=1, t_utt_start=10), record=True)
+    await w.drain()
+    async with sm() as s:
+        row = (await s.execute(select(TurnRow))).scalar_one()
+    assert (row.utterance_id, row.chunk, row.t_utt_start) == (3, 1, 10)
+    await w.close()

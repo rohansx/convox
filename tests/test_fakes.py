@@ -207,3 +207,11 @@ async def test_fake_stt_ignore_silence_counts_only_voiced_audio():
     for f in frames(speech(900) + silence(900)):
         await s.push(f)
     assert await s.end() == "w1 w2 w3"
+
+
+async def test_lettered_words_have_no_digits():
+    stt = FakeSTT(lettered=True)
+    s = await stt.open("hi-IN")
+    for f in frames(speech(1200)):
+        await s.push(f)
+    assert await s.end() == "wa wb wc wd."  # ends a clause, like a real final

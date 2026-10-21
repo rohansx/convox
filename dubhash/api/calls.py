@@ -53,6 +53,7 @@ from dubhash.config.pairs import (
     load_pairs,
 )
 from dubhash.config.settings import Settings
+from dubhash.interp.phrases import DEFAULT_VERTICAL
 from dubhash.session.language import AutoLang, ResolverConfig
 from dubhash.telephony import Dialer, DialError, ProviderUnavailable, build_dialer, leg_ws_url
 from dubhash.types import Side
@@ -339,6 +340,7 @@ async def create_call(
         record=req.record,
         opening_line=settings.pstn_opening_line,
         **auto_kw(auto),
+        vertical=req.vertical or DEFAULT_VERTICAL,
     )
     sessions.create(call_id, session)
     handle = CallHandle(
@@ -465,8 +467,10 @@ def session_turns(session: Any) -> list[Any]:
         return []
 
 
-def turn_json(turn: Any, retain_text: bool) -> dict[str, Any]:
+def turn_json(turn: Any, retain_text: bool, flags: dict[str, int] | None = None) -> dict[str, Any]:
     t = dataclasses.asdict(turn) if dataclasses.is_dataclass(turn) else dict(turn)
+    if flags:
+        t["flags"] = dict(flags)  # interpreter flags beside the row (L10)
     t.pop("call_id", None)
     if not retain_text:
         t["src_text"] = None
@@ -484,8 +488,10 @@ async def get_turns(call_id: str, sessions: Sessions, book: Book) -> dict[str, A
         raise ApiError(404, "call_not_found", f"no live call {call_id}", call_id=call_id)
     handle = book.get(call_id)
     retain = handle.record if handle is not None else bool(getattr(session, "record", False))
+    flags = getattr(getattr(session, "turn_log", None), "flags", None) or {}
     turns = sorted(
-        (turn_json(t, retain) for t in session_turns(session)), key=lambda t: t.get("seq") or 0
+        (turn_json(t, retain, flags.get(getattr(t, "seq", None))) for t in session_turns(session)),
+        key=lambda t: t.get("seq") or 0,
     )
     return {"call_id": call_id, "text_retained": retain, "turns": turns}
 

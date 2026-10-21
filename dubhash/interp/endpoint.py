@@ -7,7 +7,7 @@ where silence since the last speech frame is >= eou_ms, or when force_eou() is c
 part of the utterance (hangover). Utterances shorter than min_utterance_ms are discarded
 as noise; whether to merge them into the next utterance instead is an open question.
 
-Max length (L7): once an utterance has run max_utterance_ms (7 s; 0 = off), it ends at the
+Max length (L7, L9): once an utterance has run max_utterance_ms (15 s; 0 = off), it ends at the
 next low-energy dip: a frame that is not speech, or one dip_db (12 dB) under the loudest
 frame of the last 500 ms. So a noisy room or a monologue never holds the translation back
 for ever, and the cut falls between words, never inside one. Without any dip it ends
@@ -64,7 +64,7 @@ class Endpointer:
         speech_threshold: float = 0.5,
         preroll_ms: int = 200,
         tail_ms: int = 100,
-        max_utterance_ms: int = 7000,
+        max_utterance_ms: int = 15000,
         max_dip_wait_ms: int = 1000,
         dip_db: float = 12.0,
     ) -> None:
