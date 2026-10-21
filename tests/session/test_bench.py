@@ -53,6 +53,8 @@ def test_help_runs_as_a_module():
 
 
 LIVE_LIKE = ["--fake-mt-ms", "1200", "--fake-stt-final-ms", "290", "--fake-tts-ttfb-ms", "250"]
+# hi-kn has early final on (L3), which holds speculation back; spec tests measure it alone
+NO_EARLY = ["--early-final-ms", "0"]
 
 
 def _spaced_wavs(tmp_path) -> list[str]:
@@ -75,8 +77,8 @@ def _bench(tmp_path, call_id: str, *extra: str) -> dict:
 
 def test_spec_flag_with_live_like_fake_delays(tmp_path, monkeypatch, capsys):
     monkeypatch.setenv("DUBHASH_ENV", "dev")
-    off = _bench(tmp_path, "c_off", "--no-spec")
-    on = _bench(tmp_path, "c_on", "--spec")
+    off = _bench(tmp_path, "c_off", "--no-spec", *NO_EARLY)
+    on = _bench(tmp_path, "c_on", "--spec", *NO_EARLY)
     assert off["spec"]["enabled"] is False and off["spec"]["started"] == 0
     assert on["spec"]["enabled"] is True
     assert on["spec"]["eligible"] == 3 and on["spec"]["hits"] == 3 and on["spec"]["used"] == 3
@@ -110,8 +112,8 @@ def test_spec_flag_shown_in_help():
 
 def test_spec_after_ms_overrides_pair(tmp_path, monkeypatch):
     monkeypatch.setenv("DUBHASH_ENV", "dev")
-    late = _bench(tmp_path, "c_late", "--spec", "--spec-after-ms", "200")
-    early = _bench(tmp_path, "c_early", "--spec", "--spec-after-ms", "40")
+    late = _bench(tmp_path, "c_late", "--spec", "--spec-after-ms", "200", *NO_EARLY)
+    early = _bench(tmp_path, "c_early", "--spec", "--spec-after-ms", "40", *NO_EARLY)
     assert late["spec"]["after_ms"] == 200 and early["spec"]["after_ms"] == 40
     fa = early["stages"]["first_audio"]["p50"]
     assert fa <= late["stages"]["first_audio"]["p50"] - 140

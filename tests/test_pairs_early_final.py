@@ -14,6 +14,15 @@ def test_early_final_defaults_to_off():
     assert pairs["fake-fake"].early_final_ms == 0
 
 
+def test_early_final_on_for_hi_kn_only():
+    """L3: live hi-kn first-audio p50 1727 -> 1377 ms with 200, no words lost."""
+    pairs = load_pairs(PAIRS_FILE)
+    assert pairs["hi-kn"].early_final_ms == 200
+    for key, p in pairs.items():
+        if key != "hi-kn":
+            assert p.early_final_ms == 0, key
+
+
 def test_early_final_loads_from_yaml(tmp_path):
     f = tmp_path / "p.yaml"
     f.write_text(
