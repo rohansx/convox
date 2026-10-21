@@ -12,10 +12,12 @@ a `websockets.serve` server on 127.0.0.1). All TTS output is PCM16 mono 16 kHz.
 | `sarvam_mt.py` | `SarvamMT` (`sarvam`) | MT | REST, shared `httpx.AsyncClient` |
 | `sarvam_tts.py` | `BulbulTTS` (`bulbul`) | TTS | websocket, warm pool |
 | `eleven_tts.py` | `ElevenTTS` (`eleven`) | TTS | HTTP streaming |
-| `registry.py` | `build_stt/build_mt/build_tts(name, settings)`, `ProviderError`, `ProviderUnavailable` | | |
+| `sarvam_lid.py` | `SarvamLID` (`sarvam`) | LanguageID (`interp/langid.py`) | REST STT with `language_code=unknown` (+ optional text-lid), shared `httpx.AsyncClient` |
+| `registry.py` | `build_stt/build_mt/build_tts/build_lid(name, settings)`, `ProviderError`, `ProviderUnavailable` | | |
 
 `build_*` returns the fake (lazily imported from `providers/fakes.py`) when the name is
 `fake`, the matching `*_IMPL` setting is `fake` (the default), or `DUBHASH_ENV=test`.
+`build_lid` follows `STT_IMPL` (language ID is a speech provider) and returns `FakeLID`.
 A missing key raises `ProviderUnavailable` naming the env var.
 
 Live tests: `uv run pytest -m live -s` (needs `.env` with keys; each test skips without
