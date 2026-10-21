@@ -1,0 +1,52 @@
+# Clinic phrase pack (L10): short lines a patient and a doctor or front desk repeat. See
+# delivery.yaml for how packs are used.
+#
+# TODO(native review): every hi, mr, gu, kn and ta text below was written by us and needs
+# a native speaker's check (spelling as STT writes it, register). The texts are SOURCE
+# lines only; translations always come from MT. Doses and numbers are read back
+# (numbers_readback), never trusted to a cached phrase alone.
+vertical: clinic
+numbers_readback: true
+native_review_todo: [hi, mr, gu, kn, ta]
+lines:
+  - {id: ok, ack: true, en: [Okay, Alright], hi: [ठीक है, theek hai], mr: [ठीक आहे, theek aahe], gu: [સારું, ઠીક છે], kn: [ಸರಿ, sari], ta: [சரி]}
+  - {id: yes, ack: true, en: [Yes, Yeah], hi: [हाँ, haan], mr: [हो, ho], gu: [હા], kn: [ಹೌದು], ta: [ஆமாம்]}
+  - {id: no, ack: true, en: ["No"], hi: [नहीं, nahi], mr: [नाही], gu: [ના], kn: [ಇಲ್ಲ], ta: [இல்லை]}
+  - {id: thanks, ack: true, en: [Thank you, Thanks], hi: [धन्यवाद, thank you], mr: [धन्यवाद], gu: [આભાર]}
+  - {id: hello, ack: true, en: [Hello], hi: [हैलो, hello], mr: [हॅलो], gu: [હેલો]}
+  - {id: bye, ack: true, en: ["Okay, bye"], hi: [ठीक है बाय], mr: [ठीक आहे बाय], gu: [સારું બાય]}
+  - {id: fever, en: [I have a fever], hi: [मुझे बुखार है], mr: [मला ताप आहे], gu: [મને તાવ છે]}
+  - {id: cough, en: [I have a cough], hi: [मुझे खांसी है], mr: [मला खोकला आहे], gu: [મને ઉધરસ છે]}
+  - {id: headache, en: [I have a headache], hi: [मेरे सिर में दर्द है], mr: [माझं डोकं दुखतंय], gu: [મારું માથું દુખે છે]}
+  - {id: stomach, en: [I have stomach pain], hi: [पेट में दर्द है], mr: [पोटात दुखतंय], gu: [પેટમાં દુખે છે]}
+  - {id: after_food, en: [Take the medicine after food], hi: [दवाई खाना खाने के बाद लीजिए, dawai khana khane ke baad], mr: [जेवणानंतर औषध घ्या], gu: [જમ્યા પછી દવા લો]}
+  - {id: before_food, en: [Take the medicine before food], hi: [दवाई खाने से पहले लीजिए], mr: [जेवणाआधी औषध घ्या], gu: [જમ્યા પહેલાં દવા લો]}
+  - {id: twice, en: [Twice a day], hi: [दिन में दो बार], mr: [दिवसातून दोन वेळा], gu: [દિવસમાં બે વાર]}
+  - {id: thrice, en: [Three times a day], hi: [दिन में तीन बार], mr: [दिवसातून तीन वेळा], gu: [દિવસમાં ત્રણ વાર]}
+  - {id: come_morning, en: [Come tomorrow morning], hi: [कल सुबह आइए, kal subah aana], mr: [उद्या सकाळी या], gu: [કાલે સવારે આવજો]}
+  - {id: come_evening, en: [Come in the evening], hi: [शाम को आइए], mr: [संध्याकाळी या], gu: [સાંજે આવજો]}
+  - {id: since_when, en: ["Since how many days?"], hi: ["कितने दिनों से?"], mr: ["किती दिवसांपासून?"], gu: ["કેટલા દિવસથી?"]}
+  - {id: three_days, en: [For three days], hi: [तीन दिन से], mr: [तीन दिवसांपासून], gu: [ત્રણ દિવસથી]}
+  - {id: allergy, en: ["Do you have any allergy?"], hi: ["कोई एलर्जी है?"], mr: ["काही ॲलर्जी आहे का?"], gu: ["કોઈ એલર્જી છે?"]}
+  - {id: no_allergy, en: [No allergy], hi: [कोई एलर्जी नहीं], mr: [ॲलर्जी नाही], gu: [કોઈ એલર્જી નથી]}
+  - {id: bp, en: [Check your blood pressure], hi: [बीपी चेक कराइए], mr: [बीपी तपासा], gu: [બીપી ચેક કરાવો]}
+  - {id: sugar, en: ["Do you have diabetes?"], hi: ["आपको शुगर है?"], mr: ["तुम्हाला शुगर आहे का?"], gu: ["તમને ડાયાબિટીસ છે?"]}
+  - {id: rest, en: [Take rest], hi: [आराम कीजिए], mr: [आराम करा], gu: [આરામ કરો]}
+  - {id: water, en: [Drink plenty of water], hi: [खूब पानी पीजिए], mr: [भरपूर पाणी प्या], gu: [પુષ્કળ પાણી પીઓ]}
+  - {id: blood_test, en: [Get a blood test done], hi: [खून की जाँच कराइए], mr: [रक्त तपासणी करा], gu: [લોહીની તપાસ કરાવો]}
+  - {id: report, en: [Bring the report], hi: [रिपोर्ट लेकर आइए], mr: [रिपोर्ट घेऊन या], gu: [રિપોર્ટ લઈને આવો]}
+  - {id: prescription, en: [Show the prescription], hi: [पर्ची दिखाइए], mr: [प्रिस्क्रिप्शन दाखवा], gu: [પ્રિસ્ક્રિપ્શન બતાવો]}
+  - {id: appointment, en: [Your appointment is confirmed], hi: [आपका अपॉइंटमेंट पक्का है], mr: [तुमची अपॉइंटमेंट निश्चित आहे], gu: [તમારી એપોઇન્ટમેન્ટ નક્કી છે]}
+  - {id: wait, en: [Please wait], hi: [रुकिए], mr: [थांबा], gu: [રાહ જુઓ]}
+  - {id: doctor_coming, en: [The doctor is coming], hi: [डॉक्टर आ रहे हैं], mr: [डॉक्टर येत आहेत], gu: [ડૉક્ટર આવે છે]}
+  - {id: where_pain, en: ["Where does it hurt?"], hi: ["कहाँ दर्द है?"], mr: ["कुठे दुखतंय?"], gu: ["ક્યાં દુખે છે?"]}
+  - {id: better, en: [I feel better], hi: [अब ठीक लग रहा है], mr: [आता बरं वाटतंय], gu: [હવે સારું લાગે છે]}
+  - {id: not_better, en: ["I don't feel better"], hi: [आराम नहीं है], mr: [बरं वाटत नाही], gu: [સારું નથી લાગતું]}
+  - {id: vomiting, en: [I am vomiting], hi: [उल्टी हो रही है], mr: [उलट्या होत आहेत], gu: [ઉલટી થાય છે]}
+  - {id: dizzy, en: [I feel dizzy], hi: [चक्कर आ रहा है], mr: [चक्कर येतेय], gu: [ચક્કર આવે છે]}
+  - {id: breathless, en: [I have trouble breathing], hi: [साँस लेने में तकलीफ़ है], mr: [श्वास घ्यायला त्रास होतोय], gu: [શ્વાસ લેવામાં તકલીફ છે]}
+  - {id: one_tablet, en: [One tablet], hi: [एक गोली], mr: [एक गोळी], gu: [એક ગોળી]}
+  - {id: five_days, en: [For five days], hi: [पाँच दिन तक], mr: [पाच दिवस], gu: [પાંચ દિવસ સુધી]}
+  - {id: cant_hear, en: ["I can't hear you"], hi: [आवाज़ नहीं आ रही], mr: [आवाज येत नाहीये], gu: [અવાજ નથી આવતો]}
+  - {id: say_again, en: [Please say that again], hi: [फिर से बोलिए], mr: [पुन्हा सांगा], gu: [ફરીથી કહો]}
+  - {id: emergency, en: [Go to the emergency], hi: [इमरजेंसी में जाइए], mr: [इमर्जन्सीमध्ये जा], gu: [ઇમર્જન્સીમાં જાઓ]}
