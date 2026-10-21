@@ -82,6 +82,11 @@ class Endpointer:
         """Latest speech frame of the current utterance (valid while in_speech)."""
         return self._t_last
 
+    @property
+    def speech_ms(self) -> int:
+        """Speech span so far, first to latest speech frame inclusive (valid while in_speech)."""
+        return self._t_last - self._t_start + self._last_frame_ms
+
     def feed(self, frame: bytes, prob: float, now_ms: int) -> list[EndpointEvent]:
         is_speech = prob > self.speech_threshold
         if not self._in_speech:
@@ -129,7 +134,7 @@ class Endpointer:
             self._ring_len -= len(self._ring.popleft())
 
     def _finish(self, now_ms: int) -> Utterance | Discard:
-        duration = self._t_last - self._t_start + self._last_frame_ms
+        duration = self.speech_ms
         audio = bytes(self._buf[: self._speech_end_len + self.tail_bytes])
         self._in_speech = False
         self._buf = bytearray()

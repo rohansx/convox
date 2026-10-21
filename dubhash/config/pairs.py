@@ -43,6 +43,9 @@ class PairConfig:
     duck_db: float = -14.0
     spec_mt: bool = False  # speculative MT on the latest STT partial during the EOU wait
     spec_after_ms: int = 200  # silence before speculating
+    # finalise STT after this much silence, before EOU, so MT/TTS overlap the EOU wait.
+    # 0 = off (interp/early_final.py, open question L3)
+    early_final_ms: int = 0
 
     def side(self, side: Side) -> SideConfig:
         return self.a if side == "a" else self.b
@@ -62,6 +65,7 @@ def load_pairs(path: Path) -> dict[str, PairConfig]:
             duck_db=float(cfg.get("duck_db", -14)),
             spec_mt=bool(cfg.get("spec_mt", False)),
             spec_after_ms=int(cfg.get("spec_after_ms", 200)),
+            early_final_ms=int(cfg.get("early_final_ms", 0)),
         )
     return out
 

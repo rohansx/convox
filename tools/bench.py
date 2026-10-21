@@ -8,9 +8,12 @@ side heard and a JSON report with per-stage p50/p95 and the turn log.
         --fake-tts-ttfb-ms 250                         # fakes with the live latency budget
 
 --spec/--no-spec overrides the pair's spec_mt (speculative MT during the EOU wait); the
-report's "spec" block gives the hit rate. --fake-*-ms delay the fake providers on the
-bench clock. The fake STT counts only voiced audio, so its last partial equals its final
-(a fake speculation always hits; only a live run measures the real hit rate).
+report's "spec" block gives the hit rate. --early-final-ms overrides the pair's
+early_final_ms (finalise STT after that much silence, before EOU); the "early_final" block
+counts early finals started, used and restarted (speech resumed). --fake-*-ms delay the
+fake providers on the bench clock. The fake STT counts only voiced audio, so its last
+partial equals its final (a fake speculation always hits; only a live run measures the
+real hit rate).
 
 With only fakes the bench runs faster than real time on a FakeClock (lockstep, one 20 ms
 frame per step on both legs). With any real provider it runs at real time on the wall
@@ -187,6 +190,12 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     p.add_argument(
         "--spec-after-ms", type=int, default=None, help="override the pair's spec_after_ms"
     )
+    p.add_argument(
+        "--early-final-ms",
+        type=int,
+        default=None,
+        help="override the pair's early_final_ms (finalise STT after this silence; 0 = off)",
+    )
     p.add_argument("--fake-mt-ms", type=int, default=0, help="fake MT delay")
     p.add_argument("--fake-stt-final-ms", type=int, default=0, help="fake STT final delay")
     p.add_argument("--fake-tts-ttfb-ms", type=int, default=0, help="fake TTS first-byte delay")
@@ -215,6 +224,15 @@ def spec_stats(session: CallSession, pair: PairConfig) -> dict[str, Any]:
     return out
 
 
+def early_stats(session: CallSession, pair: PairConfig) -> dict[str, Any]:
+    interps = list(session.interpreters.values())
+    out: dict[str, Any] = {"early_final_ms": pair.early_final_ms}
+    for k in ("started", "restarts", "used"):
+        out[k] = sum(getattr(i, f"early_{k}") for i in interps)
+    out["restart_rate"] = round(out["restarts"] / out["started"], 3) if out["started"] else None
+    return out
+
+
 async def run_bench(args: argparse.Namespace) -> dict[str, Any]:
     settings = Settings(stt_impl=args.stt, mt_impl=args.mt, tts_impl=args.tts)
     pairs = load_pairs(settings.pairs_file)
@@ -225,6 +243,8 @@ async def run_bench(args: argparse.Namespace) -> dict[str, Any]:
         pair = dataclasses.replace(pair, spec_mt=args.spec)
     if args.spec_after_ms is not None:
         pair = dataclasses.replace(pair, spec_after_ms=args.spec_after_ms)
+    if args.early_final_ms is not None:
+        pair = dataclasses.replace(pair, early_final_ms=args.early_final_ms)
     providers = build_providers(pair, settings)
 
     inbound = synthetic_inbound()
@@ -279,6 +299,7 @@ async def run_bench(args: argparse.Namespace) -> dict[str, Any]:
         },
         "stages": stage_stats(turns),
         "spec": spec_stats(session, pair),
+        "early_final": early_stats(session, pair),
         "summary": session.summary(),
         "turns": [dataclasses.asdict(t) for t in turns],
         "audio_s": {s: round(len(inbound[s]) / (2 * SAMPLE_RATE), 2) for s in ("a", "b")},
@@ -306,6 +327,14 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
     else:
         print("  spec         off")
+    ef = report["early_final"]
+    if ef["early_final_ms"] > 0:
+        print(
+            f"  early_final  after={ef['early_final_ms']}ms started={ef['started']} "
+            f"used={ef['used']} restarts={ef['restarts']} (rate {ef['restart_rate']})"
+        )
+    else:
+        print("  early_final  off")
     print(f"  turns={report['summary']['turns']}  out={args.out}/{report['call_id']}_*.wav,.json")
     return 0
 
