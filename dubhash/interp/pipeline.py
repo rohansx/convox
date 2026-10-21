@@ -22,6 +22,10 @@ normalize(final) matches; otherwise it translates the final as usual. timings ga
 spec_hit (the final matched the speculated text) and spec_used (its translation was
 delivered), as 0/1. t_mt stays the time the translation was available to the worker.
 
+MT skip: when the source side's mt_lang already is the target language (stt
+sarvam-translate + mt_src en-IN towards an English listener), the final is delivered as the
+translation with no MT call and t_mt = t_stt_final.
+
 Early final (pair.early_final_ms > 0, open question L3): once silence inside an utterance
 has lasted early_final_ms, the frame loop queues an _EarlyFinal marker and the worker ends
 the STT stream then, so the final, MT and TTS first byte overlap the rest of the EOU wait.
@@ -165,6 +169,9 @@ class Interpreter:
         self.gender: Gender | None = gender
         self.src_lang = pair.side(side).lang
         self.tgt = pair.side(other(side))
+        # The STT already outputs the target language (e.g. Marathi speech -> English final
+        # for an English listener): no MT call, and t_mt = t_stt_final.
+        self.mt_skip = pair.side(side).mt_lang == self.tgt.lang
         self.endpointer = Endpointer(eou_ms=pair.eou_ms, backchannel_max_ms=pair.backchannel_max_ms)
         self._seq = 0
         self._current: _Job | None = None
@@ -256,7 +263,7 @@ class Interpreter:
         for ev in events:
             if isinstance(ev, SpeechStart):
                 job = _Job(t_speech_start=ev.t, prev=self._last_done)
-                if self.pair.spec_mt:
+                if self.pair.spec_mt and not self.mt_skip:
                     job.spec = Speculator(
                         self._translate,
                         after_ms=self.pair.spec_after_ms,
@@ -466,10 +473,13 @@ class Interpreter:
         if not final or (short and words <= BACKCHANNEL_MAX_WORDS):
             raise _Discarded
 
-        stage.name, stage.provider = "mt", self.mt.name
-        spec = await job.spec.take(final) if job.spec else SpecOutcome(None, False)
-        tgt_text = spec.text if spec.text is not None else await self._translate(final)
-        t_mt = self.clock.now_ms()
+        if self.mt_skip:
+            spec, tgt_text, t_mt = SpecOutcome(None, False), final, t_stt_final
+        else:
+            stage.name, stage.provider = "mt", self.mt.name
+            spec = await job.spec.take(final) if job.spec else SpecOutcome(None, False)
+            tgt_text = spec.text if spec.text is not None else await self._translate(final)
+            t_mt = self.clock.now_ms()
 
         stage.name, stage.provider = "tts", self.tts.name
         if self.gender is None:
