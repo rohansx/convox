@@ -4,6 +4,13 @@ side heard and a JSON report with per-stage p50/p95 and the turn log.
 
     uv run python -m tools.bench                       # all fakes, synthetic audio, fast
     uv run python -m tools.bench --a-wav a.wav --b-wav b.wav --stt real --mt real --tts real
+    uv run python -m tools.bench --no-spec --fake-mt-ms 1200 --fake-stt-final-ms 290 \
+        --fake-tts-ttfb-ms 250                         # fakes with the live latency budget
+
+--spec/--no-spec overrides the pair's spec_mt (speculative MT during the EOU wait); the
+report's "spec" block gives the hit rate. --fake-*-ms delay the fake providers on the
+bench clock. The fake STT counts only voiced audio, so its last partial equals its final
+(a fake speculation always hits; only a live run measures the real hit rate).
 
 With only fakes the bench runs faster than real time on a FakeClock (lockstep, one 20 ms
 frame per step on both legs). With any real provider it runs at real time on the wall
@@ -29,13 +36,14 @@ import numpy as np
 from dubhash.audio.frames import FRAME_BYTES, FRAME_MS, SAMPLE_RATE
 from dubhash.audio.wav import read_wav, write_wav
 from dubhash.clock import Clock, FakeClock, MonotonicClock
-from dubhash.config.pairs import load_pairs
+from dubhash.config.pairs import PairConfig, load_pairs
 from dubhash.config.settings import Settings
 from dubhash.events import EventBus
+from dubhash.interp.mt_cache import CachedMT
 from dubhash.legs.fake import FakeLeg
-from dubhash.providers.fakes import EnergyVAD
+from dubhash.providers.fakes import EnergyVAD, FakeMT, FakeSTT, FakeTTS
 from dubhash.session.call_session import CallSession
-from dubhash.session.providers import build_providers
+from dubhash.session.providers import Providers, build_providers
 from dubhash.session.registry import new_call_id
 from dubhash.store.writer import percentile
 from dubhash.types import Side, Turn
@@ -170,7 +178,41 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     p.add_argument("--call-id", default=None)
     p.add_argument("--tail-ms", type=int, default=5000, help="silence after the audio (real time)")
     p.add_argument("--no-opening", action="store_true", help="skip the opening line")
+    p.add_argument(
+        "--spec",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="speculative MT on STT partials during the EOU wait (default: the pair's spec_mt)",
+    )
+    p.add_argument(
+        "--spec-after-ms", type=int, default=None, help="override the pair's spec_after_ms"
+    )
+    p.add_argument("--fake-mt-ms", type=int, default=0, help="fake MT delay")
+    p.add_argument("--fake-stt-final-ms", type=int, default=0, help="fake STT final delay")
+    p.add_argument("--fake-tts-ttfb-ms", type=int, default=0, help="fake TTS first-byte delay")
     return p.parse_args(argv)
+
+
+def _use_fakes(providers: Providers, args: argparse.Namespace, clock: Clock) -> None:
+    """Swap in fakes that sleep on the bench clock with the requested delays."""
+    if args.stt == "fake":
+        providers.stt = {
+            s: FakeSTT(final_delay_ms=args.fake_stt_final_ms, ignore_silence=True, clock=clock)
+            for s in ("a", "b")
+        }
+    if args.mt == "fake":
+        providers.mt = CachedMT(FakeMT(delay_ms=args.fake_mt_ms, clock=clock))
+    if args.tts == "fake":
+        providers.tts = {s: FakeTTS(ttfb_ms=args.fake_tts_ttfb_ms, clock=clock) for s in ("a", "b")}
+
+
+def spec_stats(session: CallSession, pair: PairConfig) -> dict[str, Any]:
+    interps = list(session.interpreters.values())
+    out: dict[str, Any] = {"enabled": pair.spec_mt, "after_ms": pair.spec_after_ms}
+    for k in ("eligible", "started", "cancelled", "hits", "used"):
+        out[k] = sum(getattr(i, f"spec_{k}") for i in interps)
+    out["hit_rate"] = round(out["hits"] / out["eligible"], 3) if out["eligible"] else None
+    return out
 
 
 async def run_bench(args: argparse.Namespace) -> dict[str, Any]:
@@ -179,6 +221,10 @@ async def run_bench(args: argparse.Namespace) -> dict[str, Any]:
     if args.pair not in pairs:
         raise SystemExit(f"unknown pair {args.pair!r}; choose from {sorted(pairs)}")
     pair = pairs[args.pair]
+    if args.spec is not None:
+        pair = dataclasses.replace(pair, spec_mt=args.spec)
+    if args.spec_after_ms is not None:
+        pair = dataclasses.replace(pair, spec_after_ms=args.spec_after_ms)
     providers = build_providers(pair, settings)
 
     inbound = synthetic_inbound()
@@ -193,6 +239,7 @@ async def run_bench(args: argparse.Namespace) -> dict[str, Any]:
     realtime = "real" in (args.stt, args.mt, args.tts)
     call_id = args.call_id or new_call_id()
     clock: Clock = MonotonicClock() if realtime else FakeClock()
+    _use_fakes(providers, args, clock)
     legs: dict[Side, FakeLeg] = {
         s: FakeLeg(s, clock=clock, realtime=realtime, playout=True) for s in ("a", "b")
     }
@@ -231,6 +278,7 @@ async def run_bench(args: argparse.Namespace) -> dict[str, Any]:
             "tts": {s: providers.tts[s].name for s in ("a", "b")},
         },
         "stages": stage_stats(turns),
+        "spec": spec_stats(session, pair),
         "summary": session.summary(),
         "turns": [dataclasses.asdict(t) for t in turns],
         "audio_s": {s: round(len(inbound[s]) / (2 * SAMPLE_RATE), 2) for s in ("a", "b")},
@@ -249,6 +297,15 @@ def main(argv: Sequence[str] | None = None) -> int:
     print(f"call {report['call_id']} ({report['clock']}, pair {report['pair']})")
     for name, st in report["stages"].items():
         print(f"  {name:<12} n={st['n']:<3} p50={_fmt(st['p50'])} ms  p95={_fmt(st['p95'])} ms")
+    sp = report["spec"]
+    if sp["enabled"]:
+        print(
+            f"  spec         after={sp['after_ms']}ms hits={sp['hits']}/{sp['eligible']} "
+            f"used={sp['used']} "
+            f"started={sp['started']} cancelled={sp['cancelled']}"
+        )
+    else:
+        print("  spec         off")
     print(f"  turns={report['summary']['turns']}  out={args.out}/{report['call_id']}_*.wav,.json")
     return 0
 

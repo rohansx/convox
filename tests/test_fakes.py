@@ -127,3 +127,83 @@ def test_energy_vad_speech_vs_silence():
 
 def test_energy_vad_empty_frame_is_silence():
     assert EnergyVAD().speech_prob(b"") == 0.0
+
+
+# --- clock-aware delays, scripted partials (speculative MT support) -------------------
+
+
+async def test_fake_mt_delay_on_fake_clock_and_cancel_count():
+    from dubhash.clock import FakeClock
+
+    clock = FakeClock()
+    mt = FakeMT(delay_ms=1200, clock=clock)
+    t = asyncio.create_task(mt.translate("namaste", "hi-IN", "kn-IN"))
+    await asyncio.sleep(0)
+    clock.advance(1199)
+    await asyncio.sleep(0)
+    assert not t.done()
+    clock.advance(1)
+    assert await t == "[kn-IN] namaste"
+    t2 = asyncio.create_task(mt.translate("x", "hi-IN", "kn-IN"))
+    await asyncio.sleep(0)
+    t2.cancel()
+    await asyncio.gather(t2, return_exceptions=True)
+    assert mt.calls == 2 and mt.cancelled == 1
+
+
+async def test_fake_stt_final_delay_and_tts_ttfb_on_fake_clock():
+    from dubhash.clock import FakeClock
+
+    clock = FakeClock()
+    stt = FakeSTT(script=["ek do teen"], final_delay_ms=290, clock=clock)
+    s = await stt.open("hi-IN")
+    for f in frames(speech(600)):
+        await s.push(f)
+    end = asyncio.create_task(s.end())
+    await asyncio.sleep(0)
+    clock.advance(289)
+    await asyncio.sleep(0)
+    assert not end.done()
+    clock.advance(1)
+    assert await end == "ek do teen"
+
+    tts = FakeTTS(ttfb_ms=250, clock=clock)
+    it = aiter(tts.synth("abc", "v", "kn-IN"))
+    first = asyncio.create_task(anext(it))
+    await asyncio.sleep(0)
+    assert not first.done()
+    clock.advance(250)
+    assert len(await first) > 0
+
+
+async def test_fake_stt_scripted_partials_by_audio_ms():
+    stt = FakeSTT(
+        script=["main gate par hoon"],
+        partials=[[(200, "main"), (600, "main gate"), (900, "main gate par hoon")]],
+    )
+    s = await stt.open("hi-IN")
+    got: list[str] = []
+    for i, f in enumerate(frames(speech(1000))):
+        await s.push(f)
+        while not s._partials.empty():
+            got.append(s._partials.get_nowait())
+        if i == 9:  # 200 ms pushed
+            assert got == ["main"]
+    assert got == ["main", "main gate", "main gate par hoon"]
+    assert await s.end() == "main gate par hoon"
+
+
+async def test_fake_stt_scripted_partials_empty_list_means_no_partials():
+    stt = FakeSTT(script=["kuch bhi"], partials=[[]])
+    s = await stt.open("hi-IN")
+    for f in frames(speech(1000)):
+        await s.push(f)
+    assert s._partials.empty()
+
+
+async def test_fake_stt_ignore_silence_counts_only_voiced_audio():
+    stt = FakeSTT(ignore_silence=True)
+    s = await stt.open("hi-IN")
+    for f in frames(speech(900) + silence(900)):
+        await s.push(f)
+    assert await s.end() == "w1 w2 w3"

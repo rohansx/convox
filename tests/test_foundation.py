@@ -35,6 +35,14 @@ def test_pairs_load():
     assert find_pair(pairs, "hi-IN", "kn-IN") is hk
 
 
+def test_all_bulbul_test_pair_for_live_bench():
+    pairs = load_pairs(Settings().pairs_file)
+    p = pairs["hi-kn-bulbul"]
+    assert (p.a.lang, p.b.lang) == ("hi-IN", "kn-IN")
+    assert p.a.tts == p.b.tts == "bulbul"
+    assert find_pair(pairs, "hi-IN", "kn-IN") is pairs["hi-kn"]
+
+
 def test_settings_keys_optional():
     s = Settings(_env_file=None)
     assert s.deepgram_api_key == ""
@@ -70,3 +78,39 @@ def test_exotel_host_empty_or_with_scheme_normalises():
     assert Settings(_env_file=None, exotel_api_host="").exotel_api_host == "api.exotel.com"
     h = Settings(_env_file=None, exotel_api_host="https://api.in.exotel.com/").exotel_api_host
     assert h == "api.in.exotel.com"
+
+
+async def test_fake_clock_sleep_wakes_on_advance():
+    c = FakeClock()
+    woke: list[int] = []
+
+    async def sleeper(ms: int) -> None:
+        await c.sleep_ms(ms)
+        woke.append(c.now_ms())
+
+    tasks = [asyncio.create_task(sleeper(ms)) for ms in (300, 100)]
+    await asyncio.sleep(0)
+    c.advance(99)
+    await asyncio.sleep(0)
+    assert woke == []
+    c.advance(1)
+    await asyncio.sleep(0)
+    await asyncio.sleep(0)
+    assert woke == [100]
+    c.set(400)
+    await asyncio.gather(*tasks)
+    assert woke == [100, 400]
+
+
+async def test_fake_clock_sleep_cancel_is_clean():
+    c = FakeClock()
+    t = asyncio.create_task(c.sleep_ms(50))
+    await asyncio.sleep(0)
+    t.cancel()
+    await asyncio.gather(t, return_exceptions=True)
+    c.advance(100)  # must not raise on the cancelled waiter
+
+
+async def test_fake_clock_sleep_zero_returns():
+    c = FakeClock()
+    await c.sleep_ms(0)

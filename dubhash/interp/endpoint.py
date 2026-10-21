@@ -72,6 +72,16 @@ class Endpointer:
     def in_speech(self) -> bool:
         return self._in_speech
 
+    @property
+    def t_speech_start(self) -> int:
+        """First speech frame of the current utterance (valid while in_speech)."""
+        return self._t_start
+
+    @property
+    def t_last_speech(self) -> int:
+        """Latest speech frame of the current utterance (valid while in_speech)."""
+        return self._t_last
+
     def feed(self, frame: bytes, prob: float, now_ms: int) -> list[EndpointEvent]:
         is_speech = prob > self.speech_threshold
         if not self._in_speech:

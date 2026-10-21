@@ -1,4 +1,5 @@
 import asyncio
+import dataclasses
 from collections.abc import AsyncIterator
 from pathlib import Path
 
@@ -14,6 +15,8 @@ from tests.audio_fixtures import conversation, frames, harmonic, silence
 
 PAIRS = load_pairs(Path(__file__).resolve().parent.parent / "dubhash" / "config" / "pairs.yaml")
 PAIR = PAIRS["hi-kn"]
+SPEC_ON = dataclasses.replace(PAIR, spec_mt=True, spec_after_ms=200)
+SPEC_OFF = dataclasses.replace(PAIR, spec_mt=False)
 
 
 class RecordingSink:
@@ -61,14 +64,15 @@ def make(
     tts=None,
     side="a",
     gender=None,
+    pair=None,
 ) -> tuple[Interpreter, RecordingSink]:
     sink = sink or RecordingSink(clock)
     interp = Interpreter(
         call_id="c_test",
         side=side,
-        pair=PAIR,
+        pair=pair or PAIR,
         stt=stt or FakeSTT(),
-        mt=mt or FakeMT(),
+        mt=mt if mt is not None else FakeMT(),
         tts=tts or FakeTTS(),
         vad=EnergyVAD(),
         clock=clock,
@@ -106,7 +110,8 @@ async def test_timings_present_and_monotonic():
     await interp.run(feed(pcm, clock))
     (tr,) = sink.translations
     keys = ["t_speech_start", "t_speech_end", "t_eou", "t_stt_final", "t_mt", "t_tts_ttfb"]
-    assert list(tr.timings) == keys
+    assert list(tr.timings) == [*keys, "spec_hit", "spec_used"]
+    assert tr.timings["spec_hit"] in (0, 1) and tr.timings["spec_used"] in (0, 1)
     values = [tr.timings[k] for k in keys]
     assert values == sorted(values)
     assert 300 <= tr.timings["t_speech_start"] <= 360
@@ -239,7 +244,8 @@ class FailingMT:
 
 async def test_provider_error_discards_and_continues(caplog):
     clock = FakeClock()
-    interp, sink = make(clock, mt=FailingMT({1}))
+    # FailingMT counts calls; speculation would add calls, so it is off here
+    interp, sink = make(clock, mt=FailingMT({1}), pair=SPEC_OFF)
     pcm = conversation(
         [("silence", 200), ("speech", 1000), ("silence", 800), ("speech", 1000), ("silence", 800)]
     )
@@ -382,7 +388,7 @@ async def test_force_eou_from_outside():
 async def test_aclose_cancels_inflight_work():
     clock = FakeClock()
     mt = GatedMT()
-    interp, sink = make(clock, mt=mt)
+    interp, sink = make(clock, mt=mt, pair=SPEC_OFF)  # GatedMT gates by call count
     pcm = conversation([("silence", 200), ("speech", 1000), ("silence", 800)])
     await interp.run_until_frames_end(feed(pcm, clock))
     assert mt.calls == 1
@@ -442,3 +448,143 @@ async def test_end_to_end_with_silero_vad():
     await interp.run(feed(pcm, clock))
     assert [t.seq for t in sink.translations] == [0, 1]
     assert sink.kinds().count("speech_start") == 2
+
+
+# --- speculative MT (open question L1) ---------------------------------------------------
+# Live-like budget on the FakeClock: STT final 290 ms after end(), MT 1200 ms.
+
+
+def test_speculation_off_by_default_with_after_ms_200():
+    """Off: Sarvam realtime partials lag the final, so live hit rate was 1/8 (L1)."""
+    assert all(not p.spec_mt for p in PAIRS.values())
+    assert all(p.spec_after_ms == 200 for p in PAIRS.values())
+    from dubhash.config.pairs import PairConfig
+
+    assert PairConfig(key="x", a=PAIR.a, b=PAIR.b).spec_mt is False
+
+
+async def run_spec(pair, final, partials, pcm=None):
+    clock = FakeClock()
+    stt = FakeSTT(script=[final], partials=[partials], final_delay_ms=290, clock=clock)
+    mt = FakeMT(delay_ms=1200, clock=clock)
+    interp, sink = make(clock, stt=stt, mt=mt, pair=pair)
+    pcm = pcm or conversation([("silence", 300), ("speech", 1500), ("silence", 3000)])
+    await asyncio.wait_for(interp.run(feed(pcm, clock)), 5)
+    await interp.aclose()
+    return interp, sink, mt
+
+
+async def test_spec_matching_partial_delivers_earlier():
+    final = "main gate ke bahar hoon"
+    partials = [(400, "main gate"), (1200, "main gate ke bahar hoon")]
+    _, off_sink, off_mt = await run_spec(SPEC_OFF, final, partials)
+    interp, sink, mt = await run_spec(SPEC_ON, final, partials)
+    (off,) = off_sink.translations
+    (tr,) = sink.translations
+    assert tr.tgt_text == off.tgt_text == "[kn-IN] main gate ke bahar hoon"
+    assert mt.calls == off_mt.calls == 1
+    on_ms = tr.timings["t_mt"] - tr.timings["t_eou"]
+    off_ms = off.timings["t_mt"] - off.timings["t_eou"]
+    assert off_ms >= 290 + 1200
+    assert on_ms <= off_ms - 500  # MT started ~350 ms before EOU instead of 290 ms after
+    assert tr.timings["t_mt"] >= tr.timings["t_stt_final"]
+    assert (tr.timings["spec_hit"], tr.timings["spec_used"]) == (1, 1)
+    assert (off.timings["spec_hit"], off.timings["spec_used"]) == (0, 0)
+    assert (interp.spec_started, interp.spec_hits, interp.spec_used) == (1, 1, 1)
+
+
+async def test_spec_hit_ignores_case_punctuation_and_spacing():
+    final = "Main gate ke  bahar hoon."
+    _, sink, mt = await run_spec(SPEC_ON, final, [(1200, "main gate ke bahar hoon")])
+    (tr,) = sink.translations
+    assert tr.src_text == final.strip()
+    assert mt.texts == ["main gate ke bahar hoon"] and mt.calls == 1
+    assert tr.tgt_text == "[kn-IN] main gate ke bahar hoon"
+    assert tr.timings["spec_used"] == 1
+
+
+async def test_spec_non_matching_final_discards_speculation():
+    final = "main gate ke bahar hoon"
+    _, sink, mt = await run_spec(SPEC_ON, final, [(1200, "main gate ke bahar")])
+    (tr,) = sink.translations
+    assert tr.src_text == final
+    assert tr.tgt_text == "[kn-IN] main gate ke bahar hoon"
+    assert mt.texts == ["main gate ke bahar", final]
+    assert mt.calls == 2 and mt.cancelled == 1
+    assert (tr.timings["spec_hit"], tr.timings["spec_used"]) == (0, 0)
+
+
+async def test_spec_cancelled_when_speech_resumes():
+    pcm = conversation(
+        [("silence", 300), ("speech", 1000), ("silence", 300), ("speech", 800), ("silence", 3000)]
+    )
+    final = "ek do teen chaar paanch"
+    partials = [(800, "ek do teen"), (1900, final)]
+    interp, sink, mt = await run_spec(SPEC_ON, final, partials, pcm=pcm)
+    (tr,) = sink.translations
+    assert sink.kinds() == ["speech_start", "speech_end", "translation"]
+    assert mt.texts == ["ek do teen", final]
+    assert mt.calls == 2 and mt.cancelled == 1
+    assert interp.spec_started == 2 and interp.spec_cancelled == 1
+    assert tr.tgt_text == "[kn-IN] ek do teen chaar paanch"
+    assert tr.timings["spec_used"] == 1
+
+
+async def test_spec_without_partials_behaves_as_before():
+    final = "main gate ke bahar hoon"
+    _, off_sink, off_mt = await run_spec(SPEC_OFF, final, [])
+    interp, sink, mt = await run_spec(SPEC_ON, final, [])
+    (off,) = off_sink.translations
+    (tr,) = sink.translations
+    assert mt.calls == off_mt.calls == 1 and mt.cancelled == 0
+    assert interp.spec_started == 0
+    assert tr.tgt_text == off.tgt_text
+    assert tr.timings == off.timings
+
+
+async def test_spec_not_run_for_discarded_backchannel():
+    clock = FakeClock()
+    stt = FakeSTT(script=["haan"], partials=[[(300, "haan")]], clock=clock)
+    mt = FakeMT(delay_ms=1200, clock=clock)
+    interp, sink = make(clock, stt=stt, mt=mt, pair=SPEC_ON)
+    pcm = conversation([("silence", 200), ("speech", 400), ("silence", 800)])
+    await asyncio.wait_for(interp.run(feed(pcm, clock)), 5)
+    assert sink.kinds() == ["speech_start", "speech_end", "discarded"]
+    assert mt.calls == 0
+
+
+async def test_spec_cancelled_when_utterance_discarded():
+    """Speculation started, then the final is empty: nothing delivered, task cancelled."""
+    clock = FakeClock()
+    stt = FakeSTT(script=[""], partials=[[(600, "kuch to bola tha")]], clock=clock)
+    mt = FakeMT(delay_ms=5000, clock=clock)
+    interp, sink = make(clock, stt=stt, mt=mt, pair=SPEC_ON)
+    pcm = conversation([("silence", 200), ("speech", 1000), ("silence", 800)])
+    await asyncio.wait_for(interp.run(feed(pcm, clock)), 5)
+    for _ in range(5):
+        await asyncio.sleep(0)
+    assert sink.kinds() == ["speech_start", "speech_end", "discarded"]
+    assert mt.calls == 1 and mt.cancelled == 1
+
+
+async def test_spec_goes_through_cached_mt():
+    from dubhash.interp.mt_cache import CachedMT
+
+    clock = FakeClock()
+    inner = FakeMT(delay_ms=1200, clock=clock)
+    mt = CachedMT(inner)
+    final = "main gate ke bahar hoon"
+    stt = FakeSTT(
+        script=[final, final],
+        partials=[[(1200, final)], [(1200, final)]],
+        final_delay_ms=290,
+        clock=clock,
+    )
+    interp, sink = make(clock, stt=stt, mt=mt, pair=SPEC_ON)
+    pcm = conversation(
+        [("silence", 300), ("speech", 1500), ("silence", 3000), ("speech", 1500), ("silence", 1500)]
+    )
+    await asyncio.wait_for(interp.run(feed(pcm, clock)), 5)
+    assert [t.tgt_text for t in sink.translations] == ["[kn-IN] " + final] * 2
+    assert inner.calls == 1 and mt.hits == 1
+    assert all(t.timings["spec_used"] == 1 for t in sink.translations)

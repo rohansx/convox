@@ -50,3 +50,68 @@ def test_help_runs_as_a_module():
     ).stdout
     for flag in ("--a-wav", "--b-wav", "--stt", "--mt", "--tts", "--out"):
         assert flag in out
+
+
+LIVE_LIKE = ["--fake-mt-ms", "1200", "--fake-stt-final-ms", "290", "--fake-tts-ttfb-ms", "250"]
+
+
+def _spaced_wavs(tmp_path) -> list[str]:
+    """Three A utterances far apart, B silent: no floor contention, so first_audio is the
+    pipeline's own latency."""
+    wav_a, wav_b = tmp_path / "spaced_a.wav", tmp_path / "spaced_b.wav"
+    gap = ("silence", 6000)
+    a = [("silence", 500), ("speech", 1500), gap, ("speech", 1200), gap, ("speech", 1400), gap]
+    write_wav(wav_a, conversation(a))
+    write_wav(wav_b, conversation([("silence", 500)]))
+    return ["--a-wav", str(wav_a), "--b-wav", str(wav_b)]
+
+
+def _bench(tmp_path, call_id: str, *extra: str) -> dict:
+    argv = ["--out", str(tmp_path), "--call-id", call_id, "--vad", "energy", "--no-opening"]
+    argv += _spaced_wavs(tmp_path)
+    assert bench.main([*argv, *LIVE_LIKE, *extra]) == 0
+    return json.loads((tmp_path / f"{call_id}.json").read_text())
+
+
+def test_spec_flag_with_live_like_fake_delays(tmp_path, monkeypatch, capsys):
+    monkeypatch.setenv("DUBHASH_ENV", "dev")
+    off = _bench(tmp_path, "c_off", "--no-spec")
+    on = _bench(tmp_path, "c_on", "--spec")
+    assert off["spec"]["enabled"] is False and off["spec"]["started"] == 0
+    assert on["spec"]["enabled"] is True
+    assert on["spec"]["eligible"] == 3 and on["spec"]["hits"] == 3 and on["spec"]["used"] == 3
+    assert on["spec"]["hit_rate"] == 1.0
+    assert off["stages"]["mt"]["p50"] >= 1200 and off["stages"]["stt_final"]["p50"] >= 290
+    assert off["stages"]["tts_ttfb"]["p50"] >= 250
+    fa_off = off["stages"]["first_audio"]["p50"]
+    fa_on = on["stages"]["first_audio"]["p50"]
+    assert fa_on <= fa_off - 400
+    assert "spec" in capsys.readouterr().out
+
+
+def test_spec_flag_shown_in_help():
+    out = subprocess.run(
+        [sys.executable, "-m", "tools.bench", "--help"],
+        cwd=Path(__file__).resolve().parents[2],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout
+    for flag in (
+        "--spec",
+        "--no-spec",
+        "--spec-after-ms",
+        "--fake-mt-ms",
+        "--fake-stt-final-ms",
+        "--fake-tts-ttfb-ms",
+    ):
+        assert flag in out
+
+
+def test_spec_after_ms_overrides_pair(tmp_path, monkeypatch):
+    monkeypatch.setenv("DUBHASH_ENV", "dev")
+    late = _bench(tmp_path, "c_late", "--spec", "--spec-after-ms", "200")
+    early = _bench(tmp_path, "c_early", "--spec", "--spec-after-ms", "40")
+    assert late["spec"]["after_ms"] == 200 and early["spec"]["after_ms"] == 40
+    fa = early["stages"]["first_audio"]["p50"]
+    assert fa <= late["stages"]["first_audio"]["p50"] - 140

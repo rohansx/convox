@@ -14,6 +14,13 @@ Decisions where the spec is open:
 - Utterances under min_utterance_ms are dropped (sink.on_speech_end then
   on_utterance_discarded), not merged into the next one.
 - When the frame stream ends mid-utterance, the utterance is force-ended and translated.
+
+Speculative MT (pair.spec_mt, interp/speculate.py): the frame loop feeds each utterance's
+Speculator with silence/speech frames and the partial pump with STT partials, so MT can
+start on the latest partial during the EOU wait. The worker reuses that result only when
+normalize(final) matches; otherwise it translates the final as usual. timings gain
+spec_hit (the final matched the speculated text) and spec_used (its translation was
+delivered), as 0/1. t_mt stays the time the translation was available to the worker.
 """
 
 from __future__ import annotations
@@ -31,6 +38,7 @@ from dubhash.config.pairs import PairConfig
 from dubhash.interp.contracts import MT, STT, TTS, VAD, STTStream
 from dubhash.interp.endpoint import Discard, Endpointer, EndpointEvent, SpeechStart, Utterance
 from dubhash.interp.gender import detect_gender
+from dubhash.interp.speculate import SpecOutcome, Speculator
 from dubhash.types import Side, Translation, other
 
 log = logging.getLogger(__name__)
@@ -72,6 +80,7 @@ class _Job:
     utterance: Utterance | None = None
     ended: bool = False
     task: asyncio.Task[None] | None = None
+    spec: Speculator | None = None
 
 
 class Interpreter:
@@ -106,6 +115,12 @@ class Interpreter:
         self._last_done: asyncio.Event | None = None
         self._jobs: set[_Job] = set()
         self._closed = False
+        # speculative MT counters, summed over finished utterances (for bench/metrics)
+        self.spec_eligible = 0  # utterances that reached MT with speculation enabled
+        self.spec_started = 0
+        self.spec_cancelled = 0
+        self.spec_hits = 0
+        self.spec_used = 0
 
     # -- frame loop ---------------------------------------------------------------
 
@@ -125,7 +140,18 @@ class Interpreter:
             if self._current is not None and not any(isinstance(e, SpeechStart) for e in events):
                 self._current.queue.put_nowait(frame)
             await self._handle(events, frame)
+            self._speculate(now)
         await self.force_eou()
+
+    def _speculate(self, now: int) -> None:
+        job = self._current
+        if job is None or job.spec is None or not self.endpointer.in_speech:
+            return
+        t_last = self.endpointer.t_last_speech
+        if t_last == now:
+            job.spec.on_speech(now)
+        else:
+            job.spec.on_silence(now, t_last, t_last - self.endpointer.t_speech_start)
 
     async def force_eou(self) -> None:
         """End the current utterance now (the STT vendor signalled end-of-utterance)."""
@@ -150,6 +176,12 @@ class Interpreter:
         for ev in events:
             if isinstance(ev, SpeechStart):
                 job = _Job(t_speech_start=ev.t, prev=self._last_done)
+                if self.pair.spec_mt:
+                    job.spec = Speculator(
+                        self._translate,
+                        after_ms=self.pair.spec_after_ms,
+                        backchannel_max_ms=self.pair.backchannel_max_ms,
+                    )
                 self._last_done = job.done
                 job.queue.put_nowait(ev.preroll + frame)
                 self._current = job
@@ -187,7 +219,7 @@ class Interpreter:
         try:
             try:
                 stream = await self.stt.open(self.src_lang)
-                pump = asyncio.create_task(self._pump_partials(stream))
+                pump = asyncio.create_task(self._pump_partials(stream, job))
                 while (item := await job.queue.get()) is not None:
                     await stream.push(item)
                 job.ended = True
@@ -210,8 +242,15 @@ class Interpreter:
                     raise _Discarded
 
                 stage, provider = "mt", self.mt.name
-                tgt_text = await self.mt.translate(final, self.src_lang, self.tgt.lang)
+                spec = await job.spec.take(final) if job.spec else SpecOutcome(None, False)
+                if spec.text is not None:
+                    tgt_text = spec.text
+                else:
+                    tgt_text = await self._translate(final)
                 t_mt = self.clock.now_ms()
+                self.spec_eligible += job.spec is not None
+                self.spec_hits += spec.hit
+                self.spec_used += spec.text is not None
 
                 stage, provider = "tts", self.tts.name
                 if self.gender is None:
@@ -246,6 +285,8 @@ class Interpreter:
                         "t_stt_final": t_stt_final,
                         "t_mt": t_mt,
                         "t_tts_ttfb": t_tts_ttfb,
+                        "spec_hit": int(spec.hit),
+                        "spec_used": int(spec.text is not None),
                     },
                     source_audio=u.audio,
                 )
@@ -270,6 +311,10 @@ class Interpreter:
             finally:
                 if pump is not None:
                     pump.cancel()
+                if job.spec is not None:
+                    job.spec.cancel()
+                    self.spec_started += job.spec.started
+                    self.spec_cancelled += job.spec.cancelled
                 if stream is not None:
                     with contextlib.suppress(Exception):
                         await stream.aclose()
@@ -286,9 +331,14 @@ class Interpreter:
             job.done.set()
             self._jobs.discard(job)
 
-    async def _pump_partials(self, stream: STTStream) -> None:
+    async def _translate(self, text: str) -> str:
+        return await self.mt.translate(text, self.src_lang, self.tgt.lang)
+
+    async def _pump_partials(self, stream: STTStream, job: _Job) -> None:
         try:
             async for text in stream.partials():
+                if job.spec is not None and not job.ended:
+                    job.spec.on_partial(text, self.clock.now_ms())
                 await _maybe_await(self.sink.on_partial(self.side, text))
         except asyncio.CancelledError:
             raise
