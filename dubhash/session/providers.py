@@ -25,6 +25,7 @@ from typing import Any
 from dubhash.config.pairs import PairConfig
 from dubhash.config.settings import Settings
 from dubhash.interp.contracts import MT, STT, TTS, VAD
+from dubhash.interp.langid import LanguageID
 from dubhash.interp.mt_cache import CachedMT
 from dubhash.interp.vad import NoiseFloorGate, SileroVAD
 from dubhash.providers.fakes import EnergyVAD
@@ -42,6 +43,7 @@ class Providers:
     mt: MT
     tts: dict[Side, TTS]  # keyed by the side whose language it speaks (the TARGET side)
     vad_factory: Callable[[], VAD]
+    lid: LanguageID | None = None  # language ID for lang "auto" sides (interp/langid.py)
 
 
 def _all_fake(pair: PairConfig) -> bool:

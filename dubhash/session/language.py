@@ -25,12 +25,15 @@ platform's profile language).
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import StrEnum
-from typing import Any
+from typing import TYPE_CHECKING, Any, Literal
 
 from dubhash.interp.langid import SUPPORTED_LANGS, LangGuess, normalise
 from dubhash.types import Side
+
+if TYPE_CHECKING:
+    from dubhash.config.pairs import SideConfig
 
 FALLBACK_LANG = "hi-IN"
 ENGLISH = "en-IN"
@@ -63,6 +66,26 @@ class ResolverConfig:
     stt_confidence: float = 0.7  # weight of an STT final's language code (it has no score)
     hint_prior: float = 0.15  # lift for a language that matches the hint
     supported: tuple[str, ...] = SUPPORTED_LANGS
+
+
+# How an auto side's STT stream opens. "guess": in the side's best language so far (its
+# resolved language, else its hint, else Hindi), reopened when that changes; Sarvam's
+# realtime socket rejects language_code=unknown (probe of 21 Oct), and the translate mode
+# English is the same whichever Indic code it opens with. "unknown": the vendor's
+# auto-detect code, for a provider that takes it.
+SttOpen = Literal["guess", "unknown"]
+MENU_WINDOW_MS = 15000  # after the menu finishes playing, digits mean language this long
+
+
+@dataclass(slots=True)
+class AutoLang:
+    """What a CallSession needs for its auto sides."""
+
+    hints: dict[Side, str | None]  # the sides whose lang is "auto", with their hints
+    sides: dict[str, SideConfig]  # per-language side defaults (config.pairs.language_sides)
+    config: ResolverConfig = field(default_factory=lambda: ResolverConfig())
+    stt_open: SttOpen = "guess"
+    menu_window_ms: int = MENU_WINDOW_MS
 
 
 @dataclass(frozen=True, slots=True)

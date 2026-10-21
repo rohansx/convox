@@ -52,17 +52,31 @@ from dataclasses import dataclass
 from typing import Any, Literal, Protocol
 
 from dubhash.audio.earcon import EARCON
-from dubhash.audio.frames import FRAME_BYTES, bytes_to_ms
+from dubhash.audio.frames import FRAME_BYTES, FRAME_MS, bytes_to_ms
 from dubhash.audio.mixer import render_playback
 from dubhash.clock import Clock, MonotonicClock
-from dubhash.config.pairs import PairConfig
+from dubhash.config.pairs import PairConfig, SideConfig, default_side, effective_pair
 from dubhash.events import EventBus
 from dubhash.interp.contracts import STT, VAD, STTStream
+from dubhash.interp.langid import LangGuess
 from dubhash.interp.pipeline import BACKCHANNEL_MAX_WORDS, Interpreter
 from dubhash.legs.base import LegTransport
 from dubhash.session.crosstalk import CrosstalkGate, Verdict
 from dubhash.session.floor import FloorController
-from dubhash.session.prompts import line_check_text, opening_text, short_opening_text
+from dubhash.session.language import (
+    MENU_DIGITS,
+    AutoLang,
+    LanguageResolver,
+    LangUpdate,
+)
+from dubhash.session.prompts import (
+    auto_opening_text,
+    language_menu_text,
+    line_check_text,
+    opening_text,
+    partner_auto_opening_text,
+    short_opening_text,
+)
 from dubhash.session.providers import SIDES, Providers, prewarm
 from dubhash.session.turn_log import TurnLog
 from dubhash.types import CallEvent, EventKind, Side, Translation, other
@@ -97,8 +111,24 @@ GATED_EVENT_FRAMES = 3
 GATED_EVENT_GAP_MS = 1000
 
 
+MENU_LANG = "hi-IN"  # the keypad menu is read in Hindi (then English) by a Hindi voice
+MENU_TIMEOUT_S = 20.0
+_FOREVER = 1 << 62
+
+
 class _Stop(Exception):
     """Raised inside the TaskGroup to end the call."""
+
+
+@dataclass(slots=True, eq=False)
+class _LangEvidence:
+    """What an auto side's utterance says about its language, gathered at the STT final
+    and judged once the utterance is delivered or discarded."""
+
+    speech_ms: int
+    stt_lang: str | None
+    text: str | None
+    lid: asyncio.Task[LangGuess] | None
 
 
 @dataclass(slots=True, eq=False)
@@ -112,6 +142,7 @@ class _Utt:
     t_stt_final: int | None = None
     suspect: bool = False  # started while the other side talked; not told to the floor yet
     crosstalk: str | None = None  # why it was discarded as cross-talk ("level" | "lang")
+    lang_ev: _LangEvidence | None = None  # lang "auto": this utterance's language evidence
 
 
 class _Judge(Protocol):
@@ -123,6 +154,13 @@ class _Judge(Protocol):
 
     def settle(self, stream: STTStream) -> None: ...
 
+    @property
+    def wants_audio(self) -> bool: ...
+
+    def on_final(
+        self, utt: _Utt, final: str, lang: str | None, audio: bytes, text: str | None
+    ) -> None: ...
+
 
 class _TrackedStream:
     def __init__(
@@ -133,8 +171,16 @@ class _TrackedStream:
         self._clock = clock
         self._judge = judge
         self._settling = False
+        # lang "auto": the utterance's audio for language ID, and its last partial (plain
+        # transcription in the opened language, also on the pivot route)
+        self._audio: list[bytes] | None = (
+            [] if utt is not None and getattr(judge, "wants_audio", False) else None
+        )
+        self.last_partial: str | None = None
 
     async def push(self, frame: bytes) -> None:
+        if self._audio is not None:
+            self._audio.append(frame)
         await self._inner.push(frame)
 
     async def end(self) -> str:
@@ -154,10 +200,20 @@ class _TrackedStream:
         if utt is not None:
             utt.final = final
             utt.t_stt_final = self._clock.now_ms()
+        if utt is not None and judge is not None and self._audio is not None:
+            if utt.crosstalk is None:
+                detected = getattr(self._inner, "detected_lang", None)
+                audio = b"".join(self._audio)
+                judge.on_final(utt, final, detected, audio, self.last_partial)
         return final
 
     def partials(self) -> AsyncIterator[str]:
-        return self._inner.partials()
+        return self._track_partials(self._inner.partials())
+
+    async def _track_partials(self, it: AsyncIterator[str]) -> AsyncIterator[str]:
+        async for text in it:
+            self.last_partial = text
+            yield text
 
     async def aclose(self) -> None:
         if not self._settling:  # else the settle task closes it after end()
@@ -313,11 +369,13 @@ class _Sink:
 
     async def on_translation(self, tr: Translation) -> None:
         if self.utts[tr.side]:
-            self.utts[tr.side].popleft()
+            self._s._lang_utt_done(tr.side, self.utts[tr.side].popleft())
         await self._s.floor.on_translation(tr)
 
     async def on_utterance_discarded(self, side: Side) -> None:
         utt = self.utts[side].popleft() if self.utts[side] else None
+        if utt is not None:
+            self._s._lang_utt_done(side, utt)
         if utt is not None and utt.crosstalk is not None:
             self.gate.forget(side, utt.t_start)
             self._s._crosstalk(side, utt.crosstalk, "eou", t_speech_start=utt.t_start)
@@ -363,10 +421,21 @@ class _SideJudge:
         s = self._sink._s
         if not s.co_located or not lang:
             return None
+        if not (s.lang_resolved(self._side) and s.lang_resolved(other(self._side))):
+            return None  # lang "auto": the sides' languages are not known yet
         base = lang.split("-")[0].lower()
         mine = s.pair.side(self._side).lang.split("-")[0].lower()
         theirs = s.pair.side(other(self._side)).lang.split("-")[0].lower()
         return "lang" if base == theirs and base != mine else None
+
+    @property
+    def wants_audio(self) -> bool:
+        return self._side in self._sink._s.resolvers
+
+    def on_final(
+        self, utt: _Utt, final: str, lang: str | None, audio: bytes, text: str | None
+    ) -> None:
+        self._sink._s._lang_final(self._side, utt, final, lang, audio, text)
 
     def settle(self, stream: STTStream) -> None:
         """end() then aclose() a cross-talk stream in the background: a socket that
@@ -402,14 +471,28 @@ class CallSession:
         opening_line: bool | OpeningLine = "full",
         co_located: bool = False,
         duck_original: bool | None = None,
+        auto: AutoLang | None = None,
     ) -> None:
         """co_located: both phones are in one room (/join, loopback), so each mic also
         hears the other speaker: the cross-talk gate is on, and by default the listener
         gets no ducked original (they heard it live). duck_original (None = not
         co_located) plays the original under the first pair.duck_ms of each translation
-        at pair.duck_db (telephony)."""
+        at pair.duck_db (telephony). auto: the sides whose language is detected on the
+        call (lang "auto", session/language.py); `pair` is then the starting pair
+        (config.pairs.auto_pair) and self.pair follows the detected languages."""
         self.call_id = call_id
         self.pair = pair
+        self._base_pair = pair
+        self.auto = auto
+        self.resolvers: dict[Side, LanguageResolver] = (
+            {s: LanguageResolver(s, h, auto.config) for s, h in auto.hints.items()}
+            if auto is not None
+            else {}
+        )
+        self._lang_lock: dict[Side, asyncio.Lock] = {s: asyncio.Lock() for s in SIDES}
+        self._lang_tasks: set[asyncio.Task[Any]] = set()
+        self._menu_until: dict[Side, int] = {}  # side -> end of its keypad menu window
+        self._same_lang = False  # bypass entered because both sides speak one language
         self.providers = providers
         self.bus = bus
         self.writer = writer
@@ -445,6 +528,7 @@ class CallSession:
             on_played=self._on_played,
             on_bypass=self._on_bypass,
             bypass=mode == "bridge",
+            dtmf_hook=self._dtmf_hook if self.resolvers else None,
         )
         self._sink = _Sink(self)
         self.interpreters: dict[Side, Interpreter] = {}
@@ -471,12 +555,14 @@ class CallSession:
                     self.clock,
                     self._sink,
                 )
+        if self.resolvers:
+            self._retarget()
 
         self._forwarding = mode == "bridge"
         self._interpreting = False
         self._frames: dict[Side, asyncio.Queue[bytes | None]] = {s: asyncio.Queue() for s in SIDES}
         self._interp_tasks: dict[Side, asyncio.Task[None]] = {}
-        self._prompt_cache: dict[tuple[str, Side], bytes] = {}
+        self._prompt_cache: dict[tuple[str, Side, str], bytes] = {}
         self._tg: asyncio.TaskGroup | None = None
         self._task: asyncio.Task[None] | None = None
         self._stop = asyncio.Event()
@@ -552,7 +638,9 @@ class CallSession:
         s = self.turn_log.summary()
         end = self._t_end if self._t_end is not None else self.clock.now_ms()
         duration_ms = 0 if self._t_active is None else max(0, end - self._t_active)
+        extra = {"langs": self.lang_states()} if self.resolvers else {}
         return {
+            **extra,
             "call_id": self.call_id,
             "status": self.status,
             "mode": self.mode,
@@ -662,8 +750,10 @@ class CallSession:
             await self.tick()
 
     def _on_bypass(self) -> None:
-        """Floor callback (lock held): DTMF escape. Forward raw frames from now on."""
-        self.escape_used = True
+        """Floor callback (lock held): DTMF escape, or the same language on both sides
+        (lang "auto"). Forward raw frames from now on."""
+        if not self._same_lang:
+            self.escape_used = True
         self._forwarding = True
         self._interpreting = False
         self._t_bypass = self.clock.now_ms()
@@ -685,7 +775,7 @@ class CallSession:
         for t in list(self._interp_tasks.values()):
             t.cancel()
         self._interp_tasks.clear()
-        for t in list(self._sink.settling):
+        for t in list(self._sink.settling) + list(self._lang_tasks):
             t.cancel()
         try:
             await self.floor.aclose()
@@ -801,14 +891,17 @@ class CallSession:
         log.info("crosstalk.drop", extra={"call_id": self.call_id, **payload})
         self._publish("crosstalk", payload)
 
-    async def _prompt_chunks(self, kind: str, side: Side, text: str) -> AsyncIterator[bytes]:
-        """A prompt's audio in the side's female voice, chunk by chunk as the TTS produces
-        it (no dead air while a long prompt is synthesised), cached per call."""
-        key = (kind, side)
+    async def _prompt_chunks(
+        self, kind: str, side: Side, text: str, lang: str | None = None
+    ) -> AsyncIterator[bytes]:
+        """A prompt's audio in the side's female voice (or `lang`'s), chunk by chunk as the
+        TTS produces it (no dead air while a long prompt is synthesised), cached per call
+        and language."""
+        cfg = self.pair.side(side) if lang is None else self._side_cfg(lang)
+        key = (kind, side, cfg.lang)
         if key in self._prompt_cache:
             yield self._prompt_cache[key]
             return
-        cfg = self.pair.side(side)
         out = bytearray()
         async for chunk in self.providers.tts[side].synth(text, cfg.voice_f, cfg.lang):
             out += chunk
@@ -823,7 +916,12 @@ class CallSession:
     async def _play_opening(self) -> None:
         async def one(side: Side) -> None:
             me, them = self.pair.side(side).lang, self.pair.side(other(side)).lang
-            if self.opening_line == "short":
+            resolver = self.resolvers.get(side)
+            if resolver is not None:  # neutral: "speak in your language" (+ English)
+                text = auto_opening_text(resolver.hint)
+            elif not self.lang_resolved(other(side)):  # never name a language not known
+                text = partner_auto_opening_text(me)
+            elif self.opening_line == "short":
                 text = short_opening_text(me, them)
             else:
                 text = opening_text(me, them, record=self.record)
@@ -858,3 +956,184 @@ class CallSession:
 
     def _publish(self, kind: EventKind, payload: dict[str, Any]) -> None:
         self.bus.publish(CallEvent(self.call_id, self.clock.now_ms(), kind, payload))
+
+    # --- lang "auto" (session/language.py, docs/tech-spec/language-detection.md) ----------
+
+    def lang_resolved(self, side: Side) -> bool:
+        """A fixed side, or an auto side whose language is CONFIRMED."""
+        r = self.resolvers.get(side)
+        return r is None or r.resolved
+
+    def lang_states(self) -> dict[Side, dict[str, Any]]:
+        out: dict[Side, dict[str, Any]] = {}
+        for s in SIDES:
+            r = self.resolvers.get(s)
+            if r is None:
+                out[s] = {"lang": self.pair.side(s).lang, "state": "CONFIRMED", "auto": False}
+            else:
+                out[s] = {"lang": r.lang, "state": r.state.value, "auto": True}
+        return out
+
+    def _lang_of(self, side: Side) -> str:
+        r = self.resolvers.get(side)
+        return self._base_pair.side(side).lang if r is None else r.target
+
+    def _stt_lang(self, side: Side) -> str:
+        if self.auto is not None and self.auto.stt_open == "unknown":
+            return "unknown"
+        return self._lang_of(side)
+
+    def _side_cfg(self, lang: str) -> SideConfig:
+        sides = self.auto.sides if self.auto is not None else {}
+        return sides.get(lang) or default_side(lang)
+
+    def _retarget(self) -> None:
+        """self.pair and both interpreters follow the auto sides' current languages: the
+        target (MT, TTS voice) of whoever listens to them, and their own STT language."""
+        assert self.auto is not None
+        langs = {s: self._lang_of(s) for s in self.resolvers}
+        self.pair = effective_pair(self._base_pair, langs, self.auto.sides)
+        for s, interp in self.interpreters.items():
+            interp.retarget(self.pair, stt_lang=self._stt_lang(s) if s in langs else None)
+
+    def _spawn_lang(self, coro: Any) -> asyncio.Task[Any]:
+        task = asyncio.get_running_loop().create_task(coro, name=f"{self.call_id}-lang")
+        self._lang_tasks.add(task)
+        task.add_done_callback(self._lang_done)
+        return task
+
+    def _lang_done(self, task: asyncio.Task[Any]) -> None:
+        self._lang_tasks.discard(task)
+        if task.cancelled():
+            return
+        exc = task.exception()
+        if exc is not None:
+            log.warning("lang.error", extra={"call_id": self.call_id, "error": repr(exc)})
+
+    def _lang_final(
+        self,
+        side: Side,
+        utt: _Utt,
+        final: str,
+        stt_lang: str | None,
+        audio: bytes,
+        text: str | None,
+    ) -> None:
+        """An auto side's STT final: start language ID on the utterance (when it is long
+        enough to decide on) and keep the evidence on the utterance. An early-final
+        restart replaces it, so each utterance counts once."""
+        r = self.resolvers.get(side)
+        if r is None:
+            return
+        old, utt.lang_ev = utt.lang_ev, None
+        if old is not None and old.lid is not None:
+            old.lid.cancel()
+        vad = self._sink.vads.get(side)
+        end = vad.last_voiced if vad is not None else self.clock.now_ms()
+        speech_ms = end - utt.t_start + FRAME_MS
+        if not final.strip() or r.pinned or speech_ms < r.config.min_speech_ms:
+            return
+        lid = self.providers.lid
+        task = self._spawn_lang(lid.identify(audio, r.config.supported)) if lid else None
+        utt.lang_ev = _LangEvidence(speech_ms, stt_lang, text or final, task)
+
+    def _lang_utt_done(self, side: Side, utt: _Utt) -> None:
+        """The utterance was delivered or discarded: judge its language evidence."""
+        ev, utt.lang_ev = utt.lang_ev, None
+        if ev is not None and side in self.resolvers:
+            self._spawn_lang(self._resolve(side, ev))
+
+    async def _resolve(self, side: Side, ev: _LangEvidence) -> None:
+        async with self._lang_lock[side]:  # FIFO: utterances are judged in order
+            guess = await self._lid_result(side, ev.lid)
+            if self.floor.bypass:
+                return
+            update = self.resolvers[side].observe(
+                speech_ms=ev.speech_ms, stt_lang=ev.stt_lang, lid=guess, text=ev.text
+            )
+            if update is not None:
+                await self._apply_lang(update)
+
+    async def _lid_result(
+        self, side: Side, task: asyncio.Task[LangGuess] | None
+    ) -> LangGuess | None:
+        if task is None:
+            return None
+        await asyncio.wait({task})
+        if task.cancelled():
+            return None
+        exc = task.exception()
+        if exc is None:
+            return task.result()
+        name = getattr(self.providers.lid, "name", "lid")
+        log.warning(
+            "provider.error",
+            extra={
+                "call_id": self.call_id,
+                "side": side,
+                "provider": name,
+                "stage": "lid",
+                "error": repr(exc),
+            },
+        )
+        self._publish("provider_error", {"provider": name, "stage": "lid", "error": repr(exc)})
+        return None
+
+    async def _apply_lang(self, up: LangUpdate) -> None:
+        payload = up.payload()
+        if up.menu:
+            self._menu_until[up.side] = _FOREVER  # digits mean language from now
+        self._publish("lang", payload)
+        log.info("lang.update", extra={"call_id": self.call_id, **payload})
+        if up.menu:
+            self._spawn_lang(self._play_menu(up.side))
+            return
+        self._retarget()
+        await self._check_same_lang(up.side)
+
+    async def _check_same_lang(self, side: Side) -> None:
+        """Both sides resolved to one language: nothing to interpret, bridge the call."""
+        if self.floor.bypass or not all(self.lang_resolved(s) for s in SIDES):
+            return
+        if self._lang_of("a") != self._lang_of("b"):
+            return
+        self._same_lang = True
+        log.info(
+            "session.same_lang_bridge",
+            extra={"call_id": self.call_id, "side": side, "lang": self._lang_of(side)},
+        )
+        await self.floor.enter_bypass(side, reason="same_lang")
+
+    async def _play_menu(self, side: Side) -> None:
+        """The keypad language menu on `side`'s leg; digits mean language until
+        menu_window_ms after it finishes."""
+        assert self.auto is not None
+        try:
+            async with asyncio.timeout(MENU_TIMEOUT_S):
+                chunks = self._prompt_chunks("menu", side, language_menu_text(), lang=MENU_LANG)
+                await self.floor.play_prompt(side, chunks, tag="menu")
+        except Exception as e:
+            log.warning(
+                "session.menu_error",
+                extra={"call_id": self.call_id, "side": side, "error": repr(e)},
+            )
+        finally:
+            if side in self._menu_until:
+                self._menu_until[side] = self.clock.now_ms() + self.auto.menu_window_ms
+
+    def _dtmf_hook(self, side: Side, digit: str) -> bool:
+        """Floor DTMF hook (lock held). Inside a side's menu window its digits pick the
+        language (1-6; others are ignored); outside it they keep their floor meaning."""
+        until = self._menu_until.get(side)
+        if until is None:
+            return False
+        if self.clock.now_ms() > until:
+            del self._menu_until[side]
+            return False
+        lang = MENU_DIGITS.get(digit)
+        if lang is None:
+            log.info("lang.menu_digit_ignored", extra={"call_id": self.call_id, "side": side})
+            return True
+        del self._menu_until[side]
+        self._spawn_lang(self._apply_lang(self.resolvers[side].choose(lang)))
+        return True
