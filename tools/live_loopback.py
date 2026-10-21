@@ -48,6 +48,16 @@ Real-room variants (L7):
     --opening-line short|full|off
                        the call's opening (default: the server's; /join and loopback calls
                        get "short" since L7, "full" with the record sentence before)
+
+Phrase cache (L10): --vertical delivery|clinic picks the call's phrase pack (default: the
+server's, delivery). --prefill off runs cold (no prefill, no disk cache), wait waits for the
+call's background prefill to finish before the first line (warm), bg (default) lets it run
+alongside. The phrases-mr-hi script is mostly delivery-pack lines and acks. The summary
+adds from_start (heard latency counted from the START of the speaker's line), stt_open,
+the TTS first byte on cache hits and misses, and the phrase / cache hit rates.
+
+    STT_IMPL=real MT_IMPL=real TTS_IMPL=real uv run python tools/live_loopback.py \
+        --script phrases-mr-hi --prefill off      # then --prefill wait
 """
 
 from __future__ import annotations
@@ -184,6 +194,25 @@ SCRIPTS: dict[str, Script] = {
             Line("a", "સારું, હું 6 વાગ્યે ઘરે હોઈશ.", review=True),
         ),
     ),
+    # Phrase-cache run (L10): mostly delivery-pack lines and acks, customer (A, Marathi,
+    # female) and rider (B, Hindi, male). Marathi lines: NATIVE REVIEW.
+    "phrases-mr-hi": Script(
+        "mr-IN",
+        "hi-IN",
+        {"a": "bulbul:mr-female-1", "b": "bulbul:hi-male-1"},
+        (
+            Line("b", "मैं मेन गेट के बाहर हूँ।"),
+            Line("a", "ठीक आहे.", review=True),
+            Line("b", "OTP बताइए।"),
+            Line("a", "ओटीपी 4729 आहे.", review=True),
+            Line("b", "ठीक है।"),
+            Line("a", "लिफ्ट चालू नाही.", review=True),
+            Line("b", "2 मिनट।"),
+            Line("a", "हो.", review=True),
+            Line("b", "धन्यवाद।"),
+            Line("a", "धन्यवाद.", review=True),
+        ),
+    ),
 }
 DEFAULT_SCRIPT = "delivery-hi-kn"
 SCRIPT: tuple[Line, ...] = SCRIPTS[DEFAULT_SCRIPT].lines
@@ -221,6 +250,9 @@ class Opts:
     room_delay_ms: int = 40
     noise_snr: float | None = None  # pink room noise this many dB under the speech
     opening_line: str | None = None  # short | full | off (default: the server's)
+    vertical: str | None = None  # phrase pack (default: the server's, delivery)
+    prefill: str = "bg"  # off: cold | wait: warm before the first line | bg: alongside
+    prefill_timeout_s: float = 300.0
 
 
 # --- audio helpers ----------------------------------------------------------------------
@@ -556,6 +588,12 @@ class Server:
         session = reg.get(call_id) if reg is not None else None
         return getattr(getattr(session, "clock", None), "_t0", None)
 
+    def prefill_stats(self, call_id: str) -> Any:
+        """The session's phrase-prefill stats (in-process only), or None."""
+        reg = getattr(self.app.state, "sessions", None)
+        session = reg.get(call_id) if reg is not None else None
+        return getattr(session, "prefill_stats", None)
+
 
 async def _start_join(
     srv: Server, http: httpx.AsyncClient, opts: Opts
@@ -589,6 +627,8 @@ async def run_call(srv: Server, utts: list[Utt], opts: Opts) -> dict[str, Any]:
         body["pair"] = opts.pair
     if opts.opening_line:
         body["opening_line"] = opts.opening_line
+    if opts.vertical:
+        body["vertical"] = opts.vertical
     async with httpx.AsyncClient(base_url=srv.base, timeout=30) as http:
         if opts.join:
             call_id, sockets = await _start_join(srv, http, opts)
@@ -599,6 +639,9 @@ async def run_call(srv: Server, utts: list[Utt], opts: Opts) -> dict[str, Any]:
             url = f"{srv.ws_base}/ws/loopback?call={call_id}"
             sockets = {"a": f"{url}&side=a", "b": f"{url}&side=b"}
         session_t0 = srv.session_t0(call_id)
+        if opts.prefill == "wait":
+            stats = srv.prefill_stats(call_id)
+            await _until(lambda: stats is None or stats.done, opts.prefill_timeout_s)
 
         async with (
             websockets.connect(sockets["a"], max_size=None) as wa,
@@ -663,7 +706,19 @@ async def run_call(srv: Server, utts: list[Utt], opts: Opts) -> dict[str, Any]:
         "acks": {s: len(t.acks) for s, t in tabs.items()},
         "clears": {s: t.clears for s, t in tabs.items()},
         "rec": {s: bytes(t.rec) for s, t in tabs.items()},
+        "prefill": _prefill_doc(srv.prefill_stats(call_id)),
     }
+
+
+def _prefill_doc(stats: Any) -> dict[str, Any] | None:
+    if stats is None:
+        return None
+    return {k: getattr(stats, k) for k in stats.__slots__}
+
+
+def prefill_settings(mode: str) -> dict[str, Any]:
+    """Server settings for --prefill: "off" is a cold run (no prefill, no disk cache)."""
+    return {"phrase_prefill": False, "tts_cache_dir": ""} if mode == "off" else {}
 
 
 def _other(side: str) -> str:
@@ -752,16 +807,35 @@ def summarize(result: dict[str, Any]) -> dict[str, Any]:
     for r in rows:
         if r.heard_ms is not None:
             cols["heard"].append(r.heard_ms)
+            # L10: what the speaker waits from the START of their line
+            speech_ms = (r.n_voice_end - r.n_start) * FRAME_MS
+            cols.setdefault("from_start", []).append(r.heard_ms + speech_ms)
         if r.earcon_ms is not None:
             cols["earcon"].append(r.earcon_ms)
         if r.server:
-            for k, v in stages(r.server[0]).items():
+            st = stages(r.server[0])
+            for k, v in st.items():
                 if v is not None:
                     cols.setdefault(k, []).append(v)
+            flags = r.server[0].get("flags") or {}
+            if "stt_open_ms" in flags:
+                cols.setdefault("stt_open", []).append(flags["stt_open_ms"])
+            if "tts_cache_hit" in flags and st.get("tts") is not None:
+                key = "tts_hit" if flags["tts_cache_hit"] else "tts_miss"
+                cols.setdefault(key, []).append(st["tts"])
     return {
         k: {"n": len(v), "p50": pct(v, 50), "p95": pct(v, 95), "max": max(v) if v else None}
         for k, v in cols.items()
     }
+
+
+HIT_FLAGS = ("phrase_hit", "ack", "mt_cache_hit", "tts_cache_hit", "number_fix")
+
+
+def hit_rates(result: dict[str, Any]) -> dict[str, int]:
+    """How many scripted turns the phrase path served (flags of each row's first turn)."""
+    served = [r.server[0].get("flags") or {} for r in result["rows"] if r.server]
+    return {"turns": len(served), **{k: sum(int(f.get(k, 0)) for f in served) for k in HIT_FLAGS}}
 
 
 def table(result: dict[str, Any], summary: dict[str, Any]) -> str:
@@ -786,6 +860,10 @@ def table(result: dict[str, Any], summary: dict[str, Any]) -> str:
         for t in r.server:
             lines.append(f"        src: {t.get('src_text')}")
             lines.append(f"        tgt: {t.get('tgt_text')}")
+            if t.get("flags"):
+                on = [k for k in HIT_FLAGS if t["flags"].get(k)]
+                lines.append(f"        flags: {' '.join(on) or '-'}  "
+                             f"stt_open {t['flags'].get('stt_open_ms')} ms")  # fmt: skip
         if len(r.server) > 1:
             lines.append(f"        ({len(r.server)} server turns: the utterance was split)")
         if (warn := numbers_check(r)) is not None:
@@ -955,6 +1033,13 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p.add_argument("--noise-snr", type=float, default=None, help="pink room noise, dB SNR")
     p.add_argument("--speak-at-start", action="store_true", help="first line during the opening")
     p.add_argument("--opening-line", choices=["short", "full", "off"], default=None)
+    p.add_argument("--vertical", default=None, help="phrase pack (default: delivery)")
+    p.add_argument(
+        "--prefill",
+        choices=["bg", "wait", "off"],
+        default="bg",
+        help="off: cold caches; wait: prefill before the first line; bg: alongside",
+    )
     return p.parse_args(argv)
 
 
@@ -980,6 +1065,8 @@ def main(argv: list[str] | None = None) -> int:
         noise_snr=a.noise_snr,
         opening="talk" if a.speak_at_start else "play",
         opening_line=a.opening_line,
+        vertical=a.vertical,
+        prefill=a.prefill,
     )
     if a.fake:
         utts = fake_utts(lines)
@@ -993,6 +1080,7 @@ def main(argv: list[str] | None = None) -> int:
         impl = {k: os.environ.get(k) for k in ("STT_IMPL", "MT_IMPL", "TTS_IMPL")}
         if any(v != "real" for v in impl.values()):
             print(f"warning: provider switches are {impl}; set all three to real", file=sys.stderr)
+    kw.update(prefill_settings(a.prefill))
     with serve(kw, env_file) as srv:
         result = asyncio.run(run_call(srv, utts, opts))
     summary = summarize(result)
@@ -1003,6 +1091,7 @@ def main(argv: list[str] | None = None) -> int:
     by_side = {s: sum(t["side"] == s for t in spoken) for s in ("a", "b")}
     lines_by = {s: sum(r.side == s for r in result["rows"]) for s in ("a", "b")}
     print(f"server turns {by_side} for script lines {lines_by}  room_db {a.room_db}")
+    print(f"phrase cache ({a.prefill}): {hit_rates(result)}  prefill {result['prefill']}")
     print(f"wrote {write_outputs(result, summary, a.out)}")
     return 0
 
