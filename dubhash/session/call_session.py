@@ -118,6 +118,9 @@ class _TrackedSTT:
         utt = next((u for u in self._utts if not u.stream), None)
         if utt is not None:
             utt.stream = True
+        elif self._utts and self._utts[-1].t_eou is None:
+            # an early-final restart (L3): a second stream for the utterance still open
+            utt = self._utts[-1]
         return _TrackedStream(await self.inner.open(lang), utt, self._clock)
 
 
