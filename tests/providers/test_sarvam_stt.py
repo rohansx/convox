@@ -188,6 +188,46 @@ async def test_prewarm_opens_a_socket_that_open_then_uses():
     assert len(srv.conns) == 1
 
 
+async def test_closing_an_unended_stream_settles_it_and_keeps_the_socket_warm():
+    """A noise blip the interpreter discards is aclose()d without end() (L10: it cost the
+    side's next utterance a 207 ms reconnect live). The stream is ended in the background
+    and its socket goes back to the pool once the server's final settles it."""
+
+    async def handler(conn: Conn) -> None:
+        await _manual_utterance(conn, "")
+        await _manual_utterance(conn, "agla")
+        await conn.ws.wait_closed()
+
+    async with ws_server(handler) as srv:
+        stt = _stt(srv)
+        s = await stt.open("hi-IN")
+        await s.push(F1)
+        await s.aclose()
+        for _ in range(100):
+            if stt._idle.get("hi-IN"):
+                break
+            await asyncio.sleep(0.01)
+        s2 = await stt.open("hi-IN")
+        await s2.push(F2)
+        assert await s2.end() == "agla"
+        await stt.aclose()
+    assert len(srv.conns) == 1
+
+
+async def test_pool_close_stops_a_settling_stream():
+    async def handler(conn: Conn) -> None:
+        await conn.recv_until(lambda m: m.get("event") == "speech_end")
+        await conn.ws.wait_closed()  # never sends the final
+
+    async with ws_server(handler) as srv:
+        stt = _stt(srv, final_timeout_s=5.0)
+        s = await stt.open("hi-IN")
+        await s.push(F1)
+        await s.aclose()
+        await stt.aclose()
+        assert not stt._settling and not stt._idle.get("hi-IN")
+
+
 async def test_prewarm_replaces_an_idle_socket_the_server_closed():
     """Next-turn prewarm (L10) must not trust a pooled socket that has died meanwhile
     (Sarvam closes idle sockets with 1008): it connects a fresh one."""

@@ -218,6 +218,9 @@ class WarmSTTStream:
     async def end(self) -> str:
         if self._closed:
             return ""
+        return await self._end()
+
+    async def _end(self) -> str:
         if self._ended:
             return " ".join(self._finals)
         self._ended = True
@@ -276,10 +279,17 @@ class WarmSTTStream:
             yield p
 
     async def aclose(self) -> None:
+        """Close the utterance. One that was never ended (a noise blip the interpreter
+        discarded) is ended in the background instead, so its socket goes back to the pool
+        once the server settles it rather than costing the next utterance a connect (L10)."""
         if self._closed:
             return
         self._closed = True
-        await self._drop()
+        conn = self._conn
+        if not self._ended and conn is not None and not conn.dead.is_set():
+            self._stt._settle(self)
+        else:
+            await self._drop()
         self._partials.put_nowait(None)
 
     async def _drop(self) -> None:
@@ -309,6 +319,22 @@ class WarmSTTPool:
         self._keepalive = keepalive_s
         self._pool_size = pool_size
         self._idle: dict[str, list[WarmSocket]] = {}
+        self._settling: set[asyncio.Task[str]] = set()
+        self._closed = False
+
+    def _settle(self, stream: WarmSTTStream) -> None:
+        """End a closed, never-ended stream in the background (see WarmSTTStream.aclose)."""
+
+        async def run() -> str:
+            try:
+                return await stream._end()
+            finally:
+                await stream._drop()  # a no-op once end() released the socket
+
+        task = asyncio.ensure_future(run())
+        self._settling.add(task)
+        task.add_done_callback(self._settling.discard)
+        task.add_done_callback(lambda t: t.cancelled() or t.exception())
 
     def _lang(self, lang: str) -> str:
         return lang
@@ -365,13 +391,18 @@ class WarmSTTPool:
     def _release(self, conn: WarmSocket) -> None:
         conn.sink = None
         pool = self._idle.setdefault(conn.lang, [])
-        if conn.dead.is_set() or len(pool) >= self._pool_size:
+        if self._closed or conn.dead.is_set() or len(pool) >= self._pool_size:
             asyncio.ensure_future(conn.close())
             return
         conn.start_keepalive(self._keepalive)
         pool.append(conn)
 
     async def aclose(self) -> None:
+        self._closed = True
+        for task in list(self._settling):
+            task.cancel()
+        if self._settling:
+            await asyncio.gather(*self._settling, return_exceptions=True)
         for pool in self._idle.values():
             for conn in pool:
                 await conn.close()
