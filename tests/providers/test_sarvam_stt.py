@@ -188,6 +188,36 @@ async def test_prewarm_opens_a_socket_that_open_then_uses():
     assert len(srv.conns) == 1
 
 
+async def test_prewarm_replaces_an_idle_socket_the_server_closed():
+    """Next-turn prewarm (L10) must not trust a pooled socket that has died meanwhile
+    (Sarvam closes idle sockets with 1008): it connects a fresh one."""
+    first = asyncio.Event()
+
+    async def handler(conn: Conn) -> None:
+        if not first.is_set():
+            first.set()
+            await conn.ws.close(1008, "idle")
+            return
+        await _manual_utterance(conn, "fresh")
+        await conn.ws.wait_closed()
+
+    async with ws_server(handler) as srv:
+        stt = _stt(srv)
+        await stt.prewarm("hi-IN")
+        for _ in range(50):
+            if all(c.dead.is_set() for c in stt._idle.get("hi-IN", [])):
+                break
+            await asyncio.sleep(0.01)
+        await stt.prewarm("hi-IN")
+        assert len(srv.conns) == 2
+        idle = stt._idle["hi-IN"]
+        assert len(idle) == 1 and not idle[0].dead.is_set()
+        s = await stt.open("hi-IN")
+        await s.push(F1)
+        assert await s.end() == "fresh"
+        await stt.aclose()
+
+
 async def test_vad_mode_sets_eou_signal_and_joins_finals():
     async def handler(conn: Conn) -> None:
         await conn.recv_until(lambda m: _audio(m) == F1)

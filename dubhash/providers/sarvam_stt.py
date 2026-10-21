@@ -331,9 +331,15 @@ class WarmSTTPool:
         return stream
 
     async def prewarm(self, lang: str) -> None:
-        """Open a socket ahead of speech so open() skips the 150-300 ms handshake."""
+        """Open a socket ahead of speech so open() skips the 150-300 ms handshake. Idle
+        sockets the server has closed meanwhile are dropped first (L10: the next-turn
+        prewarm runs while the other side listens, often after a long idle)."""
         lang = self._lang(lang)
-        if not self._idle.get(lang):
+        pool = self._idle.get(lang, [])
+        for conn in [c for c in pool if c.dead.is_set()]:
+            pool.remove(conn)
+            asyncio.ensure_future(conn.close())
+        if not pool:
             self._release(await self._connect(lang))
 
     def _take_idle(self, lang: str) -> WarmSocket | None:
