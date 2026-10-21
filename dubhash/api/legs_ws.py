@@ -38,6 +38,7 @@ from dubhash.config.settings import Settings
 from dubhash.legs.exotel import ExotelLeg
 from dubhash.legs.plivo import PlivoLeg
 from dubhash.legs.recording import RecordingLeg
+from dubhash.logs import call_id_var
 from dubhash.store.recorder import RecorderBook
 from dubhash.types import Side
 
@@ -166,6 +167,7 @@ async def serve_leg(
     ws: Any, session: Any, side: Side, leg: Any, book: CallBook, call_id: str
 ) -> None:
     """Pump the leg while attaching it to the session; record leg facts in the CallBook."""
+    call_id_var.set(call_id)  # the call's tasks inherit it, so their log lines carry it
     run = asyncio.create_task(leg.run())
     try:
         await session.attach_leg(side, await recording_leg(ws, session, side, leg))

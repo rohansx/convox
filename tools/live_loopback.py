@@ -829,8 +829,9 @@ def main(argv: list[str] | None = None) -> int:
     a = p.parse_args(argv)
     handler = logging.StreamHandler()
     handler.setFormatter(logging.Formatter("%(relativeCreated)8.0f %(levelname)s %(message)s"))
+    handler.setLevel(a.log.upper())  # the app's file log (logs/dubhash.log) keeps INFO
     logging.getLogger("dubhash").addHandler(handler)
-    logging.getLogger("dubhash").setLevel(a.log.upper())
+    logging.getLogger("dubhash").setLevel(min(logging.INFO, handler.level))
     name = a.script or script_for(a.a_lang, a.b_lang) or DEFAULT_SCRIPT
     sc = SCRIPTS[name]
     a_lang, b_lang = a.a_lang or sc.a_lang, a.b_lang or sc.b_lang

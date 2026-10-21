@@ -23,6 +23,7 @@ from dubhash.api.schemas import ApiError, api_error_handler
 from dubhash.config.settings import Settings, get_settings
 from dubhash.events import EventBus
 from dubhash.join import routes as join_routes
+from dubhash.logs import setup_logging
 from dubhash.store.db import init_db, make_engine, make_sessionmaker, ping
 from dubhash.store.writer import TurnWriter
 from dubhash.ward import routes as ward_routes
@@ -55,6 +56,7 @@ async def _feed_registry(bus: EventBus, registry: InMemoryCallRegistry) -> None:
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     settings: Settings = app.state.settings
+    setup_logging(settings)  # JSON lines to logs/dubhash.log (not in env=test)
     if app.state.writer is None and settings.dubhash_env != "test":
         app.state.writer = await _open_store(app, settings)
     if app.state.writer is not None:
