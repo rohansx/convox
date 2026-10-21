@@ -730,7 +730,14 @@ def serve(settings_kw: dict[str, Any], env_file: Path | None) -> Iterator[Server
         **settings_kw,
     )
     app = create_app(settings)
-    config = uvicorn.Config(app, host="127.0.0.1", port=port, log_level="warning", lifespan="on")
+    config = uvicorn.Config(
+        app,
+        host="127.0.0.1",
+        port=port,
+        log_level="warning",
+        lifespan="on",
+        ws_per_message_deflate=False,  # as make dev and the Dockerfile (L7)
+    )
     srv = uvicorn.Server(config)
     th = threading.Thread(target=srv.run, daemon=True)
     th.start()

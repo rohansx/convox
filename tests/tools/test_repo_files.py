@@ -75,3 +75,11 @@ def test_dev_setup_mentions_real_commands():
     for cmd in ("make test", "make dev", "make smoke", "uv sync", "tools/label.py"):
         assert cmd in text
     assert "proposed" not in text.lower().split("## ")[0]  # intro no longer says proposed
+
+
+def test_websocket_compression_is_off_wherever_uvicorn_runs():
+    """permessage-deflate buys nothing on PCM frames and adds a compress/decompress step to
+    every 20 ms frame both ways (L7)."""
+    assert "--ws-per-message-deflate false" in (ROOT / "Makefile").read_text()
+    assert '"--ws-per-message-deflate", "false"' in (ROOT / "Dockerfile").read_text()
+    assert "ws_per_message_deflate=False" in (ROOT / "tools" / "live_loopback.py").read_text()
