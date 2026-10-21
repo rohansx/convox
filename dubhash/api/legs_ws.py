@@ -139,7 +139,7 @@ def exotel_authorized(ws: WebSocket, settings: Settings) -> bool:
     return bool(allowed) and client_ip(ws) in allowed
 
 
-async def _close(ws: Any, code: int) -> None:
+async def close_ws(ws: Any, code: int) -> None:
     with contextlib.suppress(Exception):
         await ws.close(code)
 
@@ -154,7 +154,7 @@ async def serve_leg(
     except Exception as e:
         log.warning("leg.rejected", extra={"call_id": call_id, "side": side, "error": repr(e)})
         leg.close_reason = "rejected"
-        await _close(ws, CLOSE_CONFLICT)
+        await close_ws(ws, CLOSE_CONFLICT)
         await leg.close()
     started = getattr(leg, "started", None)
     if isinstance(started, asyncio.Event):
@@ -178,17 +178,17 @@ async def leg_socket(ws: WebSocket, sessions: Sessions, book: Book) -> None:
     side = ws.query_params.get("side")
     await ws.accept()
     if side not in ("a", "b"):
-        return await _close(ws, CLOSE_BAD_REQUEST)
+        return await close_ws(ws, CLOSE_BAD_REQUEST)
     session = sessions.get(call_id) if call_id else None
     if session is None:
         log.warning("leg.unknown_call", extra={"call_id": call_id, "side": side})
-        return await _close(ws, CLOSE_UNKNOWN_CALL)
+        return await close_ws(ws, CLOSE_UNKNOWN_CALL)
     try:
         first = await asyncio.wait_for(ws.receive_text(), FIRST_MESSAGE_TIMEOUT_S)
     except TimeoutError:
-        return await _close(ws, CLOSE_TIMEOUT)
+        return await close_ws(ws, CLOSE_TIMEOUT)
     except Exception:  # disconnect or binary frame
-        return await _close(ws, CLOSE_BAD_REQUEST)
+        return await close_ws(ws, CLOSE_BAD_REQUEST)
     try:
         provider = sniff_provider(json.loads(first))
     except ValueError:
@@ -200,12 +200,12 @@ async def leg_socket(ws: WebSocket, sessions: Sessions, book: Book) -> None:
             "leg.bad_first_message",
             extra={"call_id": call_id, "side": side, "provider": provider, "expected": expected},
         )
-        return await _close(ws, CLOSE_BAD_REQUEST)
+        return await close_ws(ws, CLOSE_BAD_REQUEST)
     if provider == "exotel" and not exotel_authorized(ws, settings):
         log.warning("leg.unauthorized", extra={"call_id": call_id, "side": side})
-        return await _close(ws, CLOSE_UNAUTHORIZED)
+        return await close_ws(ws, CLOSE_UNAUTHORIZED)
     if not book.leg_attached(call_id, side):
-        return await _close(ws, CLOSE_CONFLICT)
+        return await close_ws(ws, CLOSE_CONFLICT)
     wrapped = ReplayWS(ws, [first])
     leg = ExotelLeg(side, wrapped) if provider == "exotel" else PlivoLeg(side, wrapped)
     await serve_leg(ws, session, side, leg, book, call_id)
