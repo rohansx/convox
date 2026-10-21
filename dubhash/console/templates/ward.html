@@ -31,6 +31,11 @@
     {% if side == "a" %}<button type="button" class="swap" id="swap-btn" aria-label="Swap languages">&#8644;</button>{% endif %}
     {% endfor %}
   </section>
+  <nav class="presets" aria-label="Quick language choices">
+    {% for p in presets %}
+    <button type="button" class="ghost preset" data-preset-a="{{ p.a }}" data-preset-b="{{ p.b }}">{{ p.label }}</button>
+    {% endfor %}
+  </nav>
 
   <main class="transcript" id="transcript" aria-live="polite">
     <div class="empty-state" id="empty-state">

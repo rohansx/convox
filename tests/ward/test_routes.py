@@ -80,6 +80,14 @@ def test_ward_page_renders_and_references_its_assets(client):
     assert re.search(r'data-ws-token="[^"]+"', body)
 
 
+def test_ward_page_offers_marathi_preset_buttons(client):
+    body = client.get("/ward").text
+    assert 'data-preset-a="mr-IN" data-preset-b="hi-IN"' in body
+    assert 'data-preset-a="mr-IN" data-preset-b="en-IN"' in body
+    js = client.get("/static/console/ward.js").text
+    assert "data-preset-a" in js or "presetA" in js
+
+
 def test_old_ward_stub_is_gone():
     from dubhash.api import console
 
