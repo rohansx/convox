@@ -13,10 +13,13 @@ import dataclasses
 import math
 import secrets
 from collections import OrderedDict
-from typing import Any, Protocol, runtime_checkable
+from collections.abc import Callable
+from typing import Any, Literal, Protocol, runtime_checkable
 
 from fastapi import HTTPException, Request, status
+from starlette.requests import HTTPConnection
 
+from dubhash.config.pairs import PairConfig
 from dubhash.config.settings import Settings
 from dubhash.events import EventBus
 from dubhash.types import CallEvent
@@ -181,3 +184,47 @@ def require_console_auth(request: Request) -> None:
         raise challenge from None
     if not secrets.compare_digest(password.encode(), expected.encode()):
         raise challenge
+
+
+# --- sessions (contract: dubhash/session/{call_session,registry,providers}.py) ----------
+# Imported lazily so the API imports cleanly while the session package is in flight, and
+# so tests can override these two providers with a FakeSession double.
+
+
+def get_session_registry(conn: HTTPConnection) -> Any:
+    """The process-wide SessionRegistry (create/get/remove/list of live CallSessions)."""
+    registry = getattr(conn.app.state, "sessions", None)
+    if registry is None:
+        from dubhash.session.registry import SessionRegistry
+
+        registry = conn.app.state.sessions = SessionRegistry()
+    return registry
+
+
+def get_session_factory(conn: HTTPConnection) -> Callable[..., Any]:
+    """factory(call_id, pair, *, mode, escape_dtmf, record) -> CallSession."""
+    state = conn.app.state
+
+    def make(
+        call_id: str,
+        pair: PairConfig,
+        *,
+        mode: Literal["interpret", "bridge"] = "interpret",
+        escape_dtmf: str = "0",
+        record: bool = False,
+    ) -> Any:
+        from dubhash.session.call_session import CallSession
+        from dubhash.session.providers import build_providers
+
+        return CallSession(
+            call_id,
+            pair,
+            build_providers(pair, state.settings),
+            bus=state.bus,
+            writer=state.writer,
+            mode=mode,
+            escape_dtmf=escape_dtmf,
+            record=record,
+        )
+
+    return make

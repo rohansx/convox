@@ -17,8 +17,9 @@ from typing import Any
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
-from dubhash.api import console, health
+from dubhash.api import calls, console, health
 from dubhash.api.deps import CallRegistry, InMemoryCallRegistry
+from dubhash.api.schemas import ApiError, api_error_handler
 from dubhash.config.settings import Settings, get_settings
 from dubhash.events import EventBus
 from dubhash.store.db import init_db, make_engine, make_sessionmaker, ping
@@ -89,6 +90,8 @@ def create_app(
 
     app.include_router(health.router)
     app.include_router(console.router)
+    app.include_router(calls.router)
+    app.add_exception_handler(ApiError, api_error_handler)
     app.mount("/static/console", StaticFiles(directory=console.STATIC_DIR), name="console-static")
     if LEGS_STATIC_DIR.is_dir():
         app.mount("/static/legs", StaticFiles(directory=LEGS_STATIC_DIR), name="legs-static")
