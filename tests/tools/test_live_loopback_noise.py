@@ -75,3 +75,11 @@ async def test_opening_line_is_passed_to_the_call(server):
 def test_cli_flags():
     a = ll.parse_args(["--noise-snr", "15", "--speak-at-start", "--opening-line", "short"])
     assert a.noise_snr == 15 and a.speak_at_start and a.opening_line == "short"
+
+
+def test_skip_starts_the_script_later():
+    """--skip 4 --n 1 on delivery-mr-hi: the short "OTP 4729" line first, for the
+    speak-at-start variant (a short first line is what the opening hold delayed most)."""
+    a = ll.parse_args(["--script", "delivery-mr-hi", "--skip", "4", "--n", "2"])
+    lines = ll.script_lines(ll.SCRIPTS["delivery-mr-hi"], a.skip, a.n)
+    assert [ln.text for ln in lines] == [ll.SCRIPTS["delivery-mr-hi"].lines[i].text for i in (4, 5)]

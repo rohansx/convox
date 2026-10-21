@@ -865,6 +865,10 @@ def fake_utts(lines: tuple[Line, ...], ms: int = 1200) -> list[Utt]:
             for ln in lines]  # fmt: skip
 
 
+def script_lines(sc: Script, skip: int = 0, n: int | None = None) -> tuple[Line, ...]:
+    return sc.lines[skip:][:n]
+
+
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawTextHelpFormatter)
     p.add_argument("--pair", default=None, help="pairs.yaml key (default: by languages)")
@@ -877,6 +881,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p.add_argument("--a-lang", default=None, help="default: the script's")
     p.add_argument("--b-lang", default=None, help="default: the script's")
     p.add_argument("--n", type=int, default=None, help="script lines to play (default: all)")
+    p.add_argument("--skip", type=int, default=0, help="start at this script line (0-based)")
     p.add_argument("--join", action="store_true", help="stage path: POST /join, token sockets")
     p.add_argument("--fake", action="store_true", help="fake providers, fake utterances")
     p.add_argument("--out", type=Path, default=OUT)
@@ -897,7 +902,7 @@ def main(argv: list[str] | None = None) -> int:
     name = a.script or script_for(a.a_lang, a.b_lang) or DEFAULT_SCRIPT
     sc = SCRIPTS[name]
     a_lang, b_lang = a.a_lang or sc.a_lang, a.b_lang or sc.b_lang
-    lines = sc.lines[: a.n]
+    lines = script_lines(sc, a.skip, a.n)
     opts = Opts(
         pair=a.pair,
         a_lang=a_lang,
