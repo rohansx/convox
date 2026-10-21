@@ -87,6 +87,7 @@ mr-en:
 
 - Load once at startup into frozen pydantic models. Reject unknown keys and unknown engines, and fail fast.
 - Pair lookup (`find_pair`, used by `POST /v1/calls`, `POST /loopback/calls` and ward mode) with `a.lang=kn-IN, b.lang=hi-IN`: the first non-fake entry written as `kn-IN`/`hi-IN` wins; otherwise the first written the other way round (`hi-kn`) is returned **swapped** (`PairConfig.swapped()`: `a` and `b` exchanged, every other field and the key kept, so turn logs still name the `pairs.yaml` entry). A pair named by key is oriented the same way (`orient()`). Unknown pair → `422 unsupported_pair` ([API](api.md#errors-proposed)). The v1 non-goal is any language whose STT we have not measured on PSTN, so only measured pairs go in the file.
+- **`lang: "auto"`** ([language detection](language-detection.md)): there is no pairs.yaml entry for an undetected language, so the call's pair is built (`config.pairs.auto_pair`, key e.g. `auto-kn`, `auto-auto`). An auto side starts in its hint (else `hi-IN`) on the English pivot (`stt: sarvam-translate`, `mt_src: en-IN`); a fixed side keeps the config the entry for the starting languages gives it (`find_pair`), else its language's defaults. Pair-level knobs come from that entry, else the defaults with `early_final_ms: 200`. As languages resolve, the effective pair is rebuilt (`effective_pair`): the auto side's `lang`, `tts` and voices change, its `stt`/`mt_src` and every pair-level knob stay those the call started with. **Per-language side defaults** (`language_sides`): the first non-fake side in this file for each language, else the provider convention (`default_side`: Sarvam STT, `bulbul:<lang>-male/female-1`); ward mode uses the same helpers. Every supported language (`hi`, `mr`, `gu`, `kn`, `ta`, `en`) has a side in this file.
 - Every side's `voice_m`/`voice_f` prefix must match its `tts` engine (`bulbul:` with `bulbul`).
 - Hot reload is not needed in v1. Restart the container.
 
@@ -165,6 +166,8 @@ Every component is behind an interface with a fake, and the pipeline must run en
 | `LOG_FILE` | `logs/dubhash.log` | the app also writes its log as JSON lines here (with `call_id` when known), rotating at 10 MB, 5 files kept, appended across restarts. Empty = stdout only. Not written in `DUBHASH_ENV=test` |
 | `LOOPBACK_OPENING_LINE` | `short` (default) \| `full` \| `off` | the opening line of `/loopback` and `/join` calls; a loopback request may pass `opening_line` itself (L7) |
 | `PSTN_OPENING_LINE` | `full` (default) \| `short` \| `off` | the opening line of `POST /v1/calls` calls (`full` = the disclosure sentence, plus the record sentence with `record: true`) |
+| `AUTO_STT_OPEN` | `auto` (default) \| `guess` | how a `lang: "auto"` side's STT opens: `auto` = Sarvam realtime `language_code=auto` (finals report the language and its confidence, in translate mode too); `guess` = its best language so far (resolved, else hint, else `hi-IN`), reopened when it changes. Sarvam rejects `unknown`. [Language detection](language-detection.md) |
+| `LANG_MIN_SPEECH_MS` | `1500` | an auto side's utterances shorter than this (speech start to last voiced frame) are not used to decide its language, and get no language-ID call |
 
 ### Global constants (defaults from the spec)
 
