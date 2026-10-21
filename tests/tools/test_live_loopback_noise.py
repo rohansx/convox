@@ -62,6 +62,9 @@ async def test_speak_at_start_does_not_wait_for_the_opening(server):
     result = await ll.run_call(server, utts, opts)
     assert result["opening"]["wait_ms"] <= 300  # started while the opening played
     assert result["status"] == "completed"
+    (row,) = result["rows"]
+    # the turn window waits for the translation, not for the opening still arriving
+    assert row.earcon_ms is not None and 0 < row.heard_ms < 1500, row
 
 
 async def test_opening_line_is_passed_to_the_call(server):
@@ -70,6 +73,29 @@ async def test_opening_line_is_passed_to_the_call(server):
                    opening_line="off", opening_timeout_s=1.0)  # fmt: skip
     result = await ll.run_call(server, utts, opts)
     assert result["opening"]["bytes"] == {"a": 0, "b": 0} or not result["opening"]["received"]
+
+
+async def test_tab_keeps_every_mark_name_it_received():
+    """The turn window waits for the translation's own mark (not "opening"): with an
+    opening still arriving, "any bytes received" was the opening, not the translation."""
+
+    class WS:
+        def __init__(self, msgs: list) -> None:
+            self.msgs = msgs
+
+        def __aiter__(self):
+            return self
+
+        async def __anext__(self):
+            if not self.msgs:
+                raise StopAsyncIteration
+            return self.msgs.pop(0)
+
+    msgs = [b"\x00" * 640, '{"type": "mark", "name": "opening"}', '{"type": "mark", "name": "a:0"}']
+    tab = ll.Tab("b", WS(msgs))
+    await tab.reader()
+    assert tab.mark_names == ["opening", "a:0"]
+    assert ll.translation_marks(tab, 0) == ["a:0"]
 
 
 def test_cli_flags():

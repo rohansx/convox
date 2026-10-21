@@ -244,6 +244,11 @@ def last_voiced(frames: list[bytes]) -> int:
     return -1
 
 
+def translation_marks(tab: Tab, since: int) -> list[str]:
+    """Marks received from index `since` on that end a translation (not the opening)."""
+    return [n for n in tab.mark_names[since:] if n != "opening"]
+
+
 def room_noise(utts: list[Utt], snr_db: float, ms: int = 60000, seed: int = 0) -> list[bytes]:
     """Frames of pink noise snr_db under the speech level of the utterances' voiced frames
     (looped by the Tab for as long as the call runs)."""
@@ -275,6 +280,7 @@ class Tab:
         self.played = 0  # bytes of received audio played (or dropped by clear)
         self.marks: deque[tuple[int, str]] = deque()  # (received offset, name)
         self.acks: list[str] = []
+        self.mark_names: list[str] = []  # every mark received, in order
         self.rec = bytearray()  # what was played: exactly FRAME_BYTES per tick
         self.mic: deque[bytes] = deque()
         self.t_last_rx: float | None = None  # monotonic time of the last audio received
@@ -295,6 +301,7 @@ class Tab:
                     m = json.loads(msg)
                     if m.get("type") == "mark":
                         self.marks.append((self.received, str(m.get("name"))))
+                        self.mark_names.append(str(m.get("name")))
                     elif m.get("type") == "clear":
                         self.clears += 1
                         self.played += len(self.buf)
@@ -660,7 +667,7 @@ async def _script(
         spk, lst = tabs[u.side], tabs[_other(u.side)]
         fr = frames_of(u.pcm)
         lv = last_voiced(fr)
-        rx0, clears0 = lst.received, lst.clears
+        rx0, clears0, m0 = lst.received, lst.clears, len(lst.mark_names)
         n_start = ticker.n + len(spk.mic)
         spk.mic.extend(fr)
         row = TurnRow(i, u.side, u.text, n_start=n_start, n_voice_end=n_start + lv + 1)
@@ -669,6 +676,8 @@ async def _script(
         rows.append(row)
         await _until(lambda s=spk: not s.mic, len(fr) * FRAME_MS / 1000 + 5)
         await _until(lambda t=lst, n=rx0: t.received > n, opts.turn_timeout_s)
+        # the translation's own mark (an opening still arriving is not the translation)
+        await _until(lambda t=lst, k=m0: bool(translation_marks(t, k)), opts.turn_timeout_s)
         await _until(lambda t=lst: t.quiet_for(opts.quiet_ms), opts.turn_timeout_s)
         row.clears = lst.clears - clears0
         await ticker.wait_ticks(opts.pause_ms // FRAME_MS)
