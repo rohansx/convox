@@ -247,3 +247,84 @@ async def test_odia_uses_or_in_on_the_realtime_socket():
         await stt.aclose()
 
     assert parse_qs(urlparse(srv.conns[0].path).query)["language_code"] == ["or-IN"]
+
+
+# --- early final (L3): end a stream at ~200 ms silence, reopen if speech resumes ---------
+
+
+def _utterance_audio(conn: Conn, n: int) -> list[bytes]:
+    """Audio of the n-th utterance (0-based) on a connection, as received."""
+    out: list[list[bytes]] = []
+    for m in conn.received:
+        if isinstance(m, dict) and m.get("event") == "speech_start":
+            out.append([])
+        elif (a := _audio(m)) is not None:
+            out[-1].append(a)
+    return out[n]
+
+
+async def test_early_final_restart_reuses_the_warm_socket_quickly():
+    async def handler(conn: Conn) -> None:
+        await _manual_utterance(conn, "ek do")
+        await _manual_utterance(conn, "ek do teen chaar")
+        await conn.ws.wait_closed()
+
+    async with ws_server(handler) as srv:
+        stt = _stt(srv)
+        early = await stt.open("hi-IN")
+        await early.push(F1)
+        assert await early.end() == "ek do"
+        await early.aclose()
+        loop = asyncio.get_running_loop()
+        t0 = loop.time()
+        restarted = await stt.open("hi-IN")  # the socket went back to the pool on end()
+        reopen_s = loop.time() - t0
+        for f in (F1, F2, F3):  # replay the buffered utterance, then continue live
+            await restarted.push(f)
+        assert await restarted.end() == "ek do teen chaar"
+        await restarted.aclose()
+        await stt.aclose()
+
+    assert len(srv.conns) == 1
+    assert reopen_s < 0.05
+    assert _utterance_audio(srv.conns[0], 1) == [F1, F2, F3]
+
+
+async def test_restart_while_the_early_final_is_pending_uses_a_second_socket():
+    """Speech resumes before the early final lands: the pipeline lets end() finish in the
+    background and opens a new stream at once; both sockets end up warm in the pool."""
+    release = asyncio.Event()
+
+    async def handler(conn: Conn) -> None:
+        if len(srv.conns) == 1:
+            await conn.recv_until(lambda m: m.get("event") == "speech_end")
+            await release.wait()
+            await conn.send({"event": "transcript.final", "text": "ek do"})
+        else:
+            await _manual_utterance(conn, "ek do teen chaar")
+        await conn.recv_until(lambda m: m.get("event") == "speech_start")  # next utterance
+        await conn.recv_until(lambda m: m.get("event") == "speech_end")
+        await conn.send({"event": "transcript.final", "text": "next"})
+        await conn.ws.wait_closed()
+
+    async with ws_server(handler) as srv:
+        stt = _stt(srv)
+        early = await stt.open("hi-IN")
+        await early.push(F1)
+        ending = asyncio.create_task(early.end())
+        await asyncio.sleep(0.01)
+        restarted = await stt.open("hi-IN")
+        for f in (F1, F2):
+            await restarted.push(f)
+        assert await restarted.end() == "ek do teen chaar"
+        release.set()
+        assert await ending == "ek do"
+        await early.aclose()
+        await restarted.aclose()
+        nxt = await stt.open("hi-IN")  # warm: no third connection
+        await nxt.push(F3)
+        assert await nxt.end() == "next"
+        await stt.aclose()
+
+    assert len(srv.conns) == 2
+    assert _utterance_audio(srv.conns[1], 0) == [F1, F2]
