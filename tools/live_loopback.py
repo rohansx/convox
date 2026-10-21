@@ -118,6 +118,15 @@ class Script:
     lines: tuple[Line, ...]
 
 
+_MONOLOGUE_A = (
+    Line("a", "हॅलो, मी फ्लॅट 302 मधून बोलतेय. माझं पार्सल कुठे आहे?", review=True),
+    Line("a", "बी विंग, तिसरा मजला. लिफ्ट बंद आहे, जिना डावीकडे आहे.", review=True),
+    Line("a", "ओटीपी 4729 आहे.", review=True),
+    Line("a", "मी फ्लॅट 302, शिवाजी नगरमध्ये राहते. औषध घरी पाठवाल का?", review=True),
+    Line("a", "ठीक आहे, मी 6 वाजता घरी असेन.", review=True),
+    Line("a", "लिफ्ट चालू नाही.", review=True),
+)
+
 SCRIPTS: dict[str, Script] = {
     # Rider (A, Hindi, male) and customer (B, Kannada, female). Kannada lines: NATIVE REVIEW.
     "delivery-hi-kn": Script(
@@ -211,6 +220,20 @@ SCRIPTS: dict[str, Script] = {
             Line("a", "हो.", review=True),
             Line("b", "धन्यवाद।"),
             Line("a", "धन्यवाद.", review=True),
+        ),
+    ),
+    # Next-turn prewarm run (L10): six Marathi lines from A before each Hindi reply from B,
+    # so the socket that voices B's reply (tts["a"]) idles past Bulbul's 30 s max_idle_s
+    # unless playback to B prewarms it. Marathi lines: NATIVE REVIEW.
+    "monologue-mr-hi": Script(
+        "mr-IN",
+        "hi-IN",
+        {"a": "bulbul:mr-female-1", "b": "bulbul:hi-male-1"},
+        (
+            *_MONOLOGUE_A,
+            Line("b", "ठीक है, दो मिनट में ऊपर आता हूँ। ओटीपी बता दीजिए।"),
+            *_MONOLOGUE_A,
+            Line("b", "धन्यवाद मैडम, शाम को 6 बजे दूसरा पार्सल भी आएगा।"),
         ),
     ),
 }

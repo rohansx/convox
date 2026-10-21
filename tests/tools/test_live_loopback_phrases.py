@@ -20,6 +20,14 @@ def test_phrase_script_is_mostly_pack_lines():
     assert any("4729" in ln.text for ln in sc.lines)  # one number line for the read-back
 
 
+def test_monologue_script_keeps_the_listener_quiet_for_over_30_s():
+    """For the next-turn prewarm: B answers only after six A lines (Bulbul TTS sockets idle
+    past max_idle_s, 30 s, are reconnected)."""
+    sc = ll.SCRIPTS["monologue-mr-hi"]
+    sides = "".join(ln.side for ln in sc.lines)
+    assert sides == "aaaaaab" * 2
+
+
 def test_cli_flags():
     a = ll.parse_args(["--vertical", "clinic", "--prefill", "wait"])
     assert a.vertical == "clinic" and a.prefill == "wait"
