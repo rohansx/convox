@@ -328,3 +328,31 @@ async def test_restart_while_the_early_final_is_pending_uses_a_second_socket():
 
     assert len(srv.conns) == 2
     assert _utterance_audio(srv.conns[1], 0) == [F1, F2]
+
+
+async def test_final_language_code_is_kept_as_detected_lang():
+    """Sarvam may report the language it heard on a final; the session's cross-talk gate
+    drops a final in the other side's language (co-located phones)."""
+
+    async def handler(conn: Conn) -> None:
+        for data in ({"language_code": "mr-IN"}, None):
+            await conn.recv_until(lambda m: m.get("event") == "speech_start")
+            await conn.recv_until(lambda m: m.get("event") == "speech_end")
+            msg = {"event": "transcript.final", "utterance_idx": 0, "text": "ho"}
+            if data:
+                msg["data"] = data
+            await conn.send(msg)
+        await conn.ws.wait_closed()
+
+    async with ws_server(handler) as srv:
+        stt = _stt(srv)
+        langs = []
+        for _ in range(2):
+            stream = await stt.open("hi-IN")
+            assert stream.detected_lang is None
+            await stream.push(F1)
+            await stream.end()
+            langs.append(stream.detected_lang)
+            await stream.aclose()
+        await stt.aclose()
+    assert langs == ["mr-IN", None]
