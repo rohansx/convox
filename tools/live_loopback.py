@@ -97,9 +97,18 @@ SCRIPT_MR_HI: tuple[Line, ...] = (
     Line("a", "ऑर्डर देण्यासाठी मला ओटीपी सांगा.", review=True),
     Line("b", "ओटीपी है चार सात दो नौ।"),
 )
+SCRIPT_MR_EN: tuple[Line, ...] = (
+    SCRIPT_MR_HI[0],
+    Line("b", "We are in C block, on the third floor. The lift is not working."),
+    SCRIPT_MR_HI[2],
+    Line("b", "Okay, the stairs are on the left."),
+    SCRIPT_MR_HI[4],
+    Line("b", "The OTP is four seven two nine."),
+)
 SCRIPTS: dict[tuple[str, str], tuple[Line, ...]] = {
     ("hi-IN", "kn-IN"): SCRIPT,
     ("mr-IN", "hi-IN"): SCRIPT_MR_HI,
+    ("mr-IN", "en-IN"): SCRIPT_MR_EN,
 }
 
 

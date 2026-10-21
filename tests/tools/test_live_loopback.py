@@ -142,5 +142,6 @@ def test_scripts_and_voices_follow_the_languages():
     mr = ll.script_for("mr-IN", "hi-IN")
     assert len(mr) >= 6 and mr[0].side == "a" and mr[1].side == "b"
     assert ll.script_for("hi-IN", "kn-IN") == ll.SCRIPT
+    assert [ln.side for ln in ll.script_for("mr-IN", "en-IN")] == ["a", "b"] * 3
     assert ll.voice_for("a", "mr-IN") == "bulbul:mr-male-1"
     assert ll.voice_for("b", "hi-IN") == "bulbul:hi-female-1"
