@@ -39,10 +39,11 @@ from dubhash.api.deps import (
 )
 from dubhash.api.loopback import create_loopback_call, require_enabled
 from dubhash.api.schemas import ApiError, LoopbackCallRequest, validation_error
-from dubhash.config.pairs import PairConfig, find_pair
+from dubhash.config.pairs import AUTO, PairConfig, find_pair, language_sides
 from dubhash.config.settings import Settings
 from dubhash.console.sse import sse_stream
 from dubhash.events import EventBus
+from dubhash.interp.langid import SUPPORTED_LANGS
 from dubhash.join.tokens import make_join_token, verify_join_token
 from dubhash.ward.service import LANGS
 
@@ -87,11 +88,21 @@ UI: dict[str, dict[str, str]] = {
 }  # fmt: skip
 
 
+# lang "auto": the side's language is detected on the call; until then the phone shows a
+# neutral "speak in your language". TODO(PQ5): native review.
+AUTO_VIEW = {"lang": AUTO, "native": "अपनी भाषा में बोलिए", "english": "Speak in your language"}
+AUTO_LABEL = ("Auto-detect", "अपनी भाषा")
+
+
 def native(lang: str) -> str:
+    if lang == AUTO:
+        return AUTO_LABEL[1]
     return LANGS.get(lang, (lang, lang))[1]
 
 
 def english(lang: str) -> str:
+    if lang == AUTO:
+        return AUTO_LABEL[0]
     return LANGS.get(lang, (lang, lang))[0]
 
 
@@ -130,11 +141,23 @@ def _pair_views(pairs: dict[str, PairConfig]) -> list[dict[str, Any]]:
     ]
 
 
+def side_langs(pairs: dict[str, PairConfig]) -> list[str]:
+    """Languages one side can be fixed to (the per-side picker), stage order."""
+    known = language_sides(pairs)
+    langs = [lang for lang in SUPPORTED_LANGS if lang in known]
+    return sorted(langs, key=lambda x: PREFERRED.index(x) if x in PREFERRED else len(PREFERRED))
+
+
 def _picker(request: Request, pairs: dict[str, PairConfig], error: str | None, status: int):
     return templates.TemplateResponse(
         request,
         "join_host.html",
-        {"call": None, "pairs": _pair_views(pairs), "error": error},
+        {
+            "call": None,
+            "pairs": _pair_views(pairs),
+            "side_langs": [_side_view(lang) for lang in side_langs(pairs)],
+            "error": error,
+        },
         status_code=status,
     )
 
@@ -218,9 +241,26 @@ def _ended_page() -> HTMLResponse:
     return HTMLResponse(body, status_code=404, headers={"cache-control": "no-store"})
 
 
+def _detected(session: Any, book: CallBook, call_id: str, side: str) -> str:
+    """The side's language for the page: its fixed language, or for lang "auto" the one
+    detected so far, else AUTO."""
+    handle = book.get(call_id)
+    if handle is None or handle.legs[side].lang != AUTO:  # type: ignore[index]
+        return str(session.pair.side(side).lang)
+    states = getattr(session, "lang_states", None)
+    state = states().get(side, {}) if callable(states) else {}
+    lang = state.get("lang")
+    return str(lang) if lang and state.get("state") == "CONFIRMED" else AUTO
+
+
 @phone.get("/join/{call_id}/{side}", response_class=HTMLResponse)
 async def join_phone(
-    request: Request, call_id: str, side: str, sessions: Sessions, t: str | None = None
+    request: Request,
+    call_id: str,
+    side: str,
+    sessions: Sessions,
+    book: Book,
+    t: str | None = None,
 ) -> HTMLResponse:
     try:
         session = _phone_session(request, sessions, call_id, side, t)
@@ -235,10 +275,11 @@ async def join_phone(
                 headers={"cache-control": "no-store"},
             )
         raise
-    pair: PairConfig = session.pair
-    lang = pair.side(side).lang  # type: ignore[arg-type]
-    other_lang = pair.side("b" if side == "a" else "a").lang
-    short = lang.split("-")[0]
+    lang = _detected(session, book, call_id, side)
+    other_lang = _detected(session, book, call_id, "b" if side == "a" else "a")
+    short = "hi" if lang == AUTO else lang.split("-")[0]
+    me = AUTO_VIEW if lang == AUTO else _side_view(lang)
+    names = {code: list(LANGS[code]) for code in SUPPORTED_LANGS if code in LANGS}
     q = f"call={call_id}&side={side}&t={t}"
     return templates.TemplateResponse(
         request,
@@ -246,7 +287,8 @@ async def join_phone(
         {
             "call_id": call_id,
             "side": side,
-            "me": _side_view(lang),
+            "me": me,
+            "names": names,
             "other": _side_view(other_lang),
             "short": short,
             "ui": UI.get(short, UI["en"]),
