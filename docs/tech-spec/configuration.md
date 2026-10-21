@@ -159,6 +159,9 @@ Every component is behind an interface with a fake, and the pipeline must run en
 | `TTS_IMPL` | `real` \| `fake` | `FakeTTS` |
 | `ENABLE_WEBRTC_LEG` | `true` in dev | exposes the loopback signalling page |
 | `BENCH_REALTIME` | `true` \| `false` | FakeLeg plays wav at real time or faster for tests |
+| `CALL_RECORDING` | `true` \| `false`; unset = `true` only when `DUBHASH_ENV=dev` | per-call recording (`store/recorder.py`): `a_in/b_in.wav` (each mic), `a_out/b_out.wav` (what each leg was sent, on the same timeline), `events.jsonl` (every CallEvent plus leg marks, clears, DTMF), `client.jsonl` (phone telemetry) and `summary.json`. Read one with `tools/call_report.py <call_id>`. **Dev and test only**: it stores both callers' voices, so it needs their consent (DPDP) and is never on by default in prod. Transcript text is kept only when the call has `record: true` |
+| `CALL_RECORDING_DIR` | `out/calls` | recordings land in `<dir>/<YYYY-MM-DD>/<call_id>/` (gitignored, never commit them) |
+| `LOG_FILE` | `logs/dubhash.log` | the app also writes its log as JSON lines here (with `call_id` when known), rotating at 10 MB, 5 files kept, appended across restarts. Empty = stdout only. Not written in `DUBHASH_ENV=test` |
 
 ### Global constants (defaults from the spec)
 

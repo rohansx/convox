@@ -5,9 +5,23 @@ Despite the name this is plain websocket PCM, not WebRTC (static/loopback.html):
                  {"type": "hello", "side": "a", "lang": "hi"}   (optional, recorded)
                  {"type": "dtmf", "digit": "1"}                 (on-page buttons)
                  {"type": "mark", "name": tag}                  (playout reached our mark)
+                 {"type": "telemetry", ...}                     (see below)
   us -> browser: binary = PCM16 LE mono 16 kHz to queue for playout
                  {"type": "mark", "name": tag}                  (ack it when played)
                  {"type": "clear"}                              (flush the playout queue)
+                 {"type": "ping", "server_ms": n}               (every 5 s when recording)
+
+Telemetry (for the call recorder, store/recorder.py). Any JSON message whose type is not
+one of the above goes to the on_telemetry callbacks unchanged. The phone page sends
+  {"type": "telemetry", "kind": "play_start" | "play_end" | "mic_level" | "ping",
+   "tag"?: str,              the mark tag of the audio that started/ended playing, if known
+   "client_ms": number,      the page's clock (performance.now()) when it happened
+   "audio_ctx_ms"?: number,  AudioContext.currentTime * 1000 at that moment
+   "rms"?: number}           mic_level: RMS of recent mic audio (0..1)
+and answers each server ping at once with
+  {"type": "telemetry", "kind": "pong", "server_ms": <the ping's>, "client_ms": number}
+so the recorder can estimate the round trip and the page clock's offset (offset =
+client_ms - (server_ms + rtt / 2), from the pong with the smallest rtt).
 
 Marks fire from a playout estimate on the server clock (the browser plays at real time)
 until the page has acked one; from then on acks win, and the estimate only fires a mark
@@ -50,6 +64,8 @@ class WebRtcLeg:
         self._pending: set[str] = set()
         self._mark_cbs: list[Callable[[str], None]] = []
         self._dtmf_cbs: list[Callable[[str], None]] = []
+        self._telemetry_cbs: list[Callable[[dict[str, Any]], None]] = []
+        self._ping_task: asyncio.Task[None] | None = None
         self._closed_evt = asyncio.Event()
         self._lock = asyncio.Lock()
 
@@ -89,6 +105,33 @@ class WebRtcLeg:
     def on_dtmf(self, cb: Callable[[str], None]) -> None:
         self._dtmf_cbs.append(cb)
 
+    def on_telemetry(self, cb: Callable[[dict[str, Any]], None]) -> None:
+        """cb(msg) for every JSON message of a type this leg does not handle itself."""
+        self._telemetry_cbs.append(cb)
+
+    def start_pings(
+        self,
+        now_ms: Callable[[], int],
+        *,
+        interval_s: float = 5.0,
+        on_ping: Callable[[int], None] | None = None,
+    ) -> None:
+        """Send {"type": "ping", "server_ms": now_ms()} every interval_s until close."""
+        if self._ping_task is None and not self.closed:
+            self._ping_task = asyncio.create_task(self._ping_loop(now_ms, interval_s, on_ping))
+
+    async def _ping_loop(
+        self, now_ms: Callable[[], int], interval_s: float, on_ping: Callable[[int], None] | None
+    ) -> None:
+        while not self.closed:
+            server_ms = now_ms()
+            async with self._lock:
+                msg = json.dumps({"type": "ping", "server_ms": server_ms})
+                await self._send(self.ws.send_text, msg)
+            if on_ping is not None:
+                on_ping(server_ms)
+            await asyncio.sleep(interval_s)
+
     async def run(self) -> None:
         try:
             while not self.closed:
@@ -110,6 +153,8 @@ class WebRtcLeg:
         self.closed = True
         self.close_reason = self.close_reason or "closed"
         self._closed_evt.set()
+        if self._ping_task is not None and self._ping_task is not asyncio.current_task():
+            self._ping_task.cancel()
         self._pending.clear()
         self._tracker.close()
         self._inbound.end()
@@ -142,6 +187,12 @@ class WebRtcLeg:
             self._fire(str(msg["name"]))
         elif kind == "hello":
             self.hello = msg
+        elif kind not in ("dtmf", "mark"):
+            for tcb in self._telemetry_cbs:
+                try:
+                    tcb(msg)
+                except Exception:  # a telemetry consumer must never take the leg down
+                    log.exception("leg.telemetry_error", extra={"side": self.leg_id})
 
     def _estimated_done(self, tag: str) -> None:
         if tag not in self._pending:

@@ -65,7 +65,7 @@ Proposed: the trust-review package lists every sub-processor, what data it recei
 |---|---|---|
 | Turn timestamps, flags, provider ids | kept (needed for latency metrics and audit) | kept |
 | `src_text`, `tgt_text` | nulled after latency metrics are computed | kept. Retention window TBD (proposed: 30 days, then purge job) |
-| Caller audio | never stored. Exists only in process memory during the call | S3 only with an explicit audio opt-in (see [data model](data-model.md#s3-recordings-opt-in)) |
+| Caller audio | never stored. Exists only in process memory during the call. Exception: dev and test calls with `CALL_RECORDING` on (default in `DUBHASH_ENV=dev` only) write local wavs for diagnosis (`store/recorder.py`); only with the callers' consent, never in prod by default | S3 only with an explicit audio opt-in (see [data model](data-model.md#s3-recordings-opt-in)) |
 | Phone numbers (`calls.a_number`, `b_number`) | **proposed:** store a salted hash for dedupe after the call ends. Keep the raw number only while the call is live | same |
 | Vendor-side retention | per vendor terms. TBD: confirm Sarvam/ElevenLabs/Deepgram data-retention and no-training settings | |
 

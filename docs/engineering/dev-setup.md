@@ -150,6 +150,18 @@ For each turn it prints:
 
 It also prints p50/p95 for every column and when each caller first heard the opening line. It writes `out/live/<call>_a.wav` and `<call>_b.wav` (what each leg heard) and `out/live/<call>.json` (rows, raw turns, `play_to_ear_ms` and `vad_end_lag_ms` per turn, mark acks, clears). Keep live runs small: each call is about 6 STT, 6 MT and 8 TTS requests. `tests/tools/test_live_loopback.py` runs the same core loop offline with fakes. `tests/tools/test_live_loopback_live.py` runs two live lines under `-m live`.
 
+### Diagnosing a test call (recording and timeline)
+
+In `DUBHASH_ENV=dev` every call is recorded (`CALL_RECORDING`, [configuration](../tech-spec/configuration.md#fakes-and-dev-switches)): the QR stage demo (`/join`), loopback tabs, live_loopback runs and real legs alike. Each call leaves `out/calls/<YYYY-MM-DD>/<call_id>/` with `a_in/b_in.wav` (each mic), `a_out/b_out.wav` (what each phone was sent, where it played), `events.jsonl` (every event, with wall-clock and call-relative ms), `client.jsonl` (the phone page's telemetry and ping/pong clock offset) and `summary.json`. The app log is also written as JSON lines to `logs/dubhash.log` (rotating, kept across restarts), each line with its `call_id`.
+
+```bash
+uv run python tools/call_report.py c_ab12cd34ef          # per-turn timeline, warnings, where the time went
+uv run python tools/call_report.py c_ab12cd34ef --json
+grep c_ab12cd34ef logs/dubhash.log                         # the server log for that call
+```
+
+The call id is on the host page (`/join/<call_id>`) and in the log's `recorder.start` line. Import the four wavs into Audacity together: they share one timeline from call start. The report flags the patterns behind the usual complaints: `cross_talk` (one phone's mic made a turn while the other person was talking: the phones are close enough to hear each other, so the listener gets the original voice and a second translation), `echo` (a mic picked up the translation playing on its own speaker), `queue_wait` / `opening_hold` (translation ready but held), `long_utterance` (EOU never fired: > 8 s), `early_final_restart` and `wrong_language`. Recordings hold both callers' voices: dev and test only, with the callers' consent, never committed.
+
 ## 7. Offline pipeline bench
 
 `tools/bench.py` (owned by the session work) plays wavs through two FakeLegs with the real controller and mixer and writes per-stage p50/p95 and a turn log. Run it as `make bench BENCH_ARGS="..."`; its flags are documented in the tool itself. See [testing strategy](testing-strategy.md).
