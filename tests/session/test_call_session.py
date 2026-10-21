@@ -175,6 +175,54 @@ async def test_opening_line_failure_is_logged_and_interpreting_continues():
     assert legs["b"].outbound.count(EARCON) == 1
 
 
+async def test_opening_line_streams_to_the_leg_while_it_is_synthesised():
+    """Live: the whole opening was synthesised before the first byte went out, so callers
+    heard 1.8-2.8 s of dead air after connecting (Bulbul, a 13.8 s Kannada opening)."""
+    release = asyncio.Event()
+
+    class GatedTTS(FakeTTS):
+        async def synth(self, text, voice, lang):
+            yield b"\x01\x00" * 1600
+            await release.wait()
+            yield b"\x02\x00" * 1600
+
+    prov = providers(tts={"a": GatedTTS(), "b": GatedTTS()})
+    session, legs, clock, bus = make(prov=prov, opening_line=True)
+    await attach_both(session, legs)
+    for _ in range(50):
+        await asyncio.sleep(0)
+        if legs["a"].outbound and legs["b"].outbound:
+            break
+    assert legs["a"].outbound == b"\x01\x00" * 1600 and legs["b"].outbound == b"\x01\x00" * 1600
+    release.set()
+    for _ in range(50):
+        await asyncio.sleep(0)
+    assert legs["a"].outbound.endswith(b"\x02\x00" * 1600)
+    await session.hangup()
+
+
+async def test_line_check_silence_counts_from_the_end_of_the_opening_line():
+    """Live: the 10 s line check fired at ~10 s into the call, over the rider's first
+    sentence, because the 7-9 s the callers spent hearing the opening counted as silence."""
+    tts = {"a": FakeTTS(), "b": FakeTTS()}  # 60 ms per char: openings of ~4-5 s
+    session, legs, clock, bus = make(prov=providers(tts=tts), opening_line=True)
+    await attach_both(session, legs)
+    await drive_lockstep(session, legs, clock, {"a": conversation([("silence", 10500)])})
+    assert min(len(t.requests[0][0]) * 60 for t in tts.values()) > 3000  # opening ms
+    assert bus.kinds("line_check") == []  # 10.5 s from the start, but < 10 s since the end
+    await session.wait_closed()
+
+
+async def test_line_check_silence_counts_from_activation_not_creation():
+    """A loopback call is created long before its tabs connect."""
+    session, legs, clock, bus = make()
+    clock.advance(30_000)
+    await attach_both(session, legs)
+    await drive_lockstep(session, legs, clock, {"a": conversation([("silence", 2000)])})
+    await session.wait_closed()
+    assert bus.kinds("line_check") == []
+
+
 async def test_partials_are_published():
     session, legs, clock, bus = make()
     await attach_both(session, legs)

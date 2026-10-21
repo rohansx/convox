@@ -84,6 +84,43 @@ def test_create_loopback_call_returns_page_urls():
     assert session.status == "ringing" and session.hangups == []
 
 
+def test_loopback_call_can_keep_text():
+    """record=true keeps src_text/tgt_text in GET /v1/calls/{id}/turns (live tools read it)."""
+    env = Env()
+    r = env.client.post(
+        "/loopback/calls", json={"a_lang": "hi-IN", "b_lang": "kn-IN", "record": True}
+    )
+    assert r.status_code == 201
+    call_id = r.json()["call_id"]
+    assert env.sessions[0].record is True
+    assert env.book.get(call_id).record is True
+    env.client.post("/loopback/calls", json={"a_lang": "hi-IN", "b_lang": "kn-IN"})
+    assert env.sessions[1].record is False
+
+
+def test_loopback_call_picks_a_named_pair():
+    env = Env()
+    r = env.client.post(
+        "/loopback/calls", json={"a_lang": "hi-IN", "b_lang": "kn-IN", "pair": "hi-kn-direct"}
+    )
+    assert r.status_code == 201, r.text
+    assert env.sessions[0].pair.key == "hi-kn-direct"
+    env.client.post("/loopback/calls", json={"a_lang": "hi-IN", "b_lang": "kn-IN"})
+    assert env.sessions[1].pair.key == "hi-kn"
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        {"a_lang": "hi-IN", "b_lang": "kn-IN", "pair": "nope"},
+        {"a_lang": "hi-IN", "b_lang": "ta-IN", "pair": "hi-kn-direct"},  # langs disagree
+    ],
+)
+def test_loopback_named_pair_must_exist_and_match(body):
+    r = Env().client.post("/loopback/calls", json=body)
+    assert r.status_code == 422 and r.json()["error"]["code"] == "unsupported_pair"
+
+
 def test_unsupported_loopback_pair():
     r = Env().client.post("/loopback/calls", json={"a_lang": "hi-IN", "b_lang": "od-IN"})
     assert r.status_code == 422 and r.json()["error"]["code"] == "unsupported_pair"

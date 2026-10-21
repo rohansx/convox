@@ -13,6 +13,7 @@ Decisions where the spec is open:
 - The opening line is the one send() outside the FloorController. It happens before the
   floor plays anything, is not marked, and does not hold up interpreting: frames that
   arrive while it is being synthesised are dropped; interpreting starts once it is sent.
+  It is streamed to the leg chunk by chunk as the TTS produces it.
 - Prompts (opening, line check) use the side's female voice (`voice_f`).
 - In bridge mode there is no opening line and no interpreter; the floor starts in bypass.
   After DTMF escape the interpreters are cancelled and frames are forwarded raw.
@@ -39,7 +40,7 @@ from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from typing import Any, Literal
 
-from dubhash.audio.frames import FRAME_BYTES
+from dubhash.audio.frames import FRAME_BYTES, bytes_to_ms
 from dubhash.audio.mixer import render_playback
 from dubhash.clock import Clock, MonotonicClock
 from dubhash.config.pairs import PairConfig
@@ -371,6 +372,7 @@ class CallSession:
             async with asyncio.TaskGroup() as tg:
                 self._tg = tg
                 tg.create_task(self._watch_stop(), name=f"{self.call_id}-stop")
+                self.floor.quiet_from(self._t_active)  # not from when the call was created
                 await self.floor.start()
                 for s in SIDES:
                     tg.create_task(self._pump(s), name=f"{self.call_id}-pump-{s}")
@@ -549,19 +551,30 @@ class CallSession:
     def _render(self, tr: Translation) -> AsyncIterator[bytes]:
         return self._render_partial(tr.audio, source_audio=tr.source_audio)
 
-    async def _synth(self, side: Side, text: str) -> bytes:
+    async def _synth(self, side: Side, text: str, leg: LegTransport | None = None) -> bytes:
+        """Synthesise a prompt in the side's female voice; with `leg`, stream each chunk to
+        it as it arrives (no dead air while a long prompt is synthesised)."""
         cfg = self.pair.side(side)
         tts = self.providers.tts[side]
         out = bytearray()
         async with asyncio.timeout(PROMPT_TIMEOUT_S):
             async for chunk in tts.synth(text, cfg.voice_f, cfg.lang):
                 out += chunk
+                if leg is not None and chunk:
+                    await leg.send(chunk)
         return bytes(out)
 
-    async def _prompt(self, kind: str, side: Side, text: str) -> bytes:
+    async def _prompt(
+        self, kind: str, side: Side, text: str, leg: LegTransport | None = None
+    ) -> bytes:
+        """The prompt's audio (cached per call). With `leg`, it is also sent to the leg:
+        streamed while synthesising, or in one piece from the cache."""
         key = (kind, side)
-        if key not in self._prompt_cache:
-            self._prompt_cache[key] = await self._synth(side, text)
+        if key in self._prompt_cache:
+            if leg is not None:
+                await leg.send(self._prompt_cache[key])
+        else:
+            self._prompt_cache[key] = await self._synth(side, text, leg)
         return self._prompt_cache[key]
 
     async def _play_opening(self) -> None:
@@ -569,9 +582,11 @@ class CallSession:
             text = opening_text(
                 self.pair.side(side).lang, self.pair.side(other(side)).lang, record=self.record
             )
-            audio = await self._prompt("opening", side, text)
-            await self.legs[side].send(audio)
+            audio = await self._prompt("opening", side, text, self.legs[side])
+            # the callers hear it until about t0 + its length: that is not silence
+            self.floor.quiet_from(t0 + bytes_to_ms(len(audio)))
 
+        t0 = self.clock.now_ms()
         results = await asyncio.gather(*(one(s) for s in SIDES), return_exceptions=True)
         for side, res in zip(SIDES, results, strict=True):
             if isinstance(res, BaseException):

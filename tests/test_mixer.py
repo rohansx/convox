@@ -107,8 +107,8 @@ async def test_render_earcon_first_then_tts_reframed():
 
 
 async def test_render_without_earcon():
-    frames = await _collect(render_playback(_chunks(_const(7, 320)), earcon=None))
-    assert frames == [_const(7, 320)]
+    frames = await _collect(render_playback(_chunks(_const(700, 320)), earcon=None))
+    assert frames == [_const(700, 320)]
 
 
 async def test_render_ducks_source_under_tts_and_stops_with_tts():
@@ -134,7 +134,9 @@ async def test_render_source_shorter_than_tts_only_overlaps_start():
 
 async def test_render_source_aligned_to_tts_not_earcon():
     source = _const(10000, 320)
-    frames = await _collect(render_playback(_chunks(_const(0, 320)), source_audio=source))
+    frames = await _collect(
+        render_playback(_chunks(_const(0, 320)), source_audio=source, trim_lead_ms=0)
+    )
     assert b"".join(frames[:6]) == EARCON
     assert np.all(_arr(frames[6]) == round(10000 * db_to_gain(-14.0)))
 
@@ -163,14 +165,56 @@ async def test_render_streams_before_tts_finishes():
     release = asyncio.Event()
 
     async def gated() -> AsyncIterator[bytes]:
-        yield _const(1, 320)
+        yield _const(100, 320)
         await release.wait()
-        yield _const(2, 320)
+        yield _const(200, 320)
 
     it = render_playback(gated(), earcon=None)
     first = await asyncio.wait_for(anext(it), timeout=0.05)
-    assert first == _const(1, 320)
+    assert first == _const(100, 320)
     assert not release.is_set()
     release.set()
     rest = [f async for f in it]
-    assert rest == [_const(2, 320)]
+    assert rest == [_const(200, 320)]
+
+
+# --- leading TTS silence (live: Bulbul starts every clip with 100-320 ms of zeros) -------
+
+
+async def test_render_trims_leading_digital_silence_of_tts():
+    voice = _const(900, 640)
+    tts = _chunks(b"\x00\x00" * 2400, b"\x00\x00" * 800 + voice)  # 200 ms of zeros
+    frames = await _collect(render_playback(tts, earcon=None))
+    assert b"".join(frames) == voice  # starts with the voice, nothing lost after it
+
+
+async def test_render_trim_is_capped_and_keeps_silence_inside_speech():
+    voice = _const(900, 320)
+    lead = b"\x00\x00" * (16 * 600)  # 600 ms of zeros, more than the 400 ms cap
+    gap = b"\x00\x00" * 320
+    frames = await _collect(render_playback(_chunks(lead + voice + gap + voice), earcon=None))
+    body = b"".join(frames)
+    assert body == b"\x00\x00" * (16 * 200) + voice + gap + voice
+
+
+async def test_render_ducked_source_aligned_to_first_kept_tts_sample():
+    source = _const(10000, 320)
+    tts = _chunks(b"\x00\x00" * 320 + _const(100, 320))
+    frames = await _collect(render_playback(tts, source_audio=source, earcon=None))
+    assert len(frames) == 1
+    assert np.all(_arr(frames[0]) == 100 + round(10000 * db_to_gain(-14.0)))
+
+
+async def test_render_trim_can_be_turned_off():
+    tts = b"\x00\x00" * 320 + _const(100, 320)
+    frames = await _collect(render_playback(_chunks(tts), earcon=None, trim_lead_ms=0))
+    assert b"".join(frames) == tts
+
+
+async def test_render_trims_near_silent_lead_in_too():
+    """Live (Bulbul kn): a few +-1..5 samples, then zeros, then the voice."""
+    voice = _const(900, 320)
+    lead = np.zeros(16 * 150, dtype=np.int16)
+    lead[:40] = np.tile([1, -1, 3, -5], 10)
+    frames = await _collect(render_playback(_chunks(lead.tobytes() + voice), earcon=None))
+    assert b"".join(frames) == voice

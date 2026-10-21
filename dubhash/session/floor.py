@@ -129,6 +129,12 @@ class FloorController:
 
     # --- lifecycle -------------------------------------------------------------------------
 
+    def quiet_from(self, t_ms: int) -> None:
+        """Count line-check silence from t_ms (may be in the future: the end of a prompt
+        still playing to the callers). Never moves the start of the silence back."""
+        self._quiet_since = max(self._quiet_since, t_ms)
+        self._line_checked = False
+
     async def start(self) -> None:
         """Register mark and DTMF callbacks on both legs."""
         for side, leg in self._legs.items():

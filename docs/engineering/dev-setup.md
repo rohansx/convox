@@ -128,6 +128,28 @@ services:
 
 Without it the app starts anyway, logs `store.unavailable`, and runs without a turn log.
 
+### Live loopback
+
+`tools/live_loopback.py` places one scripted call through the real app with no telephony and no browser. It starts the app in-process (uvicorn on a free port), creates a loopback call (`POST /loopback/calls` with `record: true`, so the turn log keeps text), and connects two websocket clients that behave like `static/loopback.html`: they send 20 ms PCM16 16 kHz frames in real time, play what they receive in real time into a recording, and ack each mark when playout reaches it.
+
+```bash
+STT_IMPL=real MT_IMPL=real TTS_IMPL=real uv run python tools/live_loopback.py             # hi-kn (pivot)
+STT_IMPL=real MT_IMPL=real TTS_IMPL=real uv run python tools/live_loopback.py --pair hi-kn-direct
+uv run python tools/live_loopback.py --fake            # fake providers, synthetic audio, no network
+```
+
+Set the three `*_IMPL` switches in the environment: the tool does not trust the `.env` values for them. If `.env` has no valid `DUBHASH_ENV`, prefix `DUBHASH_ENV=dev` too. Flags: `--n` (script lines, default 6), `--pause-ms`, `--log INFO`, `--out`.
+
+The script is example call 1 from [problem and users](../product/problem-and-users.md): a rider speaking Hindi on leg A and a customer speaking Kannada on leg B, 6 lines. The utterances are synthesised once with Bulbul (`shubh` for the rider, `ishita` for the customer) and cached in `out/live/utt_*.wav`. The Kannada lines are our own and still need a native speaker's review. The tool waits for both opening lines to finish playing, then plays one line at a time, and waits for the translation to finish before the next line.
+
+For each turn it prints:
+
+- **earcon** and **heard**: ms from the end of the speaker's last voiced frame to the earcon onset, and to the first non-silent frame of the translation after the earcon. This is what the listener experiences, on the client's 20 ms tick clock. No browser jitter buffer or device latency is modelled, so these are lower bounds for a real tab.
+- **eou, stt, mt, tts, queue, srv_fa**: the server turn log's stages (`GET /v1/calls/{id}/turns`), as differences of its `t_*` fields. `srv_fa` is `t_play_start - t_speech_end`.
+- **src/tgt**: the turn log's transcripts.
+
+It also prints p50/p95 for every column and when each caller first heard the opening line. It writes `out/live/<call>_a.wav` and `<call>_b.wav` (what each leg heard) and `out/live/<call>.json` (rows, raw turns, `play_to_ear_ms` and `vad_end_lag_ms` per turn, mark acks, clears). Keep live runs small: each call is about 6 STT, 6 MT and 8 TTS requests. `tests/tools/test_live_loopback.py` runs the same core loop offline with fakes. `tests/tools/test_live_loopback_live.py` runs two live lines under `-m live`.
+
 ## 7. Offline pipeline bench
 
 `tools/bench.py` (owned by the session work) plays wavs through two FakeLegs with the real controller and mixer and writes per-stage p50/p95 and a turn log. Run it as `make bench BENCH_ARGS="..."`; its flags are documented in the tool itself. See [testing strategy](testing-strategy.md).
