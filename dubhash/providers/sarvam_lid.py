@@ -31,7 +31,11 @@ log = logging.getLogger(__name__)
 
 DEFAULT_BASE_URL = "https://api.sarvam.ai"
 DEFAULT_MODEL = "saaras:v3"
-DEFAULT_THRESHOLD = 0.8
+# Measured on 8 kHz mu-law audio (L8): no Indic guess at >= 0.7 was wrong. The guesses
+# that pass 0.7 and are wrong are en-IN on loanword-only utterances ("Flat number 302",
+# "Cash on delivery ₹400", up to 0.93 on wideband audio), so English needs more.
+DEFAULT_THRESHOLD = 0.7
+DEFAULT_LANG_THRESHOLDS: dict[str, float] = {"en-IN": 0.95}
 DEFAULT_WINDOW_MS = 2000
 KEEPALIVE_S = 60.0  # as SarvamMT: keep the TLS connection between turns
 
@@ -57,6 +61,7 @@ class SarvamLID:
         base_url: str = DEFAULT_BASE_URL,
         model: str = DEFAULT_MODEL,
         threshold: float = DEFAULT_THRESHOLD,
+        lang_thresholds: dict[str, float] | None = None,
         window_ms: int | None = DEFAULT_WINDOW_MS,
         text_check: bool = False,
         timeout_s: float = 5.0,
@@ -70,6 +75,9 @@ class SarvamLID:
         self._timeout = timeout_s
         self.model = model
         self.threshold = threshold
+        self.lang_thresholds = dict(
+            DEFAULT_LANG_THRESHOLDS if lang_thresholds is None else lang_thresholds
+        )
         self.window_ms = window_ms
         self.text_check = text_check
 
@@ -82,7 +90,8 @@ class SarvamLID:
             d = await self.detect(pcm16_16k)
         except _Failed:
             return LangGuess(None, 0.0, "lid")
-        guess = pick(d.lang, d.confidence, candidates, threshold=self.threshold)
+        threshold = self.lang_thresholds.get(d.lang or "", self.threshold)
+        guess = pick(d.lang, d.confidence, candidates, threshold=threshold)
         if guess.lang is not None and self.text_check and d.transcript.strip():
             try:
                 second = await self.text_lid(d.transcript)

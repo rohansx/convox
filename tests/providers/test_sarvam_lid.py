@@ -159,6 +159,23 @@ async def test_text_check_keeps_an_agreeing_speech_guess():
     assert paths == ["/speech-to-text", "/text-lid"]
 
 
+async def test_measured_defaults_threshold_0_7_and_english_needs_0_95():
+    """L8: on PSTN audio no Indic guess at >= 0.7 was wrong; the wrong guesses that pass
+    0.7 are en-IN on loanword-only utterances ("Cash on delivery ₹400", 0.93 clean)."""
+    assert (await _lid(lambda req: _stt_reply("mr-IN", 0.71)).identify(SEC, HI_MR)).lang == "mr-IN"
+    assert (await _lid(lambda req: _stt_reply("mr-IN", 0.69)).identify(SEC, HI_MR)).lang is None
+    en = ["en-IN", "ta-IN"]
+    assert (await _lid(lambda req: _stt_reply("en-IN", 0.93)).identify(SEC, en)).lang is None
+    assert (await _lid(lambda req: _stt_reply("en-IN", 0.96)).identify(SEC, en)).lang == "en-IN"
+
+
+async def test_per_language_thresholds_are_configurable():
+    lid = _lid(lambda req: _stt_reply("en-IN", 0.8), threshold=0.5, lang_thresholds={})
+    assert (await lid.identify(SEC, ["en-IN"])).lang == "en-IN"
+    lid = _lid(lambda req: _stt_reply("hi-IN", 0.8), lang_thresholds={"hi-IN": 0.9})
+    assert await lid.identify(SEC, ["hi-IN"]) == LangGuess(None, 0.8, "lid")
+
+
 async def test_model_is_configurable():
     models: list[str] = []
 
