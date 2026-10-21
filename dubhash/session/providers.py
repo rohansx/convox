@@ -6,8 +6,9 @@
   A->B synthesises with `tts["b"]`; the opening line and line check to leg X use `tts[X]`.
 - MT by settings ("sarvam" unless MT_IMPL=fake or the pair is all-fake), wrapped in the
   per-call CachedMT.
-- VAD: SileroVAD when the model loads, else EnergyVAD; one fresh instance per call to
-  `vad_factory()` (Silero keeps recurrent state per leg).
+- VAD: SileroVAD when the model loads, else EnergyVAD, behind NoiseFloorGate (speech must
+  also be 6 dB over the room's noise floor, L7); one fresh instance per call to
+  `vad_factory()` (Silero keeps recurrent state per leg, the gate the leg's floor).
 
 Fake names, *_IMPL=fake and DUBHASH_ENV=test all map to the fakes (providers.registry).
 """
@@ -25,7 +26,7 @@ from dubhash.config.pairs import PairConfig
 from dubhash.config.settings import Settings
 from dubhash.interp.contracts import MT, STT, TTS, VAD
 from dubhash.interp.mt_cache import CachedMT
-from dubhash.interp.vad import SileroVAD
+from dubhash.interp.vad import NoiseFloorGate, SileroVAD
 from dubhash.providers.fakes import EnergyVAD
 from dubhash.providers.registry import build_mt, build_stt, build_tts
 from dubhash.types import Side
@@ -48,12 +49,15 @@ def _all_fake(pair: PairConfig) -> bool:
 
 
 def _vad_factory() -> Callable[[], VAD]:
+    """Silero (or EnergyVAD if it will not load) behind the adaptive noise-floor gate."""
+    inner: Callable[[], VAD]
     try:
         SileroVAD()
+        inner = SileroVAD
     except Exception as e:  # missing model, broken onnxruntime, ...
         log.warning("vad.fallback", extra={"error": repr(e), "vad": "energy"})
-        return EnergyVAD
-    return SileroVAD
+        inner = EnergyVAD
+    return lambda: NoiseFloorGate(inner())
 
 
 async def prewarm(providers: Providers, pair: PairConfig) -> None:
