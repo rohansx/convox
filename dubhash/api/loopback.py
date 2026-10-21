@@ -39,11 +39,12 @@ from dubhash.api.calls import (
     CallBook,
     CallHandle,
     LegState,
+    auto_kw,
+    call_pair,
     get_call_book,
     get_pairs,
     new_call_id,
     note_console,
-    unsupported_pair,
 )
 from dubhash.api.deps import get_session_factory, get_session_registry, require_console_auth
 from dubhash.api.legs_ws import (
@@ -60,7 +61,7 @@ from dubhash.api.schemas import (
     LoopbackCallResponse,
     validation_error,
 )
-from dubhash.config.pairs import PairConfig, find_pair, orient
+from dubhash.config.pairs import PairConfig, orient
 from dubhash.config.settings import Settings
 from dubhash.join.tokens import verify_join_token
 from dubhash.legs.webrtc import WebRtcLeg
@@ -105,6 +106,7 @@ def create_loopback_call(
     pairs: dict[str, PairConfig],
 ) -> LoopbackCallResponse:
     settings: Settings = request.app.state.settings
+    auto = None
     if req.pair is not None:
         named = pairs.get(req.pair)
         pair = orient(named, req.a_lang, req.b_lang) if named is not None else None
@@ -113,14 +115,23 @@ def create_loopback_call(
                 422, "unsupported_pair", f"no pair {req.pair!r} for {req.a_lang}-{req.b_lang}"
             )
     else:
-        pair = find_pair(pairs, req.a_lang, req.b_lang)
-    if pair is None:
-        raise unsupported_pair(req.a_lang, req.b_lang)
+        pair, auto = call_pair(
+            pairs,
+            settings,
+            {"a": req.a_lang, "b": req.b_lang},
+            {"a": req.a_lang_hint, "b": req.b_lang_hint},
+        )
     call_id = new_call_id()
     # both phones in one room (/join, loopback): cross-talk gate on, no ducked original
     opening = req.opening_line or settings.loopback_opening_line
     session = factory(
-        call_id, pair, mode=req.mode, record=req.record, co_located=True, opening_line=opening
+        call_id,
+        pair,
+        mode=req.mode,
+        record=req.record,
+        co_located=True,
+        opening_line=opening,
+        **auto_kw(auto),
     )
     sessions.create(call_id, session)
     handle = CallHandle(

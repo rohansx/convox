@@ -62,6 +62,11 @@ class Settings(BaseSettings):
     # (~1.5-2 s), "full" = the disclosure sentence (+ record sentence), "off" = none.
     loopback_opening_line: Literal["short", "full", "off"] = "short"  # /loopback and /join
     pstn_opening_line: Literal["short", "full", "off"] = "full"  # POST /v1/calls
+    # lang "auto" (docs/tech-spec/language-detection.md): how an auto side's STT opens
+    # ("guess": its best language so far; "unknown": the vendor's auto-detect code, which
+    # Sarvam realtime rejects today) and the shortest utterance decided on (L8 tunes it).
+    auto_stt_open: Literal["guess", "unknown"] = "guess"
+    lang_min_speech_ms: int = 1500
 
     # Per-call recording for diagnosis (dubhash/store/recorder.py): mic and playout wavs,
     # every CallEvent, client telemetry and a summary under call_recording_dir. Dev and

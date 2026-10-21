@@ -18,6 +18,7 @@ from pydantic import AnyHttpUrl, BaseModel, Field, ValidationError
 E164 = r"^\+[1-9]\d{7,14}$"
 INDIAN_MOBILE = r"^\+91\d{10}$"
 BCP47 = r"^[a-z]{2,3}-[A-Z]{2}$"
+LANG_OR_AUTO = r"^([a-z]{2,3}-[A-Z]{2}|auto)$"  # "auto": detected on the call
 
 ErrorCode = Literal[
     "invalid_number",
@@ -34,7 +35,10 @@ ErrorCode = Literal[
 
 class LegSpec(BaseModel):
     number: str = Field(pattern=INDIAN_MOBILE)
-    lang: str = Field(pattern=BCP47)
+    lang: str = Field(pattern=LANG_OR_AUTO)
+    # a prior for lang "auto" (e.g. the platform's profile language); ignored otherwise,
+    # and ignored when it is not a supported language
+    lang_hint: str | None = Field(default=None, pattern=BCP47)
 
 
 class CreateCallRequest(BaseModel):
@@ -59,8 +63,10 @@ class HangupResponse(BaseModel):
 
 
 class LoopbackCallRequest(BaseModel):
-    a_lang: str = Field(pattern=BCP47)
-    b_lang: str = Field(pattern=BCP47)
+    a_lang: str = Field(pattern=LANG_OR_AUTO)
+    b_lang: str = Field(pattern=LANG_OR_AUTO)
+    a_lang_hint: str | None = Field(default=None, pattern=BCP47)  # for a_lang "auto"
+    b_lang_hint: str | None = Field(default=None, pattern=BCP47)  # for b_lang "auto"
     mode: Literal["interpret", "bridge"] = "interpret"
     record: bool = False  # keep src_text/tgt_text in the turn log (dev and live tools)
     pair: str | None = None  # pairs.yaml key, e.g. "hi-kn-direct"; default: by languages

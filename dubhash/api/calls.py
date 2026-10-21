@@ -44,8 +44,16 @@ from dubhash.api.schemas import (
     HangupResponse,
     validation_error,
 )
-from dubhash.config.pairs import PairConfig, find_pair, load_pairs
+from dubhash.config.pairs import (
+    AUTO,
+    PairConfig,
+    auto_pair,
+    find_pair,
+    language_sides,
+    load_pairs,
+)
 from dubhash.config.settings import Settings
+from dubhash.session.language import AutoLang, ResolverConfig
 from dubhash.telephony import Dialer, DialError, ProviderUnavailable, build_dialer, leg_ws_url
 from dubhash.types import Side
 
@@ -255,6 +263,37 @@ def unsupported_pair(lang_a: str, lang_b: str) -> ApiError:
     return ApiError(422, "unsupported_pair", f"no config for pair {lang_a[:2]}-{lang_b[:2]}")
 
 
+def call_pair(
+    pairs: dict[str, PairConfig],
+    settings: Settings,
+    langs: dict[Side, str],
+    hints: dict[Side, str | None],
+) -> tuple[PairConfig, AutoLang | None]:
+    """The call's pair, and its AutoLang when a side's lang is "auto" (then the pair is
+    the starting one, config.pairs.auto_pair). Raises the 422 unsupported_pair."""
+    if AUTO not in langs.values():
+        pair = find_pair(pairs, langs["a"], langs["b"])
+        if pair is None:
+            raise unsupported_pair(langs["a"], langs["b"])
+        return pair, None
+    try:
+        pair = auto_pair(pairs, langs, hints)
+    except ValueError:
+        raise unsupported_pair(langs["a"], langs["b"]) from None
+    auto = AutoLang(
+        hints={s: hints.get(s) for s in SIDES if langs[s] == AUTO},
+        sides=language_sides(pairs),
+        config=ResolverConfig(min_speech_ms=settings.lang_min_speech_ms),
+        stt_open=settings.auto_stt_open,
+    )
+    return pair, auto
+
+
+def auto_kw(auto: AutoLang | None) -> dict[str, Any]:
+    """Session-factory kwargs for an AutoLang (none for fixed pairs)."""
+    return {"auto": auto} if auto is not None else {}
+
+
 def note_console(conn: HTTPConnection, row: dict[str, Any]) -> None:
     """Show the new call on the console's calls list (InMemoryCallRegistry)."""
     put = getattr(conn.app.state.registry, "put", None)
@@ -280,9 +319,12 @@ async def create_call(
         req = CreateCallRequest.model_validate(raw)
     except ValidationError as e:
         raise validation_error(e) from None
-    pair = find_pair(pairs, req.a.lang, req.b.lang)
-    if pair is None:
-        raise unsupported_pair(req.a.lang, req.b.lang)
+    pair, auto = call_pair(
+        pairs,
+        settings,
+        {"a": req.a.lang, "b": req.b.lang},
+        {"a": req.a.lang_hint, "b": req.b.lang_hint},
+    )
     try:
         dialer = dialers(req.provider)
     except ProviderUnavailable as e:
@@ -296,6 +338,7 @@ async def create_call(
         escape_dtmf=req.escape_dtmf,
         record=req.record,
         opening_line=settings.pstn_opening_line,
+        **auto_kw(auto),
     )
     sessions.create(call_id, session)
     handle = CallHandle(
@@ -370,6 +413,9 @@ async def get_call(call_id: str, sessions: Sessions, book: Book) -> dict[str, An
             leg.pop("attached", None)
             leg.pop("status", None)
         provider, created_at, ended_at = handle.provider, handle.created_at, handle.ended_at
+        for s, detected in (summary.get("langs") or {}).items():
+            if s in legs:
+                legs[s]["detected"] = detected  # lang "auto": what the call resolved
     else:
         raw = summary.get("status")
         status = {"active": "in_progress", "ended": "completed"}.get(raw, raw or "ringing")
