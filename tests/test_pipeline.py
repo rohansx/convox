@@ -666,3 +666,21 @@ async def test_mt_still_called_in_the_other_direction_of_a_skip_pair():
     await interp.run(feed(pcm, clock))
     await interp.aclose()
     assert mt.langs == [("en-IN", "mr-IN")]
+
+
+async def test_gu_en_pair_skips_mt_on_the_gujarati_side_and_translates_the_english():
+    gu_en = PAIRS["gu-en"]
+    pcm = conversation([("silence", 300), ("speech", 1500), ("silence", 800)])
+    clock = FakeClock()
+    mt = _SpyMT()
+    interp, sink = make(clock, stt=FakeSTT(script=["my flat is 302"]), mt=mt, pair=gu_en)
+    await interp.run(feed(pcm, clock))
+    await interp.aclose()
+    (tr,) = sink.translations
+    assert mt.langs == [] and tr.tgt_text == "my flat is 302"
+    clock = FakeClock()
+    mt = _SpyMT()
+    interp, sink = make(clock, stt=FakeSTT(script=["otp 4729"]), mt=mt, pair=gu_en, side="b")
+    await interp.run(feed(pcm, clock))
+    await interp.aclose()
+    assert mt.langs == [("en-IN", "gu-IN")]

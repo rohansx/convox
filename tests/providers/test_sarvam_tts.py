@@ -146,6 +146,8 @@ async def test_stalled_vendor_times_out():
 def test_voice_mapping():
     assert vendor_voice("bulbul:kn-female-1") == ("bulbul:v3", "ishita")
     assert vendor_voice("bulbul:ta-male-1") == ("bulbul:v3", "shubh")
+    assert vendor_voice("bulbul:gu-male-1") == ("bulbul:v3", "shubh")
+    assert vendor_voice("bulbul:gu-female-1") == ("bulbul:v3", "ishita")
     assert vendor_voice("bulbul:priya") == ("bulbul:v3", "priya")
     assert vendor_voice("bulbul:chaitra_kn_conversation") == (
         "bulbul:v4-flash",
