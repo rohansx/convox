@@ -7,6 +7,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 PACKAGE_DIR = Path(__file__).resolve().parent.parent
@@ -57,6 +58,17 @@ class Settings(BaseSettings):
     tts_impl: Literal["real", "fake"] = "fake"
     enable_webrtc_leg: bool = True
     bench_realtime: bool = False
+
+    @field_validator("pairs_file")
+    @classmethod
+    def _resolve_pairs_file(cls, v: Path) -> Path:
+        """Relative paths resolve against the cwd, then the repo root, then the package."""
+        if v.is_absolute() or v.exists():
+            return v
+        for base in (PACKAGE_DIR.parent, PACKAGE_DIR):
+            if (base / v).exists():
+                return base / v
+        return v
 
     @property
     def forces_fakes(self) -> bool:

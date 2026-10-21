@@ -57,3 +57,10 @@ async def test_event_bus_filters_by_call():
     bus.publish(CallEvent("c_1", 5, "state", {"to": "IDLE"}))
     await asyncio.wait_for(t, 1)
     assert [e.ts_ms for e in got] == [0, 5]
+
+
+def test_relative_pairs_file_resolves_from_any_cwd(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    for rel in ("config/pairs.yaml", "dubhash/config/pairs.yaml"):
+        s = Settings(_env_file=None, pairs_file=rel)
+        assert s.pairs_file.exists(), rel

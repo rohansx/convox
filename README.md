@@ -19,7 +19,7 @@ Then open:
 
 | URL | What |
 |---|---|
-| `http://127.0.0.1:8000/loopback/new` | creates a loopback call and gives two tab URLs: one browser tab per leg, talk into each mic (lands with the phase-2 session/API work) |
+| `http://127.0.0.1:8000/loopback/new` | creates a loopback call and gives two tab URLs: one browser tab per leg, talk into each mic |
 | `http://127.0.0.1:8000/ward` | ward mode: one phone, two people |
 | `http://127.0.0.1:8000/console` | live console: turns, state badge, per-stage latency over SSE (HTTP Basic, any user, password `CONSOLE_PASSWORD`) |
 
@@ -35,18 +35,18 @@ One `CallSession` per call owns two legs (Exotel, Plivo, WebRTC or Fake, behind 
 |---|---|---|---|
 | Audio: frames, resample, mixer, earcon, wav | works, unit-tested | n/a | n/a |
 | Floor controller (states, queue, barge-in, DTMF, bypass) | works, invariant tests | n/a | n/a |
-| Interpreter pipeline | works end to end on fakes | wired to real providers; not yet run live | n/a |
+| Interpreter pipeline | works end to end on fakes | wired to real providers; not yet run live (needs `.env`) | n/a |
 | Sarvam STT, Mayura translate, Bulbul TTS | `FakeSTT` / `FakeMT` / `FakeTTS` | implemented, mock-tested; run `make smoke` to verify live | n/a |
 | ElevenLabs Flash v2.5 TTS (hi, en) | `FakeTTS` | implemented, mock-tested; `make smoke` | n/a |
 | Deepgram Nova STT (fallback) | `FakeSTT` | mock-tested only, no key yet | n/a |
 | FakeLeg, WebRtcLeg + loopback page | works | browser mic, real providers | n/a |
 | ExotelLeg | mock-tested against the documented protocol | n/a | pending: Exotel voicebot access expected in a few days (open question 1, 16 kHz, still unverified) |
 | PlivoLeg | mock-tested (L16 and mu-law) | n/a | pending: Udyam-verified account (open question 6) |
-| CallSession, registry, `/v1/calls`, `/ws/leg`, `/loopback/new` | phase 2, in progress | in progress | in progress |
+| CallSession, registry, `/v1/calls`, `/ws/leg`, `/loopback/new` | works end to end on fakes (two-tab loopback integration test) | wired; not yet run live | Exotel/Plivo dialers mock-tested; pending access |
 | Console (`/console`) and ward page (`/ward`) | pages and SSE work | n/a | n/a |
 | Turn writer (Postgres) | works with SQLite in tests; app runs without a DB | n/a | n/a |
 | Tools: `smoke`, `label`, `gen_fixtures`, `record_fixtures` | tested | `smoke` is the live check | n/a |
-| Tools: `bench`, `loopback` | phase 2, in progress | | |
+| Tools: `bench` | works on fakes | `--stt/--mt/--tts real` once keys are in `.env` | n/a |
 
 Latency numbers we quote come from real PSTN calls only; loopback numbers are for correctness. See [evaluation and metrics](docs/engineering/evaluation-and-metrics.md).
 
@@ -61,10 +61,10 @@ dubhash/
   interp/       Protocols (contracts.py), VAD, endpointing, gender, MT cache, pipeline
   legs/         LegTransport base, FakeLeg, ExotelLeg, PlivoLeg, WebRtcLeg (+ loopback page)
   providers/    Sarvam STT/MT/Bulbul, ElevenLabs, Deepgram, registry, fakes
-  session/      FloorController (CallSession and registry land in phase 2)
+  session/      CallSession, FloorController, TurnLog, registry, providers wiring, prompts
   store/        SQLAlchemy models, background TurnWriter
   clock.py, events.py, types.py   shared clock, event bus, value types
-tools/          smoke.py, label.py, gen_fixtures.py, record_fixtures.py (bench.py, loopback.py: phase 2)
+tools/          smoke.py, label.py, gen_fixtures.py, record_fixtures.py bench.py
 tests/          unit, contract and pipeline tests; fixtures/ holds small synthetic wavs
 docs/           product, architecture, tech spec, plan, engineering
 Makefile        install, test, test-live, lint, fmt, dev, up, down, bench, smoke, fixtures, label

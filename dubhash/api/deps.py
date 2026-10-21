@@ -24,7 +24,7 @@ from dubhash.config.settings import Settings
 from dubhash.events import EventBus
 from dubhash.types import CallEvent
 
-ACTIVE_STATUSES = frozenset({"ringing", "in_progress"})
+ACTIVE_STATUSES = frozenset({"ringing", "active", "in_progress"})
 MARKER_KINDS = frozenset({"dtmf", "barge_in", "bypass", "gap", "provider_error"})
 
 

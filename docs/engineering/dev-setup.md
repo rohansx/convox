@@ -1,6 +1,6 @@
 # Dev setup
 
-This document gets a new engineer from a clean laptop to a running dubhash: the offline tests on fakes, the API with the console, the live vendor smoke test, and the eval tools, without spending any telephony minutes. Every command here exists in the repo today. Where something lands later in the build (the session API, `tools/bench.py`, the loopback call), it says so. If you change a command, change this doc in the same PR; `tests/tools/test_repo_files.py` checks that its links resolve and that the main commands are still mentioned.
+This document gets a new engineer from a clean laptop to a running dubhash: the offline tests on fakes, the API with the console, the live vendor smoke test, and the eval tools, without spending any telephony minutes. Every command here exists in the repo today. If you change a command, change this doc in the same PR; `tests/tools/test_repo_files.py` checks that its links resolve and that the main commands are still mentioned.
 
 ## Prerequisites
 
@@ -32,7 +32,7 @@ cp .env.example .env
 | `make fmt` | `ruff check --fix` and `ruff format` |
 | `make dev` | `uv run uvicorn dubhash.api.app:app --host 127.0.0.1 --port 8000 --reload` |
 | `make up` / `make down` | `docker compose up -d postgres redis` / `docker compose down` |
-| `make bench` | `uv run python -m tools.bench $(BENCH_ARGS)` (bench lands in phase 2) |
+| `make bench` | `uv run python -m tools.bench $(BENCH_ARGS)` |
 | `make smoke` | `uv run python tools/smoke.py $(SMOKE_ARGS)` |
 | `make fixtures` | `uv run python tools/gen_fixtures.py` |
 | `make label` | `uv run python tools/label.py $(TURNS) --rater "$(RATER)"` |
@@ -107,7 +107,7 @@ Exactly one worker, always: both legs of a call must land in the same process. `
 | `/healthz` | liveness |
 | `/console` | live console: active calls, turns, state badge, per-stage latency over SSE |
 | `/ward` | ward mode page (one phone, two people) |
-| `/loopback/new` | two browser tabs as two legs (`WebRtcLeg`): open each tab URL, allow the mic, talk. Lands with the phase-2 session/API work |
+| `/loopback/new` | two browser tabs as two legs (`WebRtcLeg`): open each tab URL, allow the mic, talk. |
 
 Loopback latency numbers are for correctness only. Deck numbers come from real PSTN calls. See [latency engineering](latency-engineering.md).
 
@@ -128,7 +128,7 @@ services:
 
 Without it the app starts anyway, logs `store.unavailable`, and runs without a turn log.
 
-## 7. Offline pipeline bench (phase 2)
+## 7. Offline pipeline bench
 
 `tools/bench.py` (owned by the session work) plays wavs through two FakeLegs with the real controller and mixer and writes per-stage p50/p95 and a turn log. Run it as `make bench BENCH_ARGS="..."`; its flags are documented in the tool itself. See [testing strategy](testing-strategy.md).
 
@@ -150,7 +150,7 @@ uv run --with sounddevice python tools/record_fixtures.py prompts/hi.txt --lang 
 ## 9. Real phones (once Exotel access lands)
 
 1. Get a public TLS endpoint. Use the VM (see [deployment](deployment.md)). A local tunnel works for a first smoke test only, because its RTT pollutes latency.
-2. Create a call with `POST /v1/calls` (see [api](../tech-spec/api.md)) with both numbers, languages and `"provider": "exotel"`. This endpoint lands with the phase-2 session/API work.
+2. Create a call with `POST /v1/calls` (see [api](../tech-spec/api.md)) with both numbers, languages and `"provider": "exotel"`.
 3. Both phones ring. Interpretation starts once both websockets have sent `start`.
 4. Check the `start` message's `media_format` in the logs (`leg.start`, `leg.resample`). Confirm Exotel actually sends 16 kHz. This is open question 1 and the first thing to test.
 
