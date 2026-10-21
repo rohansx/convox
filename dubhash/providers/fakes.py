@@ -72,7 +72,8 @@ class FakeSTTStream:
         if scripted is not None:
             return " ".join(scripted.split()[:n_words])
         if self._owner.lettered:
-            return " ".join(_lettered(i) for i in range(1, n_words + 1))
+            # ends a clause like a real final, so the chunker may commit it (L9)
+            return " ".join(_lettered(i) for i in range(1, n_words + 1)) + "."
         return " ".join(f"w{i}" for i in range(1, n_words + 1))
 
     async def push(self, frame: bytes) -> None:

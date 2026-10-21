@@ -58,10 +58,17 @@ def _words(text: str) -> list[str]:
     return [w for w in (t.strip(_STRIP) for t in _WORD.findall(text)) if w]
 
 
+_CLAUSE_END = frozenset(".,?!;।॥")
+
+
 def chunk_text_ok(text: str) -> bool:
     """May this STT final be committed as a chunk now (else wait for more speech)?"""
     raw = text.strip()
     if raw.endswith("₹"):
+        return False
+    # only at a clause boundary the recognizer heard: an unpunctuated final is mid-phrase
+    # (live L9: "so please keep | the prescription ready" lost its meaning)
+    if not raw or raw[-1] not in _CLAUSE_END:
         return False
     words = _words(raw)
     if len(words) < MIN_WORDS:

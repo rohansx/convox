@@ -13,7 +13,9 @@ from dubhash.interp.chunker import chunk_text_ok, pause_commits
         "मैं गेट के बाहर खड़ा हूँ,",
         "Take one tablet twice a day,",
         "The flat is on the third floor.",
-        "My OTP is 4729 and the parcel",  # a number inside is fine
+        "My OTP is 4729 and the parcel is here.",  # a number inside is fine
+        "क्या आप गेट पर आ सकते हैं?",
+        "मैं पाँच मिनट में पहुँच जाऊँगा।",
     ],
 )
 def test_ok(text):
@@ -63,3 +65,19 @@ def test_pause_commits_only_after_pause_and_min_speech():
     assert not pause_commits(now=1800, t_last_speech=1500, chunk_t0=400, pause_ms=300, min_ms=1200)
     # the last speech frame counts (20 ms): 1180 + 20 = 1200
     assert pause_commits(now=1480, t_last_speech=1180, chunk_t0=0, pause_ms=300, min_ms=1200)
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        # live L9 (c_ydbtw4qy6q): cut mid-phrase, "keep | the prescription ready" lost meaning
+        "The delivery OTP is 4729, so please keep",
+        "The delivery OTP is 4729 so please keep",
+        "please put the parcel near the",
+        "I will send my son to collect",
+    ],
+)
+def test_waits_until_the_stt_ends_a_clause(text):
+    """Commit only at a clause boundary the recognizer heard (. , ? ! । ;): an unpunctuated
+    final is mid-phrase, and a verb cut from its object changes the meaning."""
+    assert not chunk_text_ok(text), text

@@ -23,7 +23,7 @@
 # hi-kn: 200 (L3, live first-audio p50 1727 -> 1377 ms, 20/20 finals identical; half of
 # the early finals are discarded on comma pauses, costing an extra STT stream each and
 # rarely a cancelled MT call).
-# max_utterance_ms (default 7000, not set below): an utterance that has run this long ends at
+# max_utterance_ms (default 15000, not set below; 7000 cut live sentences mid-phrase, L9): an utterance that has run this long ends at
 # the next pause between words (L7), so a noisy room or a monologue is never held back.
 # chunking (default false, not set below), chunk_pause_ms (300), chunk_min_ms (1200):
 # chunked interpretation (L9). A pause of chunk_pause_ms after chunk_min_ms of speech

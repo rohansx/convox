@@ -19,7 +19,8 @@ CHUNK = dataclasses.replace(
 TWO = conversation(
     [("silence", 300), ("speech", 1500), ("silence", 400), ("speech", 1500), ("silence", 3000)]
 )
-C0, C1 = "main gate ke bahar khada hoon", "building ka naam bataiye"
+# real Sarvam finals carry clause punctuation; a chunk commits only at one (L9)
+C0, C1 = "main gate ke bahar khada hoon,", "building ka naam bataiye."
 
 
 async def test_a_pause_commits_a_chunk_that_plays_while_the_speaker_goes_on():
@@ -106,7 +107,7 @@ async def test_h_three_chunks_in_order_one_utterance():
         [("silence", 300), ("speech", 1500), ("silence", 400), ("speech", 1300),
          ("silence", 400), ("speech", 1000), ("silence", 3000)]
     )  # fmt: skip
-    texts = ["pehla hissa yeh hai bhai", "doosra hissa yeh hai bhai", "teesra hissa"]
+    texts = ["pehla hissa yeh hai bhai,", "doosra hissa yeh hai bhai,", "teesra hissa."]
     interp, sink, _, _ = await run(CHUNK, texts, pcm, stt_ms=50)
     trs = sink.translations
     assert [t.src_text for t in trs] == texts

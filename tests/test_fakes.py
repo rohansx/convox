@@ -214,4 +214,4 @@ async def test_lettered_words_have_no_digits():
     s = await stt.open("hi-IN")
     for f in frames(speech(1200)):
         await s.push(f)
-    assert await s.end() == "wa wb wc wd"
+    assert await s.end() == "wa wb wc wd."  # ends a clause, like a real final

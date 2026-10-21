@@ -25,7 +25,7 @@ PAIRS = load_pairs(Path(__file__).resolve().parents[2] / "dubhash" / "config" / 
 CHUNKED = dataclasses.replace(
     PAIRS["fake-fake"], early_final_ms=200, chunking=True, chunk_pause_ms=300, chunk_min_ms=1200
 )
-C0, C1 = "bhaiya main gate ke bahar hoon", "aap neeche aa jaiye please"
+C0, C1 = "bhaiya main gate ke bahar hoon,", "aap neeche aa jaiye please."  # clause ends (L9)
 # A: 1.5 s clause, 400 ms comma pause, 1.5 s clause (speech 300..3700 ms)
 A_VOICE = at_dbfs(
     silence(300) + speech(1500) + silence(400) + speech(1500, f0=150.0) + silence(5000), -20.0
