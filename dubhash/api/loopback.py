@@ -106,7 +106,8 @@ def create_loopback_call(
     if pair is None:
         raise unsupported_pair(req.a_lang, req.b_lang)
     call_id = new_call_id()
-    session = factory(call_id, pair, mode=req.mode, record=req.record)
+    # both phones in one room (/join, loopback): cross-talk gate on, no ducked original
+    session = factory(call_id, pair, mode=req.mode, record=req.record, co_located=True)
     sessions.create(call_id, session)
     handle = CallHandle(
         call_id=call_id,

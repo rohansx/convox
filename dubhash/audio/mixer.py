@@ -1,5 +1,10 @@
-"""Builds the listener's outbound stream for one playback: earcon, then TTS at 0 dB with the
-speaker's original mixed underneath at duck_db (-14 dB by default).
+"""Builds the listener's outbound stream for one playback: earcon, then TTS at 0 dB with,
+optionally, the speaker's original mixed underneath at duck_db.
+
+duck_ms limits the original to the first duck_ms of the TTS (a short "a real person spoke"
+cue on telephony calls); None keeps it under the whole translation. Calls with co-located
+phones (/join, loopback) pass no source at all: the listener already heard the original in
+the room, and replaying it is the "double sound" (docs/tech-spec/audio.md section 3).
 
 Decisions (open questions in docs/tech-spec/audio.md section 6):
 - The earcon plays at translation start, immediately before the TTS audio.
@@ -81,12 +86,14 @@ async def render_playback(
     *,
     source_audio: bytes = b"",
     duck_db: float = -14.0,
+    duck_ms: int | None = None,
     earcon: bytes | None = EARCON,
     stats: RenderStats | None = None,
     trim_lead_ms: int = TRIM_LEAD_MS,
 ) -> AsyncIterator[bytes]:
     """Yield 640-byte frames: earcon, then TTS reframed, with source_audio mixed underneath at
-    duck_db from the first TTS sample until either runs out. Ends when the TTS ends; the last
+    duck_db from the first TTS sample until either runs out, or for at most duck_ms of TTS
+    when duck_ms is given (0 = no source). Ends when the TTS ends; the last
     partial frame is zero-padded (source is not mixed into the padding). Streams: each frame
     is yielded as soon as the TTS bytes for it arrive. Up to trim_lead_ms of leading
     near-silent TTS samples (|x| <= TRIM_LEAD_PEAK) are dropped (the source then aligns
@@ -101,6 +108,8 @@ async def render_playback(
             yield f
 
     offset = 0  # bytes of TTS (and so of source) consumed
+    if duck_ms is not None:
+        source_audio = source_audio[: ms_to_bytes(max(0, duck_ms))]
 
     def _duck(chunk: bytes) -> bytes:
         nonlocal offset

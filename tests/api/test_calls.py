@@ -65,6 +65,7 @@ async def test_create_call_dials_both_legs_and_registers_session():
     assert r.json() == {"call_id": call_id, "status": "ringing"}
     session = env.registry.get(call_id)
     assert session is env.sessions[0]
+    assert not session.kw.get("co_located", False)  # two phone lines: no cross-talk
     assert session.pair.key == "hi-kn"
     assert session.mode == "bridge" and session.escape_dtmf == "9" and session.record is False
     dialed = {d.side: d for d in env.dialer.calls}

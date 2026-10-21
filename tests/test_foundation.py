@@ -30,7 +30,7 @@ def test_pairs_load():
     pairs = load_pairs(Settings().pairs_file)
     hk = pairs["hi-kn"]
     assert hk.a.lang == "hi-IN" and hk.b.tts == "bulbul"
-    assert hk.eou_ms == 550 and hk.barge_in_min_ms == 1200 and hk.duck_db == -14
+    assert hk.eou_ms == 550 and hk.barge_in_min_ms == 1200 and hk.duck_db == -20
     assert hk.side("b").voice("f") == "bulbul:kn-female-1"
     assert find_pair(pairs, "hi-IN", "kn-IN") is hk
 

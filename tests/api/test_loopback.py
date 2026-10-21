@@ -84,6 +84,14 @@ def test_create_loopback_call_returns_page_urls():
     assert session.status == "ringing" and session.hangups == []
 
 
+def test_loopback_calls_are_co_located():
+    """Both phones are in one room: cross-talk gate on, no ducked original."""
+    env = Env()
+    r = env.client.post("/loopback/calls", json={"a_lang": "hi-IN", "b_lang": "kn-IN"})
+    assert r.status_code == 201
+    assert env.sessions[0].kw.get("co_located") is True
+
+
 def test_loopback_call_can_keep_text():
     """record=true keeps src_text/tgt_text in GET /v1/calls/{id}/turns (live tools read it)."""
     env = Env()

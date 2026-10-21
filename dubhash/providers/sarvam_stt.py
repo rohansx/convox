@@ -126,6 +126,8 @@ class WarmSTTStream:
         self._closed = False
         self._recoveries = 0
         self.eou_signal = asyncio.Event()  # vendor end-of-utterance hint, when it has one
+        # language the vendor reports hearing on a final, when it does (session/crosstalk)
+        self.detected_lang: str | None = None
 
     # -- wire hooks -----------------------------------------------------------------
     def _final_per_stream(self) -> bool:
@@ -394,6 +396,12 @@ class SarvamSTTStream(WarmSTTStream):
         if event == "transcript.partial":
             self._partials.put_nowait(str(msg.get("text", "")))
         elif event == "transcript.final":
+            data = msg.get("data")
+            lang = msg.get("language_code") or (
+                data.get("language_code") if isinstance(data, dict) else None
+            )
+            if lang:
+                self.detected_lang = str(lang)
             self._add_final(str(msg.get("text", "")))
         elif event == "vad.speech_start":
             self._speech_started()

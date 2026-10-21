@@ -105,14 +105,15 @@ The mixer builds the **listener's** outbound stream for one playback:
 
 ```
 listener out = earcon (120 ms) → TTS at 0 dB
-             + speaker's original frames at −14 dB during the TTS window
+             + speaker's original at duck_db (−20 dB) for the first duck_ms (600 ms) of TTS
+               (telephony calls only; co-located /join and loopback calls play no original)
 ```
 
 ```mermaid
 flowchart LR
     E["earcon<br/>120 ms = 6 frames"] --> SUM
     T["TTS chunks<br/>(resampled to 16k)<br/>gain 0 dB"] --> SUM
-    O["speaker's original frames<br/>gain −14 dB (duck_db)"] --> SUM
+    O["speaker's original, first 600 ms (duck_ms)<br/>gain −20 dB (duck_db)<br/>telephony only"] --> SUM
     SUM["sum in int32 / float32"] --> C["clip to int16<br/>set clipped flag"]
     C --> F["20 ms frames"] --> TR["transport.send()<br/>chunks to 100 ms"]
 ```
@@ -121,13 +122,15 @@ flowchart LR
 |---|---|
 | Earcon | 120 ms (1,920 samples, 3,840 bytes, 6 frames), a soft tone |
 | TTS gain | 0 dB (unity) |
-| Duck gain | `duck_db` per pair, **−14 dB** → linear `10 ** (-14/20) ≈ 0.1995` |
+| Duck gain | `duck_db` per pair, **−20 dB** → linear `10 ** (-20/20) = 0.1` (was −14 dB until 21 Oct) |
+| Duck length | `duck_ms` per pair, **600 ms** from the first kept TTS sample; `render_playback(duck_ms=None)` keeps the old "whole translation" behaviour |
+| Duck on/off | per call: `CallSession(duck_original=...)`, default **off** when `co_located` (/join, loopback), **on** for telephony |
 | Output | 20 ms frames to the transport. The transport groups them into 100 ms provider chunks. |
 
 ### Arithmetic and clipping
 
 ```python
-DUCK = 10 ** (duck_db / 20)          # -14 dB → 0.1995
+DUCK = 10 ** (duck_db / 20)          # -20 dB → 0.1
 
 def mix(tts: np.ndarray, orig: np.ndarray) -> tuple[bytes, bool]:
     # tts, orig: int16 arrays of 320 samples (zeros where absent)
@@ -143,6 +146,7 @@ def mix(tts: np.ndarray, orig: np.ndarray) -> tuple[bytes, bool]:
 ### Why: making the pause feel intentional
 
 - **Ducked original.** The listener hears the real speaker at low volume, then the translation at full volume. They know the other person spoke, and the delay reads as interpretation, not failure. The ducked original also carries tone that the words may not (idioms, sarcasm, anger).
+- **Not for co-located phones, and only as a short cue (21 Oct).** The first stage test (/join, two phones in one room, Marathi ⇄ Hindi) reported "double sound": the listener heard the original live in the room, then again under the whole translation at −14 dB, then the translation. On /join and loopback calls (`co_located`) the original is not replayed at all: the listener's outbound audio is the earcon and the TTS only (`tests/session/test_duck_original.py` checks the correlation with the source is about 0). On telephony the original stays, but at −20 dB and only for the first 600 ms of the TTS: enough to say "a real person spoke", without two voices talking over each other for the whole translation.
 - **Earcon.** A soft tone so silence never runs past about 700 ms without a signal. Perceived latency drops more than it would from any real cut.
 - **Cut list:** ducking is item 4 on the cut list (fall back to plain earcon only). Never cut the earcon.
 
@@ -151,7 +155,7 @@ def mix(tts: np.ndarray, orig: np.ndarray) -> tuple[bytes, bool]:
 Both are **TBD — see [open questions](../plan/open-questions.md)**:
 
 1. **Earcon timing.** The spec's latency table says "earcon at EOU" (listener hears something about 100 ms after the speaker stops). The mix-stage row and the overview say it plays at the start of the translation, immediately before TTS. Playing at EOU hides TTS first-byte time. Playing at translation start adds 120 ms before the first word unless it overlaps the TTS first-byte wait.
-2. **Which original frames are ducked.** "The speaker's original frames mixed at −14 dB during the TTS window" can mean (a) the speaker's *live* frames (mostly silence after EOU) or (b) the *buffered utterance* replayed under the translation. The overview's timing figure ("tts + ducked A" in the playout row) suggests (b). Whether the listener also hears the speaker live, ducked, *while* they speak is not stated.
+2. **Which original frames are ducked.** Decided: (b), the *buffered utterance* replayed under the translation, aligned to the first kept TTS sample, for `duck_ms` (600 ms), on telephony calls only (see "Not for co-located phones" above). The listener never hears the speaker live while they speak.
 
 ### Bypass (DTMF 0)
 

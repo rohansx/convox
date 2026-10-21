@@ -30,6 +30,13 @@ after the earcon (heard_ms). It joins the server's turn log (GET /v1/calls/{id}/
 the stage breakdown. Writes out/live/<call>_a.wav, <call>_b.wav (what each leg heard) and
 out/live/<call>.json, and prints a table with p50/p95.
 
+--room-db DB simulates two phones in one room (the /join stage setup): each tab's mic also
+carries the other tab's mic DB lower and --room-delay-ms later, so cross-talk turns show
+up as extra server turns ("server turns" line).
+
+    STT_IMPL=real MT_IMPL=real TTS_IMPL=real uv run python tools/live_loopback.py \
+        --a-lang mr-IN --b-lang hi-IN --room-db -12
+
 Timing is the client's 20 ms tick clock: no browser jitter buffer or device latency is
 modelled, so heard_ms is a lower bound on a real tab's (leg-transports.md section 5).
 """
@@ -198,6 +205,8 @@ class Opts:
     opening: str = "play"  # "play": wait it out like a person; "skip": drop it once received
     opening_timeout_s: float = 20.0
     join: bool = False  # start from the stage host page (POST /join), QR-token sockets
+    room_db: float | None = None  # co-located phones: each mic hears the other this much lower
+    room_delay_ms: int = 40
 
 
 # --- audio helpers ----------------------------------------------------------------------
@@ -281,7 +290,11 @@ class Tab:
         finally:
             self.closed = True
 
-    async def tick(self) -> None:
+    def take_mic(self) -> bytes:
+        return self.mic.popleft() if self.mic else SILENCE
+
+    async def tick(self, mic: bytes | None = None) -> None:
+        """Play one frame, ack due marks, send one mic frame (`mic`, else the queue's)."""
         out = bytes(self.buf[:FRAME_BYTES])
         del self.buf[:FRAME_BYTES]
         self.played += len(out)
@@ -290,7 +303,7 @@ class Tab:
             name = self.marks.popleft()[1]
             self.acks.append(name)
             await self._send(json.dumps({"type": "mark", "name": name}))
-        await self._send(self.mic.popleft() if self.mic else SILENCE)
+        await self._send(mic if mic is not None else self.take_mic())
 
     async def _send(self, data: bytes | str) -> None:
         if self.closed:
@@ -311,11 +324,26 @@ class Tab:
         )
 
 
-class Ticker:
-    """Drives both tabs on one absolute 20 ms schedule. tick n covers [n*20, (n+1)*20) ms."""
+def mix_db(base: bytes, overlay: bytes, db: float) -> bytes:
+    b = np.frombuffer(base, dtype=np.int16).astype(np.float64)
+    o = np.frombuffer(overlay, dtype=np.int16).astype(np.float64)
+    out = b + np.rint(o * 10 ** (db / 20))
+    return np.clip(out, -32768, 32767).astype(np.int16).tobytes()
 
-    def __init__(self, tabs: list[Tab]) -> None:
+
+class Ticker:
+    """Drives both tabs on one absolute 20 ms schedule. tick n covers [n*20, (n+1)*20) ms.
+
+    room_db (two tabs): each tab's mic frame also carries the other tab's, room_db lower
+    and room_delay_ms later (co-located phones)."""
+
+    def __init__(
+        self, tabs: list[Any], *, room_db: float | None = None, room_delay_ms: int = 40
+    ) -> None:
         self.tabs = tabs
+        self.room_db = room_db
+        delay = max(0, room_delay_ms // FRAME_MS)
+        self._room: list[deque[bytes]] = [deque([SILENCE] * delay) for _ in tabs]
         self.n = 0
         self.t0 = time.monotonic()
         self.max_late_ms = 0.0
@@ -331,8 +359,17 @@ class Ticker:
             else:  # behind: catch up, but always yield so the readers keep running
                 self.max_late_ms = max(self.max_late_ms, -delay * 1000)
                 await asyncio.sleep(0)
-            for tab in self.tabs:
-                await tab.tick()
+            if self.room_db is None:
+                for tab in self.tabs:
+                    await tab.tick()
+            else:
+                mics = [tab.take_mic() for tab in self.tabs]
+                for line, m in zip(self._room, mics, strict=True):
+                    line.append(m)
+                heard = [line.popleft() for line in self._room]
+                for i, tab in enumerate(self.tabs):
+                    far = heard[1 - i] if len(self.tabs) == 2 else SILENCE
+                    await tab.tick(mix_db(mics[i], far, self.room_db))
             self.n += 1
             async with self._cond:
                 self._cond.notify_all()
@@ -516,7 +553,9 @@ async def run_call(srv: Server, utts: list[Utt], opts: Opts) -> dict[str, Any]:
             for side, ws in (("a", wa), ("b", wb)):
                 lang = opts.a_lang if side == "a" else opts.b_lang
                 await ws.send(json.dumps({"type": "hello", "side": side, "lang": lang}))
-            ticker = Ticker(list(tabs.values()))
+            ticker = Ticker(
+                list(tabs.values()), room_db=opts.room_db, room_delay_ms=opts.room_delay_ms
+            )
             tasks = [asyncio.create_task(t.reader()) for t in tabs.values()]
             tasks.append(asyncio.create_task(ticker.run()))
             try:
@@ -826,6 +865,13 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--out", type=Path, default=OUT)
     p.add_argument("--pause-ms", type=int, default=800)
     p.add_argument("--log", default="WARNING", help="dubhash log level to stderr")
+    p.add_argument(
+        "--room-db",
+        type=float,
+        default=None,
+        help="co-located phones: each mic also hears the other this many dB lower (e.g. -12)",
+    )
+    p.add_argument("--room-delay-ms", type=int, default=40)
     a = p.parse_args(argv)
     handler = logging.StreamHandler()
     handler.setFormatter(logging.Formatter("%(relativeCreated)8.0f %(levelname)s %(message)s"))
@@ -836,7 +882,15 @@ def main(argv: list[str] | None = None) -> int:
     sc = SCRIPTS[name]
     a_lang, b_lang = a.a_lang or sc.a_lang, a.b_lang or sc.b_lang
     lines = sc.lines[: a.n]
-    opts = Opts(pair=a.pair, a_lang=a_lang, b_lang=b_lang, pause_ms=a.pause_ms, join=a.join)
+    opts = Opts(
+        pair=a.pair,
+        a_lang=a_lang,
+        b_lang=b_lang,
+        pause_ms=a.pause_ms,
+        join=a.join,
+        room_db=a.room_db,
+        room_delay_ms=a.room_delay_ms,
+    )
     if a.fake:
         utts = fake_utts(lines)
         kw: dict[str, Any] = {"dubhash_env": "test"}
@@ -855,6 +909,10 @@ def main(argv: list[str] | None = None) -> int:
     print(f"call {result['call_id']}  pair {result['pair']}  script {name}  {result['status']}")
     print(table(result, summary))
     print(f"opening: {result['opening']}  max tick late: {result['max_tick_late_ms']} ms")
+    spoken = [t for t in result["turns"] if not t.get("backchannel")]
+    by_side = {s: sum(t["side"] == s for t in spoken) for s in ("a", "b")}
+    lines_by = {s: sum(r.side == s for r in result["rows"]) for s in ("a", "b")}
+    print(f"server turns {by_side} for script lines {lines_by}  room_db {a.room_db}")
     print(f"wrote {write_outputs(result, summary, a.out)}")
     return 0
 

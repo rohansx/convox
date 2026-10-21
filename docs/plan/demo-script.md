@@ -72,7 +72,7 @@ Two people use their own phones' browsers. Nothing is dialled, so this works wha
 1. Run the app on the VM or the laptop, and expose it over **https**. Phones block the microphone on plain http (only localhost is exempt). Set `PUBLIC_BASE_URL` to the https host (the cloudflared tunnel or the VM's domain). The QR codes always encode `PUBLIC_BASE_URL`, not the address the laptop used, so the laptop can stay on `localhost`.
 2. On the laptop, open `https://<host>/join` (console password). Pick the pair and press **Start call**. Offered pairs are the ones `config/pairs.yaml` resolves: मराठी ⇄ हिन्दी, मराठी ⇄ English, हिन्दी ⇄ ಕನ್ನಡ, हिन्दी ⇄ தமிழ்.
 3. Each person scans the QR code under their own language and taps **Tap to start**. The tap is needed: iOS and Android unlock the microphone and audio only from a tap. Allow the microphone. The badge under each code turns to **joined**, both phones hear the opening line, and the codes shrink so the transcript gets the screen.
-4. Phones: volume up, screen on (the page asks for a wake lock where the browser supports it), not on silent. Hold the phone like a walkie-talkie, about 20 cm away. The two phones should be a few metres apart, or the second phone's mic hears the first phone's speaker.
+4. Phones: volume up, screen on (the page asks for a wake lock where the browser supports it), not on silent. Hold the phone like a walkie-talkie, about 20 cm away. The two people stand 1–2 m apart, or wear earphones (see "Co-located phones" below).
 5. The join links work for 2 hours, and only for that call and that side. When either phone leaves (red **Leave call**, a reload or a locked screen), the call ends for both. Press **Start again** on the laptop, which makes new codes, and scan again.
 
 **What to say (step 2 of the 3-minute script, 70 s)**
@@ -91,6 +91,8 @@ Two people use their own phones' browsers. Nothing is dialled, so this works wha
 3. **This stage demo** on the venue Wi-Fi or a phone hotspot.
 4. The same stage demo with **both phones' pages opened on the laptop** if a phone refuses the mic: open each QR's URL (printed under the code) in two browser tabs with a headset.
 5. The backup video.
+
+**Co-located phones (cross-talk).** Both phones are in one room, so each mic also hears the other person. The server drops that (it keeps the louder, earlier voice and ignores a copy at least 6 dB quieter on the other mic, [floor controller § 7](../tech-spec/floor-controller.md#7-cross-talk-and-echo)), and it no longer replays the speaker's original under the translation on these calls, so nobody hears the same sentence twice. It still works best if the two people **stand 1–2 m apart, each speaking into their own phone at about 20 cm**, or **wear earphones** (then neither mic hears the other phone's speaker at all). Do not hold the phones side by side. If a sentence is ever lost, it is because both spoke at once at a similar distance from one phone: repeat it. Simulate it before the slot with `tools/live_loopback.py --join --a-lang mr-IN --b-lang hi-IN --room-db -12`: the "server turns" line must equal the script lines.
 
 Known limits: phones do not barge in. While a phone plays a translation it sends silence (so its own speaker is not heard as speech), and `?duplex=1` on the phone URL turns that off. iOS can route audio quietly while the mic is open, so turn the volume all the way up. The loopback socket still accepts connections with no token (dev tools use that). Only a token that is present is checked.
 
