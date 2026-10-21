@@ -216,6 +216,14 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     p.add_argument(
         "--long", action="store_true", help="synthetic: long utterances with comma pauses (L9)"
     )
+    p.add_argument(
+        "--chunking",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="chunked interpretation (default: the pair's chunking, L9)",
+    )
+    p.add_argument("--chunk-pause-ms", type=int, default=None, help="override chunk_pause_ms")
+    p.add_argument("--chunk-min-ms", type=int, default=None, help="override chunk_min_ms")
     p.add_argument("--fake-mt-ms", type=int, default=0, help="fake MT delay")
     p.add_argument("--fake-stt-final-ms", type=int, default=0, help="fake STT final delay")
     p.add_argument("--fake-tts-ttfb-ms", type=int, default=0, help="fake TTS first-byte delay")
@@ -226,7 +234,12 @@ def _use_fakes(providers: Providers, args: argparse.Namespace, clock: Clock) -> 
     """Swap in fakes that sleep on the bench clock with the requested delays."""
     if args.stt == "fake":
         providers.stt = {
-            s: FakeSTT(final_delay_ms=args.fake_stt_final_ms, ignore_silence=True, clock=clock)
+            s: FakeSTT(
+                final_delay_ms=args.fake_stt_final_ms,
+                ignore_silence=True,
+                clock=clock,
+                lettered=True,  # "w1"-style words end in a digit: never a chunk
+            )
             for s in ("a", "b")
         }
     if args.mt == "fake":
@@ -265,6 +278,9 @@ async def run_bench(args: argparse.Namespace) -> dict[str, Any]:
         pair = dataclasses.replace(pair, spec_after_ms=args.spec_after_ms)
     if args.early_final_ms is not None:
         pair = dataclasses.replace(pair, early_final_ms=args.early_final_ms)
+    for field_ in ("chunking", "chunk_pause_ms", "chunk_min_ms"):
+        if getattr(args, field_) is not None:
+            pair = dataclasses.replace(pair, **{field_: getattr(args, field_)})
     providers = build_providers(pair, settings)
 
     inbound = synthetic_inbound(long=args.long)
@@ -321,6 +337,12 @@ async def run_bench(args: argparse.Namespace) -> dict[str, Any]:
         "felt": utterance_metrics([dataclasses.asdict(t) for t in turns]),
         "spec": spec_stats(session, pair),
         "early_final": early_stats(session, pair),
+        "chunking": {
+            "enabled": pair.chunking,
+            "pause_ms": pair.chunk_pause_ms,
+            "min_ms": pair.chunk_min_ms,
+            "committed": sum(i.chunks_committed for i in session.interpreters.values()),
+        },
         "summary": session.summary(),
         "turns": [dataclasses.asdict(t) for t in turns],
         "audio_s": {s: round(len(inbound[s]) / (2 * SAMPLE_RATE), 2) for s in ("a", "b")},

@@ -21,6 +21,16 @@ MIN_HEARD_MS = 100
 SILENCE_PEAK = 64  # ignore_silence: frames whose peak |sample| is below this are silence
 
 
+def _lettered(i: int) -> str:
+    """1 -> "wa", 26 -> "wz", 27 -> "wba": a fake word with no digits."""
+    out = ""
+    while True:
+        i, r = divmod(i - 1, 26)
+        out = chr(ord("a") + r) + out
+        if i == 0:
+            return "w" + out
+
+
 def _word_count(ms: int) -> int:
     return 0 if ms < MIN_HEARD_MS else max(1, ms // MS_PER_WORD)
 
@@ -58,6 +68,8 @@ class FakeSTTStream:
         scripted = self._owner._peek()
         if scripted is not None:
             return " ".join(scripted.split()[:n_words])
+        if self._owner.lettered:
+            return " ".join(_lettered(i) for i in range(1, n_words + 1))
         return " ".join(f"w{i}" for i in range(1, n_words + 1))
 
     async def push(self, frame: bytes) -> None:
@@ -115,7 +127,9 @@ class FakeSTT:
     partials: optional per-utterance scripts (one list per open(), in order) of
     (audio_ms, text): text is emitted as a partial once audio_ms of audio has been pushed.
     A scripted utterance emits only those partials ([] = none). ignore_silence: only
-    voiced frames count towards words. final_delay_ms sleeps on `clock` when given."""
+    voiced frames count towards words. final_delay_ms sleeps on `clock` when given.
+    lettered: words are "wa wb wc ..." instead of "w1 w2 w3 ..." (a text ending in a digit
+    is never committed as a chunk, interp/chunker.py)."""
 
     name = "fake"
 
@@ -127,7 +141,9 @@ class FakeSTT:
         partials: list[list[tuple[int, str]]] | None = None,
         ignore_silence: bool = False,
         clock: Any = None,
+        lettered: bool = False,
     ) -> None:
+        self.lettered = lettered
         self._script: deque[str] = deque(script or [])
         self.final_delay_ms = final_delay_ms
         self._partial_script: deque[list[tuple[int, str]]] | None = (
