@@ -51,6 +51,12 @@ class PairConfig:
     early_final_ms: int = 0
     # end an utterance at the next pause once it has run this long (0 = off, L7)
     max_utterance_ms: int = 7000
+    # chunked interpretation (interp/chunker.py, L9): inside an utterance, after a pause of
+    # chunk_pause_ms once the chunk has chunk_min_ms of speech, translate and play that
+    # chunk while the speaker goes on
+    chunking: bool = False
+    chunk_pause_ms: int = 300
+    chunk_min_ms: int = 1200
 
     def side(self, side: Side) -> SideConfig:
         return self.a if side == "a" else self.b
@@ -78,6 +84,9 @@ def load_pairs(path: Path) -> dict[str, PairConfig]:
             spec_after_ms=int(cfg.get("spec_after_ms", 200)),
             early_final_ms=int(cfg.get("early_final_ms", 0)),
             max_utterance_ms=int(cfg.get("max_utterance_ms", 7000)),
+            chunking=bool(cfg.get("chunking", False)),
+            chunk_pause_ms=int(cfg.get("chunk_pause_ms", 300)),
+            chunk_min_ms=int(cfg.get("chunk_min_ms", 1200)),
         )
     return out
 
