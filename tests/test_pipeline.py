@@ -454,9 +454,13 @@ async def test_end_to_end_with_silero_vad():
 # Live-like budget on the FakeClock: STT final 290 ms after end(), MT 1200 ms.
 
 
-def test_pairs_yaml_enables_speculation_with_default_after_ms():
-    assert PAIR.spec_mt is True and PAIR.spec_after_ms == 200
-    assert PAIRS["fake-fake"].spec_after_ms == 200
+def test_speculation_off_by_default_with_after_ms_200():
+    """Off: Sarvam realtime partials lag the final, so live hit rate was 1/8 (L1)."""
+    assert all(not p.spec_mt for p in PAIRS.values())
+    assert all(p.spec_after_ms == 200 for p in PAIRS.values())
+    from dubhash.config.pairs import PairConfig
+
+    assert PairConfig(key="x", a=PAIR.a, b=PAIR.b).spec_mt is False
 
 
 async def run_spec(pair, final, partials, pcm=None):
