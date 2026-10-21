@@ -23,11 +23,8 @@ Decisions where the spec is open:
 
 from __future__ import annotations
 
-import re
 import secrets
 import time
-import unicodedata
-from collections import Counter
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -40,6 +37,7 @@ from dubhash.config.settings import PACKAGE_DIR
 from dubhash.interp.contracts import MT, STT, TTS, STTStream
 from dubhash.interp.gender import THRESHOLD_HZ, estimate_f0
 from dubhash.interp.mt_cache import CachedMT
+from dubhash.interp.numbers import check_numbers, extract_numbers
 from dubhash.types import Side, other
 
 if TYPE_CHECKING:
@@ -146,36 +144,8 @@ def build_ward_providers(pair: PairConfig, settings: Settings) -> WardProviders:
 
 # --- numbers -------------------------------------------------------------------------
 
-_NUMBER = re.compile(r"\d+(?:[.,:/]\d+)*")
-_GROUPING = re.compile(r"(?<=\d),(?=\d{2,3}\b)")
-
-
-def _ascii_digits(s: str) -> str:
-    return "".join(str(unicodedata.digit(c)) if c.isdigit() else c for c in s)
-
-
-def extract_numbers(text: str) -> list[str]:
-    """Digit runs in order, in ASCII, without leading zeros. "8:30" -> ["8", "30"],
-    "1,50,000" -> ["150000"], "०८" -> ["8"]."""
-    text = _GROUPING.sub("", _ascii_digits(text))
-    out: list[str] = []
-    for m in _NUMBER.finditer(text):
-        out.extend(str(int(run)) for run in re.findall(r"\d+", m.group()))
-    return out
-
-
-def check_numbers(src_text: str, tgt_text: str) -> str | None:
-    """None when every number in src_text appears in tgt_text, else a warning."""
-    src = extract_numbers(src_text)
-    missing = Counter(src) - Counter(extract_numbers(tgt_text))
-    if not missing:
-        return None
-    listed: list[str] = []
-    for n in src:  # source order, each missing occurrence once
-        if missing[n] > 0:
-            listed.append(n)
-            missing[n] -= 1
-    return f"numbers differ: {', '.join(listed)} missing in translation"
+# extract_numbers / check_numbers live in interp/numbers.py (the interpreter's read-back
+# uses them too) and are imported above for the ward's turns.
 
 
 # --- session -------------------------------------------------------------------------
