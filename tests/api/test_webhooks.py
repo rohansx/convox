@@ -178,7 +178,7 @@ def _notifier(env, handler, *, record=False, retries=3):
     return PlatformNotifier(
         env.handle,
         env.bus,
-        secret="s3cret",
+        secret="test-webhook-key",
         client=httpx.AsyncClient(transport=httpx.MockTransport(handler)),
         retries=retries,
         backoff_s=0,
@@ -190,7 +190,7 @@ async def test_notifier_sends_started_turn_and_ended():
     got: list[dict] = []
 
     def handler(req):
-        got.append(verify("s3cret", req))
+        got.append(verify("test-webhook-key", req))
         assert str(req.url) == "https://platform.example/hooks"
         return httpx.Response(200)
 
