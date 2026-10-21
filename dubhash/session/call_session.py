@@ -236,7 +236,14 @@ class CallSession:
         record: bool = False,
         tick_ms: int = 20,
         opening_line: bool = True,
+        co_located: bool = False,
+        duck_original: bool | None = None,
     ) -> None:
+        """co_located: both phones are in one room (/join, loopback), so each mic also
+        hears the other speaker: the cross-talk gate is on, and by default the listener
+        gets no ducked original (they heard it live). duck_original (None = not
+        co_located) plays the original under the first pair.duck_ms of each translation
+        at pair.duck_db (telephony)."""
         self.call_id = call_id
         self.pair = pair
         self.providers = providers
@@ -247,6 +254,8 @@ class CallSession:
         self.record = record
         self.tick_ms = tick_ms
         self.opening_line = opening_line
+        self.co_located = co_located
+        self.duck_original = (not co_located) if duck_original is None else duck_original
         self.status: Status = "ringing"
         self.legs: dict[Side, LegTransport] = {}
         self.escape_used = False
@@ -255,7 +264,9 @@ class CallSession:
         self.turn_log = TurnLog(
             call_id, providers=providers, clock=self.clock, bus=bus, writer=writer, record=record
         )
-        self._render_partial = functools.partial(render_playback, duck_db=pair.duck_db)
+        self._render_partial = functools.partial(
+            render_playback, duck_db=pair.duck_db, duck_ms=pair.duck_ms
+        )
         self.floor = FloorController(
             call_id,
             self.legs,  # filled by attach_leg; the floor keeps this dict
@@ -553,7 +564,8 @@ class CallSession:
     # --- audio -----------------------------------------------------------------------------
 
     def _render(self, tr: Translation) -> AsyncIterator[bytes]:
-        return self._render_partial(tr.audio, source_audio=tr.source_audio)
+        source = tr.source_audio if self.duck_original else b""
+        return self._render_partial(tr.audio, source_audio=source)
 
     async def _prompt_chunks(self, kind: str, side: Side, text: str) -> AsyncIterator[bytes]:
         """A prompt's audio in the side's female voice, chunk by chunk as the TTS produces
