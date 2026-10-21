@@ -183,3 +183,110 @@ async def test_two_chunked_utterances_back_to_back_keep_order():
     assert rig.sent_tags("b") == ["a:0", "a:1", "a:2", "a:3"]
     assert fc.state == "IDLE"
     check_all_ended(rig)
+
+
+# --- the hold never outlives its utterance (L9 stall, live c_uiaxt3slo6) -----------------
+
+
+async def test_rest_discarded_while_the_chunk_still_waits_does_not_leave_a_hold():
+    """The stall: A's chunk 0 is queued behind B's playback when the rest of A's utterance
+    is discarded. Chunk 0 then plays, and nothing of A's is coming: the floor must not
+    stay A's, so B's next translation plays at once instead of after the 4 s rescue."""
+    rig = Rig()
+    fc = rig.fc
+    await fc.on_speech_start("b")
+    await fc.on_speech_end("b")
+    b0 = rig.tr("b", 0)
+    await rig.hand(b0)
+    assert fc.playing is b0
+    await fc.on_speech_start("a")  # A talks over B's translation (under barge_in_min_ms)
+    a0 = chunk(rig, "a", 0, 0, final=False)
+    await rig.hand(a0)
+    assert list(fc.queue) == [a0]
+    await fc.on_speech_end("a")
+    await fc.on_utterance_discarded("a")  # the rest of A's utterance: an empty final
+    await rig.finish()
+    assert fc.playing is a0
+    await rig.finish()
+    assert fc.state == "IDLE"
+    b1 = rig.tr("b", 1)
+    await rig.hand(b1)
+    assert fc.playing is b1  # no wait for a final chunk that never comes
+    await rig.finish()
+    check_all_ended(rig)
+
+
+async def test_rest_discarded_with_chunks_still_queued_keeps_them_together():
+    """A holds the floor; chunk 1 waits behind chunk 0 with B's translation queued before
+    it; the rest is discarded. Chunk 1 still plays before B's, and then the hold is over."""
+    rig = Rig()
+    fc = rig.fc
+    await fc.on_speech_start("a")
+    a0 = chunk(rig, "a", 0, 0, final=False)
+    await rig.hand(a0)
+    await fc.on_speech_start("b")
+    await fc.on_speech_end("b")
+    b0 = rig.tr("b", 0)
+    await rig.hand(b0)
+    a1 = chunk(rig, "a", 1, 1, final=False)
+    await rig.hand(a1)
+    assert list(fc.queue) == [b0, a1]
+    await fc.on_speech_end("a")
+    await fc.on_utterance_discarded("a")
+    await rig.finish()
+    assert fc.playing is a1  # never B's in the middle of A's utterance
+    await rig.finish()
+    assert fc.playing is b0
+    await rig.finish()
+    assert fc.state == "IDLE"
+    b1 = rig.tr("b", 1)
+    await rig.hand(b1)
+    assert fc.playing is b1
+    await rig.finish()
+    check_all_ended(rig)
+
+
+async def test_a_hold_with_no_chunk_coming_is_released_after_the_hold_timeout():
+    """Defensive: the holder is silent, nothing of its is playing or queued, and no chunk
+    has come for hold_timeout_ms: the hold ends (with a log event), well before 4 s."""
+    rig = Rig()
+    rig.fc = fc = rig.make(hold_timeout_ms=1500)
+    await fc.start()
+    await fc.on_speech_start("a")
+    await rig.hand(chunk(rig, "a", 0, 0, final=False))
+    await rig.finish()
+    await fc.on_speech_end("a")
+    b1 = rig.tr("b", 0)
+    await rig.hand(b1)
+    await rig.advance(1400)
+    assert fc.playing is None  # A's final chunk may still be on its way
+    await rig.advance(200)
+    assert fc.playing is b1
+    assert [e.payload for e in rig.bus.kinds("hold_released")] == [
+        {"side": "a", "reason": "timeout", "idle_ms": 1500}
+    ]
+    await rig.finish()
+    check_all_ended(rig)
+
+
+async def test_the_hold_timeout_waits_while_the_holder_speaks():
+    rig = Rig()
+    rig.fc = fc = rig.make(hold_timeout_ms=1500)
+    await fc.start()
+    await fc.on_speech_start("a")
+    await rig.hand(chunk(rig, "a", 0, 0, final=False))
+    await rig.finish()
+    b1 = rig.tr("b", 0)
+    await rig.hand(b1)
+    await rig.advance(3000)  # A is still talking (its next clause)
+    assert fc.playing is None
+    await fc.on_speech_end("a")
+    a1 = chunk(rig, "a", 1, 1, final=True)
+    await rig.advance(1000)
+    await rig.hand(a1)
+    assert fc.playing is a1
+    await rig.finish()
+    assert fc.playing is b1
+    await rig.finish()
+    assert rig.bus.kinds("hold_released") == []
+    check_all_ended(rig)

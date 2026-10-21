@@ -94,6 +94,7 @@ EventKind = Literal[
     "prompt_cut",  # {side, tag, sent_ms}: a translation cut the opening line short (L7)
     "lang",  # {side, lang, state, confidence, source[, menu]}: lang "auto" (language.py)
     "number_fix",  # {side, missing, replaced, appended}: the number read-back changed MT (L10)
+    "hold_released",  # {side, reason, idle_ms}: a chunked utterance's hold timed out (L9)
 ]
 
 

@@ -11,7 +11,7 @@ Live-like budget on the FakeClock as in test_early_final: MT 700, TTS first byte
 import dataclasses
 
 from tests.audio_fixtures import conversation
-from tests.test_early_final import BASE, run
+from tests.test_early_final import BASE, TimedMT, run
 
 CHUNK = dataclasses.replace(
     BASE, early_final_ms=200, chunking=True, chunk_pause_ms=300, chunk_min_ms=1200
@@ -157,3 +157,69 @@ async def test_m_chunking_without_early_final_cuts_at_chunk_pause_ms():
     interp, sink, stt, _ = await run(no_early, [C0, C1], TWO, stt_ms=50)
     assert [t.src_text for t in sink.translations] == [C0, C1]
     assert abs(stt.t_end[0] - (1780 + 300)) <= 40  # end() at the chunk pause
+
+
+# --- every committed chunk becomes a turn, in order (the L9 stall investigation) --------
+
+
+class FlakyMT(TimedMT):
+    """Fails the first `fails` calls for the texts in `bad`; `slow` texts take longer."""
+
+    def __init__(self, bad=(), fails=1, slow=None, **kw) -> None:
+        super().__init__(**kw)
+        self.bad, self.fails, self.slow = set(bad), dict.fromkeys(bad, fails), slow or {}
+
+    async def translate(self, text, src, tgt):
+        if text in self.slow:
+            await self.clock.sleep_ms(self.slow[text])
+        if self.fails.get(text, 0) > 0:
+            self.fails[text] -= 1
+            self.texts.append(text)
+            await self.clock.sleep_ms(self.delay_ms)
+            raise ConnectionError("mt socket closed")
+        return await super().translate(text, src, tgt)
+
+
+def flaky(**kw):
+    return lambda **base: FlakyMT(**kw, **base)
+
+
+async def test_n_a_committed_chunk_whose_mt_fails_once_is_retried_not_dropped():
+    interp, sink, _, mt = await run(CHUNK, [C0, C1], TWO, stt_ms=50, mt_cls=flaky(bad=[C0]))
+    assert [(t.src_text, t.chunk, t.final_chunk) for t in sink.translations] == [
+        (C0, 0, False),
+        (C1, 1, True),
+    ]
+    assert mt.texts.count(C0) == 2
+    assert sink.kinds() == ["speech_start", "translation", "speech_end", "translation"]
+    assert interp.chunks_committed == 1
+
+
+async def test_o_a_chunk_that_keeps_failing_is_logged_and_the_rest_still_ends_the_utterance(
+    caplog,
+):
+    interp, sink, _, _ = await run(CHUNK, [C0, C1], TWO, stt_ms=50, mt_cls=flaky(bad=[C0], fails=9))
+    (tr,) = sink.translations
+    assert (tr.src_text, tr.chunk, tr.final_chunk) == (C1, 1, True)  # ends any hold
+    assert [r.message for r in caplog.records if r.message == "chunk.dropped"] == ["chunk.dropped"]
+    assert interp.chunks_failed == 1
+
+
+async def test_p_chunk_0_still_pending_at_eou_is_delivered_before_chunk_1():
+    """Chunk 0's MT is slow (3 s): chunk 1, the final chunk, is ready first but waits."""
+    interp, sink, _, _ = await run(CHUNK, [C0, C1], TWO, stt_ms=50, mt_cls=flaky(slow={C0: 3000}))
+    t0, t1 = sink.translations
+    assert (t0.src_text, t0.final_chunk, t1.src_text, t1.final_chunk) == (C0, False, C1, True)
+    assert t1.timings["t_tts_ttfb"] < t0.timings["t_tts_ttfb"]  # ready first, yet second
+    assert sink.t_delivered == sorted(sink.t_delivered)
+    assert (t0.seq, t1.seq) == (0, 1)
+
+
+async def test_q_a_commit_whose_text_fails_the_guards_after_the_commit_was_queued():
+    """The pause asked for a commit, but the early final ends in a number: no chunk, the
+    whole utterance is restarted and delivered as one, final, translation."""
+    full = "mera flat number 302 hai, building ka naam bataiye."
+    interp, sink, _, _ = await run(CHUNK, ["mera flat number 302", full], TWO, stt_ms=50)
+    (tr,) = sink.translations
+    assert (tr.src_text, tr.chunk, tr.final_chunk) == (full, 0, True)
+    assert interp.chunks_committed == 0 and interp.early_restarts == 1
