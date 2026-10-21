@@ -7,12 +7,13 @@ from __future__ import annotations
 import asyncio
 import math
 from collections import deque
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Sequence
 from typing import Any
 
 import numpy as np
 
 from dubhash.audio.frames import SAMPLE_RATE, SAMPLE_WIDTH, bytes_to_ms, ms_to_bytes
+from dubhash.interp.langid import LangGuess
 
 MS_PER_WORD = 300
 MIN_HEARD_MS = 100
@@ -232,6 +233,37 @@ class FakeTTS:
             if i and self.realtime:
                 await asyncio.sleep(self.chunk_ms / 1000)
             yield pcm[i : i + step]
+
+
+class FakeLID:
+    """identify() returns the next scripted LangGuess, else `default` (lang None). A
+    scripted language outside the call's candidates comes back as None, as the real engine
+    would. `calls` records (pcm bytes, candidates); delay_ms sleeps on `clock` when given."""
+
+    name = "fake"
+
+    def __init__(
+        self,
+        script: list[LangGuess] | None = None,
+        *,
+        default: LangGuess | None = None,
+        delay_ms: int = 0,
+        clock: Any = None,
+    ) -> None:
+        self._script: deque[LangGuess] = deque(script or [])
+        self.default = default or LangGuess(None, 0.0, "lid")
+        self.delay_ms = delay_ms
+        self.clock = clock
+        self.calls: list[tuple[int, tuple[str, ...]]] = []
+
+    async def identify(self, pcm16_16k: bytes, candidates: Sequence[str]) -> LangGuess:
+        self.calls.append((len(pcm16_16k), tuple(candidates)))
+        if self.delay_ms > 0:
+            await _sleep(self.clock, self.delay_ms)
+        g = self._script.popleft() if self._script else self.default
+        if g.lang is not None and g.lang not in candidates:
+            return LangGuess(None, g.confidence, g.source)
+        return g
 
 
 class EnergyVAD:
