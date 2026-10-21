@@ -144,3 +144,19 @@ def test_works_without_writer_or_bus():
     log = TurnLog("c_x", providers=providers(), clock=FakeClock())
     log.on_played(tr("a", 0, **TIMES))
     assert len(log.turns) == 1
+
+
+def test_chunk_fields_reach_the_turn():
+    """L9: every chunk of one utterance is a turn sharing utterance_id; t_utt_start is the
+    utterance's own speech start (chunk 1 starts later)."""
+    log, _, _ = make()
+    x = tr("a", 3, **TIMES, t_utt_start=40)
+    x.utterance_id, x.chunk = 5, 1
+    t = log.on_played(x)
+    assert (t.utterance_id, t.chunk, t.t_utt_start) == (5, 1, 40)
+
+
+def test_unchunked_translation_defaults():
+    log, _, _ = make()
+    t = log.on_played(tr("a", 0, **TIMES))
+    assert (t.utterance_id, t.chunk, t.t_utt_start) == (None, None, None)

@@ -35,6 +35,13 @@ class Translation:
     timings: dict[str, int] = field(default_factory=dict)  # t_* call-relative ms
     source_audio: bytes = b""  # the speaker's buffered utterance, ducked under the translation
     clipped_ms: int | None = None  # set by the controller when cut short
+    # Chunked interpretation (L9): the chunks of one utterance share utterance_id (per
+    # direction) and count chunk 0, 1, ...; final_chunk is False while more of the same
+    # utterance is still coming (the speaker is still talking). None/0/True: a whole
+    # utterance, as before.
+    utterance_id: int | None = None
+    chunk: int = 0
+    final_chunk: bool = True
 
     @property
     def tag(self) -> str:
@@ -64,6 +71,11 @@ class Turn:
     mt_provider: str | None = None
     tts_provider: str | None = None
     voice: str | None = None
+    # L9 (chunked interpretation): not columns of the `turns` table yet (the writer leaves
+    # them out); in turn events and the recorder. t_utt_start: the utterance's speech start.
+    utterance_id: int | None = None
+    chunk: int | None = None
+    t_utt_start: int | None = None
 
 
 EventKind = Literal[

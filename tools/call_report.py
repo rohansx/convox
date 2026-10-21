@@ -184,6 +184,20 @@ def render(doc: dict[str, Any]) -> str:
     )
     out.append("  (speech end is the end of the speaker's voiced audio as the VAD saw it;")
     out.append("   the speaker's own sense of 'I stopped' adds their trailing silence)")
+    out.append("")
+    out.append("WHAT THE LISTENER FELT (per utterance, server play start; L9)")
+    felt = (
+        ("speech_start_to_first_heard", "speech start -> first heard"),
+        ("ear_voice_span", "ear-voice span (part said -> its part heard)"),
+        ("utterance_first_audio", "speech end -> last heard (first audio)"),
+        ("heard_from_start", "speech start -> first heard, on the phone"),
+    )
+    for key, label in felt:
+        m = doc.get(key) or {}
+        out.append(
+            f"  {label:<46} p50 {_fmt(m.get('p50')):>6} p95 {_fmt(m.get('p95')):>6} "
+            f"n={m.get('n', 0)}"
+        )
     return "\n".join(out)
 
 

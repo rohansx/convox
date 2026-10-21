@@ -227,6 +227,9 @@ async def test_summary_has_pair_turns_percentiles_and_stages(tmp_path):
     assert s["first_audio"] == {"n": 1, "p50": 1250, "p95": 1250}
     assert s["per_turn"][0]["first_audio_ms"] == 1250
     assert s["stages"]["eou_wait"] == 550 and s["warnings"] == []
+    # L9: what the listener felt, per utterance
+    assert s["speech_start_to_first_heard"] == {"n": 1, "p50": 2750, "p95": 2750}
+    assert s["ear_voice_span"]["p50"] == 2750
 
 
 async def test_close_is_idempotent_and_late_calls_are_ignored(tmp_path):

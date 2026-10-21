@@ -274,6 +274,11 @@ class CallRecorder:
             "backchannels": len(result["turns"]) - len(spoken),
             "first_audio": result["first_audio"],
             "heard": result["heard"],
+            # L9, per utterance: what the listener felt from when the speaker started
+            "speech_start_to_first_heard": result["speech_start_to_first_heard"],
+            "ear_voice_span": result["ear_voice_span"],
+            "utterance_first_audio": result["utterance_first_audio"],
+            "heard_from_start": result["heard_from_start"],
             "stages": result["stages"],
             "clock": result["clock"],
             "per_turn": [

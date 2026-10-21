@@ -116,6 +116,11 @@ class TurnRow(Base):
     mt_provider: Mapped[str | None] = mapped_column(Text)
     tts_provider: Mapped[str | None] = mapped_column(Text)
     voice: Mapped[str | None] = mapped_column(Text)
+    # L9 chunked interpretation. A database created before these needs
+    # ALTER TABLE turns ADD COLUMN utterance_id integer, chunk integer, t_utt_start integer.
+    utterance_id: Mapped[int | None] = mapped_column(Integer)
+    chunk: Mapped[int | None] = mapped_column(Integer)
+    t_utt_start: Mapped[int | None] = mapped_column(Integer)
 
 
 class EventRow(Base):
