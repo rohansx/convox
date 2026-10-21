@@ -106,7 +106,8 @@ def create_loopback_call(
     if pair is None:
         raise unsupported_pair(req.a_lang, req.b_lang)
     call_id = new_call_id()
-    session = factory(call_id, pair, mode=req.mode, record=req.record)
+    opening = req.opening_line or settings.loopback_opening_line
+    session = factory(call_id, pair, mode=req.mode, record=req.record, opening_line=opening)
     sessions.create(call_id, session)
     handle = CallHandle(
         call_id=call_id,

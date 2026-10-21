@@ -50,7 +50,7 @@ from dubhash.interp.contracts import STT, VAD, STTStream
 from dubhash.interp.pipeline import BACKCHANNEL_MAX_WORDS, Interpreter
 from dubhash.legs.base import LegTransport
 from dubhash.session.floor import FloorController
-from dubhash.session.prompts import line_check_text, opening_text
+from dubhash.session.prompts import line_check_text, opening_text, short_opening_text
 from dubhash.session.providers import SIDES, Providers
 from dubhash.session.turn_log import TurnLog
 from dubhash.types import CallEvent, EventKind, Side, Translation, other
@@ -59,6 +59,20 @@ log = logging.getLogger(__name__)
 
 Status = Literal["ringing", "active", "ended"]
 Mode = Literal["interpret", "bridge"]
+# "full": the disclosure sentence (+ the record sentence), PSTN's default. "short": the two
+# language names and "speak" (~1.5-2 s), loopback's and /join's default. "off": none (L7).
+OpeningLine = Literal["short", "full", "off"]
+OPENING_LINES: tuple[OpeningLine, ...] = ("short", "full", "off")
+
+
+def opening_mode(value: bool | str) -> OpeningLine:
+    """Normalise an opening_line setting; True/False (the old flag) mean full/off."""
+    if value is True or value is False:
+        return "full" if value else "off"
+    if value not in OPENING_LINES:
+        raise ValueError(f"opening_line must be one of {OPENING_LINES}, not {value!r}")
+    return value  # type: ignore[return-value]
+
 
 PROMPT_TIMEOUT_S = 10.0
 SPEECH_END_HANGOVER_MS = 200  # silence after which the floor hears "speech ended"
@@ -235,7 +249,7 @@ class CallSession:
         escape_dtmf: str = "0",
         record: bool = False,
         tick_ms: int = 20,
-        opening_line: bool = True,
+        opening_line: bool | OpeningLine = "full",
     ) -> None:
         self.call_id = call_id
         self.pair = pair
@@ -246,7 +260,7 @@ class CallSession:
         self.mode: Mode = mode
         self.record = record
         self.tick_ms = tick_ms
-        self.opening_line = opening_line
+        self.opening_line: OpeningLine = opening_mode(opening_line)
         self.status: Status = "ringing"
         self.legs: dict[Side, LegTransport] = {}
         self.escape_used = False
@@ -388,7 +402,7 @@ class CallSession:
                                 self._interpret(s), name=f"{self.call_id}-interp-{s}"
                             )
                     self._interpreting = not self._forwarding
-                    if self.opening_line:
+                    if self.opening_line != "off":
                         await self._play_opening()
         except* _Stop:
             pass
@@ -576,9 +590,11 @@ class CallSession:
 
     async def _play_opening(self) -> None:
         async def one(side: Side) -> None:
-            text = opening_text(
-                self.pair.side(side).lang, self.pair.side(other(side)).lang, record=self.record
-            )
+            me, them = self.pair.side(side).lang, self.pair.side(other(side)).lang
+            if self.opening_line == "short":
+                text = short_opening_text(me, them)
+            else:
+                text = opening_text(me, them, record=self.record)
             async with asyncio.timeout(PROMPT_TIMEOUT_S):
                 sent = await self.floor.play_prompt(
                     side, self._prompt_chunks("opening", side, text)

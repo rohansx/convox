@@ -289,7 +289,14 @@ async def create_call(
         raise ApiError(503, "provider_unavailable", str(e)) from None
 
     call_id = new_call_id()
-    session = factory(call_id, pair, mode=req.mode, escape_dtmf=req.escape_dtmf, record=req.record)
+    session = factory(
+        call_id,
+        pair,
+        mode=req.mode,
+        escape_dtmf=req.escape_dtmf,
+        record=req.record,
+        opening_line=settings.pstn_opening_line,
+    )
     sessions.create(call_id, session)
     handle = CallHandle(
         call_id=call_id,
