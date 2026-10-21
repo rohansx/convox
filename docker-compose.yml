@@ -1,0 +1,68 @@
+# One-VM stack (docs/engineering/deployment.md). Locally: `docker compose up -d postgres redis`.
+# Only caddy publishes ports; postgres and redis stay on the compose network.
+services:
+  app:
+    build: .
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      DATABASE_URL: postgresql+asyncpg://dubhash:${PG_PASSWORD:-dubhash}@postgres:5432/dubhash
+      REDIS_URL: redis://redis:6379/0
+    # --workers 1 is load-bearing: both legs of a call must land in the same process
+    command:
+      - uvicorn
+      - dubhash.api.app:app
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8000"
+      - --workers
+      - "1"
+      - --proxy-headers
+      - --forwarded-allow-ips
+      - "*"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: dubhash
+      POSTGRES_PASSWORD: ${PG_PASSWORD:-dubhash}
+      POSTGRES_DB: dubhash
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dubhash -d dubhash"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  redis:
+    image: redis:7
+    restart: unless-stopped
+
+  caddy:
+    image: caddy:2
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      EDGE_DOMAIN: ${EDGE_DOMAIN:-edge.dubhash.in}
+      API_DOMAIN: ${API_DOMAIN:-api.dubhash.in}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+    depends_on:
+      - app
+    restart: unless-stopped
+
+volumes:
+  pgdata: {}
+  caddy_data: {}

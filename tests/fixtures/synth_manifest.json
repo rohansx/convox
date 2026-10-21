@@ -1,0 +1,131 @@
+[
+  {
+    "name": "synth_16k.wav",
+    "rate": 16000,
+    "f0": 140.0,
+    "noise": 0,
+    "segments": [
+      {
+        "kind": "silence",
+        "start_ms": 0,
+        "end_ms": 300
+      },
+      {
+        "kind": "speech",
+        "start_ms": 300,
+        "end_ms": 1500
+      },
+      {
+        "kind": "silence",
+        "start_ms": 1500,
+        "end_ms": 2200
+      },
+      {
+        "kind": "speech",
+        "start_ms": 2200,
+        "end_ms": 2600
+      },
+      {
+        "kind": "silence",
+        "start_ms": 2600,
+        "end_ms": 3300
+      },
+      {
+        "kind": "speech",
+        "start_ms": 3300,
+        "end_ms": 4100
+      },
+      {
+        "kind": "silence",
+        "start_ms": 4100,
+        "end_ms": 4400
+      }
+    ]
+  },
+  {
+    "name": "synth_8k.wav",
+    "rate": 8000,
+    "f0": 210.0,
+    "noise": 0,
+    "segments": [
+      {
+        "kind": "silence",
+        "start_ms": 0,
+        "end_ms": 300
+      },
+      {
+        "kind": "speech",
+        "start_ms": 300,
+        "end_ms": 1500
+      },
+      {
+        "kind": "silence",
+        "start_ms": 1500,
+        "end_ms": 2200
+      },
+      {
+        "kind": "speech",
+        "start_ms": 2200,
+        "end_ms": 2600
+      },
+      {
+        "kind": "silence",
+        "start_ms": 2600,
+        "end_ms": 3300
+      },
+      {
+        "kind": "speech",
+        "start_ms": 3300,
+        "end_ms": 4100
+      },
+      {
+        "kind": "silence",
+        "start_ms": 4100,
+        "end_ms": 4400
+      }
+    ]
+  },
+  {
+    "name": "synth_8k_noisy.wav",
+    "rate": 8000,
+    "f0": 140.0,
+    "noise": 600,
+    "segments": [
+      {
+        "kind": "silence",
+        "start_ms": 0,
+        "end_ms": 300
+      },
+      {
+        "kind": "speech",
+        "start_ms": 300,
+        "end_ms": 1500
+      },
+      {
+        "kind": "silence",
+        "start_ms": 1500,
+        "end_ms": 2200
+      },
+      {
+        "kind": "speech",
+        "start_ms": 2200,
+        "end_ms": 2600
+      },
+      {
+        "kind": "silence",
+        "start_ms": 2600,
+        "end_ms": 3300
+      },
+      {
+        "kind": "speech",
+        "start_ms": 3300,
+        "end_ms": 4100
+      },
+      {
+        "kind": "silence",
+        "start_ms": 4100,
+        "end_ms": 4400
+      }
+    ]
+  }
+]

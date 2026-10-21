@@ -1,0 +1,14 @@
+{% for c in calls %}
+<tr class="{{ 'ended' if c.status not in ('ringing', 'in_progress') }}">
+  <td><a class="mono" href="/console/calls/{{ c.call_id }}">{{ c.call_id }}</a></td>
+  <td>{{ c.a_lang or '—' }} <span class="muted">⇄</span> {{ c.b_lang or '—' }}</td>
+  <td>{{ c.provider or '—' }}</td>
+  <td><span class="status status-{{ c.status }}">{{ c.status | replace('_', ' ') }}</span></td>
+  <td><span class="badge state-{{ c.state }}">{{ c.state }}</span>{% if c.queue_depth %} <span class="queued">queue {{ c.queue_depth }}</span>{% endif %}</td>
+  <td class="num">{{ c.n_turns if c.n_turns is defined else (c.turns if c.turns is number else 0) }}</td>
+  <td class="num">{% if c.p50_first_audio_ms %}<span class="lat-{{ c.p50_first_audio_ms | grade }}">{{ c.p50_first_audio_ms | secs }}</span>{% else %}<span class="muted">—</span>{% endif %}</td>
+  <td>{% if c.escape_used %}<span class="flag">used</span>{% else %}<span class="muted">no</span>{% endif %}</td>
+</tr>
+{% else %}
+<tr class="empty"><td colspan="8">No calls yet. Start one with <code>POST /v1/calls</code> or <code>python -m tools.loopback</code>.</td></tr>
+{% endfor %}
