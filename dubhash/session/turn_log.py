@@ -80,6 +80,9 @@ class TurnLog:
             mt_provider=self._name(self._providers.mt),
             tts_provider=self._name(self._providers.tts.get(other(tr.side))),
             voice=tr.voice,
+            utterance_id=tr.utterance_id,
+            chunk=tr.chunk if tr.utterance_id is not None else None,
+            t_utt_start=tr.timings.get("t_utt_start"),
         )
         flags = {k: v for k, v in tr.timings.items() if k not in _TIMING_FIELDS}
         if flags:

@@ -23,7 +23,7 @@ listener heard (a negative `stt` means an early final, L3):
 from __future__ import annotations
 
 import re
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from typing import Any
 
 from dubhash.store.writer import percentile
@@ -52,6 +52,73 @@ _SCRIPT_RANGES = (
 _HI_WORDS = frozenset("है हैं नहीं क्या मुझे मैं आप और के की का में रहा रही हूँ हूं था थी चाहिए को से".split())
 _MR_WORDS = frozenset("आहे आहेत नाही काय मला मी तुम्ही आणि च्या ला मध्ये होते हवे पाहिजे आम्ही तुमचा".split())
 _WORD = re.compile(r"[^\s.,!?;:।॥\"'()]+")
+
+
+def utterances(
+    turns: Iterable[Mapping[str, Any]], play_key: str = "t_play_start"
+) -> list[dict[str, Any]]:
+    """What the listener felt, per utterance (L9). An utterance is every played, spoken turn
+    of one (side, utterance_id): one turn unchunked, one per chunk with chunked
+    interpretation. A turn without utterance_id (recorded before L9) is an utterance alone.
+
+      speech_start_to_first_heard  utterance speech start -> its first translation heard
+      ear_voice_span               mean over its chunks of (chunk heard - chunk speech
+                                   start), weighted by each chunk's speech span: how far
+                                   the listener trails the speaker (approximated per chunk)
+      first_audio                  utterance speech end -> its last chunk heard (the wait
+                                   after the speaker stops, as before L9)
+
+    `play_key` names the "heard" time in each turn (server t_play_start by default)."""
+    groups: dict[tuple[str, Any], list[Mapping[str, Any]]] = {}
+    for i, t in enumerate(turns):
+        if t.get("backchannel") or t.get(play_key) is None or t.get("t_speech_start") is None:
+            continue
+        uid = t.get("utterance_id")
+        key = (str(t.get("side")), uid if uid is not None else ("turn", i))
+        groups.setdefault(key, []).append(t)
+    out: list[dict[str, Any]] = []
+    for (side, uid), ts in groups.items():
+        ts = sorted(ts, key=lambda x: (x.get("chunk") or 0, x["t_speech_start"]))
+        start = min(
+            [x["t_utt_start"] for x in ts if x.get("t_utt_start") is not None]
+            or [x["t_speech_start"] for x in ts]
+        )
+        first = min(x[play_key] for x in ts)
+        last = ts[-1]
+        weights = [max(20, (x.get("t_speech_end") or x["t_speech_start"]) - x["t_speech_start"])
+                   for x in ts]  # fmt: skip
+        lags = [x[play_key] - x["t_speech_start"] for x in ts]
+        evs = sum(w * lag for w, lag in zip(weights, lags, strict=True)) / sum(weights)
+        end = last.get("t_speech_end")
+        out.append(
+            {
+                "side": side,
+                "utterance_id": None if isinstance(uid, tuple) else uid,
+                "chunks": len(ts),
+                "t_start": start,
+                "t_end": end,
+                "speech_start_to_first_heard": first - start,
+                "ear_voice_span": round(evs),
+                "first_audio": last[play_key] - end if end is not None else None,
+            }
+        )
+    out.sort(key=lambda u: u["t_start"])
+    return out
+
+
+HEARD_METRICS = ("speech_start_to_first_heard", "ear_voice_span", "first_audio")
+
+
+def utterance_metrics(
+    turns: Iterable[Mapping[str, Any]], play_key: str = "t_play_start"
+) -> dict[str, dict[str, int | None]]:
+    """n / p50 / p95 over utterances of each HEARD_METRICS metric."""
+    us = utterances(turns, play_key)
+    out: dict[str, dict[str, int | None]] = {}
+    for k in HEARD_METRICS:
+        vals = [u[k] for u in us if u[k] is not None]
+        out[k] = {"n": len(vals), "p50": percentile(vals, 50), "p95": percentile(vals, 95)}
+    return out
 
 
 def script_counts(text: str | None) -> dict[str, int]:
@@ -230,6 +297,8 @@ def analyze(
             "clipped_ms": t.get("clipped_ms"),
             # not Turn fields today; read if the interpreter's timings ever carry them
             "early_final_restarts": t.get("early_final_restarts"),
+            "utterance_id": t.get("utterance_id"),
+            "chunk": t.get("chunk"),
             "tag": None,
             "mark_ack": None,
             "client_play_start": None,
@@ -259,6 +328,10 @@ def analyze(
             _turn_warnings(row, rows, played_to, prompt_acks, _sides_at(sides, langs, at))
         )
 
+    heard_turns = [
+        {**t, "t_client_play": r["client_play_start"]} for t, r in zip(turns, rows, strict=True)
+    ]
+    per_utt = utterance_metrics(turns)
     spoken = [r for r in rows if not r["backchannel"]]
     fa = [r["first_audio_ms"] for r in spoken if r["first_audio_ms"] is not None]
     heard = [r["heard_ms"] for r in spoken if r["heard_ms"] is not None]
@@ -275,6 +348,13 @@ def analyze(
         "stages": stages,
         "first_audio": {"n": len(fa), "p50": percentile(fa, 50), "p95": percentile(fa, 95)},
         "heard": {"n": len(heard), "p50": percentile(heard, 50), "p95": percentile(heard, 95)},
+        # L9, per utterance: server play start, and heard_from_start on the phone's clock
+        "speech_start_to_first_heard": per_utt["speech_start_to_first_heard"],
+        "ear_voice_span": per_utt["ear_voice_span"],
+        "utterance_first_audio": per_utt["first_audio"],
+        "heard_from_start": utterance_metrics(heard_turns, "t_client_play")[
+            "speech_start_to_first_heard"
+        ],
         "clock": offsets,
     }
 
@@ -374,6 +454,8 @@ def _turn_warnings(
             )
         )
     wait = _diff(row["tts_ttfb"], row["play_start"])
+    if row.get("chunk"):  # a later chunk waits for the earlier ones by design (L9)
+        wait = None
     if wait is not None and wait > QUEUE_WAIT_MS:
         held = any(
             row["tts_ttfb"] < ack <= row["play_start"] + 50

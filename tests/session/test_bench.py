@@ -138,3 +138,44 @@ def test_early_final_ms_flag_cuts_first_audio(tmp_path, monkeypatch, capsys):
     assert on["stages"]["first_audio"]["p50"] <= fa_off - 300
     assert [t["src_text"] for t in on["turns"]] == [t["src_text"] for t in off["turns"]]
     assert "early_final" in capsys.readouterr().out
+
+
+def test_report_has_what_the_listener_felt(tmp_path, monkeypatch, capsys):
+    """L9: per-utterance speech start -> first heard, ear-voice span, first audio."""
+    monkeypatch.setenv("DUBHASH_ENV", "dev")
+    assert bench.main(["--out", str(tmp_path), "--call-id", "c_felt", "--vad", "energy"]) == 0
+    report = json.loads((tmp_path / "c_felt.json").read_text())
+    felt = report["felt"]
+    assert set(felt) == {"speech_start_to_first_heard", "ear_voice_span", "first_audio"}
+    assert felt["speech_start_to_first_heard"]["n"] == 3
+    # unchunked: heard after the whole utterance, so from its start > from its end
+    assert felt["speech_start_to_first_heard"]["p50"] > felt["first_audio"]["p50"]
+    assert "speech_start_to_first_heard" in capsys.readouterr().out
+
+
+def test_chunking_cuts_speech_start_to_first_heard_on_long_utterances(tmp_path, monkeypatch):
+    monkeypatch.setenv("DUBHASH_ENV", "dev")
+    base = ["--vad", "energy", "--long", "--no-opening", "--fake-mt-ms", "600"]
+    base += ["--fake-stt-final-ms", "260", "--fake-tts-ttfb-ms", "180", "--early-final-ms", "200"]
+    reports = {}
+    for flag in ("--no-chunking", "--chunking"):
+        out = tmp_path / flag
+        assert bench.main([*base, flag, "--out", str(out), "--call-id", "c"]) == 0
+        reports[flag] = json.loads((out / "c.json").read_text())
+    off, on = reports["--no-chunking"], reports["--chunking"]
+    assert len(off["turns"]) == 3 and len(on["turns"]) > 3
+    assert on["chunking"]["committed"] >= 3 and off["chunking"]["committed"] == 0
+    s_off = off["felt"]["speech_start_to_first_heard"]["p50"]
+    s_on = on["felt"]["speech_start_to_first_heard"]["p50"]
+    assert s_on <= s_off - 1500
+    assert on["felt"]["ear_voice_span"]["p50"] < off["felt"]["ear_voice_span"]["p50"]
+
+
+def test_long_synthetic_utterances_have_comma_pauses(tmp_path, monkeypatch):
+    monkeypatch.setenv("DUBHASH_ENV", "dev")
+    inbound = bench.synthetic_inbound(long=True)
+    assert len(inbound["a"]) > len(bench.synthetic_inbound()["a"])
+    argv = ["--out", str(tmp_path), "--call-id", "c_long", "--vad", "energy", "--long"]
+    assert bench.main(argv) == 0
+    report = json.loads((tmp_path / "c_long.json").read_text())
+    assert report["felt"]["speech_start_to_first_heard"]["n"] == 3

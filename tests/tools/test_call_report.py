@@ -130,3 +130,18 @@ def test_no_lang_section_without_auto_sides(tmp_path, capsys):
 def test_unknown_call_is_an_error(tmp_path, capsys):
     with pytest.raises(SystemExit):
         call_report.main(["c_missing", "--dir", str(tmp_path)])
+
+
+def test_reports_what_the_listener_feels_per_utterance(tmp_path, capsys):
+    """L9: speech start -> first heard, ear-voice span and first audio, p50/p95."""
+    d = write_call(tmp_path)
+    assert call_report.main([str(d)]) == 0
+    out = capsys.readouterr().out
+    assert "WHAT THE LISTENER FELT" in out
+    for label in ("speech start -> first heard", "ear-voice span", "speech end -> last heard"):
+        assert label in out, label
+    assert call_report.main([str(d), "--json"]) == 0
+    doc = json.loads(capsys.readouterr().out)
+    assert doc["speech_start_to_first_heard"]["n"] == 8
+    assert doc["speech_start_to_first_heard"]["p50"] == 2750  # play start 2750 after start
+    assert doc["ear_voice_span"]["n"] == 8
