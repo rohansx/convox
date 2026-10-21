@@ -7,15 +7,17 @@
 # TODO(native review): every hi, mr, gu, kn and ta text below was written by us and needs
 # a native speaker's check (spelling as STT writes it, register, gender: the rider lines
 # are in the masculine). The texts are SOURCE lines only; translations always come from MT.
+# Extra texts on a line are other spellings of the same words (romanised, contractions,
+# digits), never synonyms: a match is voiced as the line's first text.
 vertical: delivery
 numbers_readback: true  # a number in a turn must survive translation (interp/numbers.py)
 native_review_todo: [hi, mr, gu, kn, ta]
 lines:
-  - {id: ok, ack: true, en: [Okay, Alright], hi: [ठीक है, theek hai], mr: [ठीक आहे, theek aahe], gu: [સારું, ઠીક છે], kn: [ಸರಿ, sari], ta: [சரி]}
-  - {id: yes, ack: true, en: [Yes, Yeah], hi: [हाँ, haan], mr: [हो, ho], gu: [હા], kn: [ಹೌದು], ta: [ஆமாம்]}
+  - {id: ok, ack: true, en: [Okay], hi: [ठीक है, theek hai], mr: [ठीक आहे, theek aahe], gu: [સારું], kn: [ಸರಿ, sari], ta: [சரி]}
+  - {id: yes, ack: true, en: [Yes], hi: [हाँ, haan], mr: [हो, ho], gu: [હા], kn: [ಹೌದು], ta: [ஆமாம்]}
   - {id: no, ack: true, en: ["No"], hi: [नहीं, nahi], mr: [नाही], gu: [ના], kn: [ಇಲ್ಲ], ta: [இல்லை]}
   - {id: yes_sir, ack: true, en: [Yes sir], hi: [हाँ जी, haan ji], mr: [हो सर], gu: [હા સાહેબ]}
-  - {id: thanks, ack: true, en: [Thank you, Thanks], hi: [धन्यवाद, thank you], mr: [धन्यवाद], gu: [આભાર]}
+  - {id: thanks, ack: true, en: [Thank you], hi: [धन्यवाद], mr: [धन्यवाद], gu: [આભાર]}
   - {id: hello, ack: true, en: [Hello], hi: [हैलो, hello], mr: [हॅलो], gu: [હેલો]}
   - {id: bye, ack: true, en: ["Okay, bye"], hi: [ठीक है बाय], mr: [ठीक आहे बाय], gu: [સારું બાય]}
   - {id: sorry, ack: true, en: [Sorry], hi: [सॉरी], mr: [सॉरी], gu: [સોરી]}
@@ -25,7 +27,7 @@ lines:
   - {id: coming, en: [I am coming, "I'm coming"], hi: [आ रहा हूँ], mr: [येतोय], gu: [આવું છું]}
   - {id: at_gate, en: [I am outside the main gate, "I'm outside the main gate"], hi: [मैं मेन गेट के बाहर हूँ, main gate ke bahar hoon], mr: [मी मेन गेटच्या बाहेर आहे], gu: [હું મેન ગેટની બહાર છું]}
   - {id: reached, en: [I have reached, "I've reached"], hi: [मैं पहुँच गया हूँ], mr: [मी पोहोचलो आहे], gu: [હું પહોંચી ગયો છું]}
-  - {id: tell_otp, en: [Tell me the OTP, Please tell me the OTP], hi: [OTP बताइए, OTP batao], mr: [OTP सांगा], gu: [OTP કહો]}
+  - {id: tell_otp, en: [Tell me the OTP], hi: [OTP बताइए, OTP batao], mr: [OTP सांगा], gu: [OTP કહો]}
   - {id: what_otp, en: ["What is the OTP?"], hi: ["OTP क्या है?"], mr: ["OTP काय आहे?"], gu: ["OTP શું છે?"]}
   - {id: lift_broken, en: [The lift is not working], hi: [लिफ्ट काम नहीं कर रही, lift kaam nahi kar rahi], mr: [लिफ्ट चालू नाही], gu: [લિફ્ટ ચાલતી નથી]}
   - {id: which_floor, en: ["Which floor?"], hi: ["कौन सी मंज़िल?"], mr: ["कितवा मजला?"], gu: ["કયો માળ?"]}
