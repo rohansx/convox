@@ -13,7 +13,7 @@ import base64
 import json
 import logging
 from collections import deque
-from collections.abc import AsyncIterator, Callable, Mapping
+from collections.abc import AsyncIterator, Awaitable, Callable, Mapping
 from typing import Any, Protocol, runtime_checkable
 
 from dubhash.audio.frames import SAMPLE_RATE, SAMPLE_WIDTH, Reframer, ms_to_bytes
@@ -428,17 +428,23 @@ class JsonStreamLeg:
             self._closed_evt.set()
 
     async def _receive(self) -> str | None:
-        recv = asyncio.ensure_future(self.ws.receive_text())
-        stop = asyncio.ensure_future(self._closed_evt.wait())
-        try:
-            done, _ = await asyncio.wait({recv, stop}, return_when=asyncio.FIRST_COMPLETED)
-        finally:
-            stop.cancel()
-            if not recv.done():
-                recv.cancel()
-        if recv not in done or recv.cancelled() or recv.exception() is not None:
-            return None
-        return recv.result()
+        return await receive_until(self.ws.receive_text(), self._closed_evt)
+
+
+async def receive_until[T](recv: Awaitable[T], closed: asyncio.Event) -> T | None:
+    """Await one websocket receive unless `closed` is set first. None on close,
+    disconnect or any receive error (Starlette raises WebSocketDisconnect)."""
+    rx = asyncio.ensure_future(recv)
+    stop = asyncio.ensure_future(closed.wait())
+    try:
+        done, _ = await asyncio.wait({rx, stop}, return_when=asyncio.FIRST_COMPLETED)
+    finally:
+        stop.cancel()
+        if not rx.done():
+            rx.cancel()
+    if rx not in done or rx.cancelled() or rx.exception() is not None:
+        return None
+    return rx.result()
 
 
 def b64decode(payload: Any) -> bytes:
