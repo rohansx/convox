@@ -166,8 +166,8 @@ Every component is behind an interface with a fake, and the pipeline must run en
 | `LOG_FILE` | `logs/dubhash.log` | the app also writes its log as JSON lines here (with `call_id` when known), rotating at 10 MB, 5 files kept, appended across restarts. Empty = stdout only. Not written in `DUBHASH_ENV=test` |
 | `LOOPBACK_OPENING_LINE` | `short` (default) \| `full` \| `off` | the opening line of `/loopback` and `/join` calls; a loopback request may pass `opening_line` itself (L7) |
 | `PSTN_OPENING_LINE` | `full` (default) \| `short` \| `off` | the opening line of `POST /v1/calls` calls (`full` = the disclosure sentence, plus the record sentence with `record: true`) |
-| `AUTO_STT_OPEN` | `auto` (default) \| `guess` | how a `lang: "auto"` side's STT opens: `auto` = Sarvam realtime `language_code=auto` (finals report the language and its confidence, in translate mode too); `guess` = its best language so far (resolved, else hint, else `hi-IN`), reopened when it changes. Sarvam rejects `unknown`. [Language detection](language-detection.md) |
-| `LANG_MIN_SPEECH_MS` | `1500` | an auto side's utterances shorter than this (speech start to last voiced frame) are not used to decide its language, and get no language-ID call |
+| `AUTO_STT_OPEN` | `guess` (default) \| `auto` | how a `lang: "auto"` side's STT opens: `guess` = its best language so far (resolved, else hint, else `hi-IN`), reopened when it changes; `auto` = Sarvam realtime `language_code=auto` (finals report a language and confidence, in translate mode too, but unreliable on short lines, [L8](../plan/open-questions.md#answer-log)). Sarvam rejects `unknown`. [Language detection](language-detection.md) |
+| `LANG_MIN_SPEECH_MS` | `2000` | an auto side's utterances shorter than this (speech start to last voiced frame) are not used to decide its language, and get no language-ID call (L8: 2.0 s) |
 
 ### Global constants (defaults from the spec)
 

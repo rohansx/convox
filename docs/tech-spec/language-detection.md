@@ -36,8 +36,8 @@ stateDiagram-v2
 
 Per utterance (`LanguageResolver.observe`):
 
-- **Only utterances of at least `min_speech_ms`** (default 1500, `LANG_MIN_SPEECH_MS`) count: speech start to the last voiced frame. Shorter ones ("haan ji") are skipped and get no language-ID call.
-- **Evidence**: the STT final's language (Sarvam realtime with `language_code=auto` reports `language` and `language_confidence` on finals, in translate mode too), the `LanguageID` guess on the utterance audio (`SarvamLID`, whose thresholds are 0.7, and 0.95 for `en-IN`), and the hint. Per language the scores are combined as a noisy-or; the winner's confidence is multiplied by (1 − the runner-up's), so two engines disagreeing is low confidence. The hint lifts a language that some evidence named (by `hint_prior` 0.15) and never resolves a side on its own.
+- **Only utterances of at least `min_speech_ms`** (default 2000, `LANG_MIN_SPEECH_MS`; [L8](../plan/open-questions.md#answer-log): decide from 2.0 s, never from 1.0 s) count: speech start to the last voiced frame. Shorter ones ("haan ji", "OTP 4729") are skipped and get no language-ID call.
+- **Evidence**: the `LanguageID` guess on the utterance audio (`SarvamLID`: `saaras:v3` and `v4` vote on the first 2.0 s; 0 wrong of 360 in L8), the STT final's language when the vendor reports one (only with `AUTO_STT_OPEN=auto`: Sarvam realtime finals then carry `language` + `language_confidence`; L8 found it `en-IN` on every short clip and wrong at 1.0, so its score is capped at 0.7: alone it is at most PROVISIONAL), and the hint. Per language the scores are combined as a noisy-or; the winner's confidence is multiplied by (1 − the runner-up's), so two engines disagreeing is low confidence. The hint lifts a language that some evidence named (by `hint_prior` 0.15) and never resolves a side on its own.
 - **Confident** is ≥ 0.6 (`en-IN`: ≥ 0.95, `lang_confident`), **very confident** ≥ 0.9.
 - **English rules** (loanwords): when the side is in an Indic language and the utterance's transcript has ≥ 20 % Indic-script letters, English evidence is dropped. When an Indic guess in the utterance is confident, the STT final's `en-IN` is dropped whatever its score, and a LID `en-IN` must clear 0.95. Live, Sarvam realtime said `en-IN` at 0.98–0.99 on a Hindi speaker's lines with English words while the LID said `hi-IN` at 0.95–0.96 (c_f4h2dho56j).
 - **Menu**: `menu_after` (2) consecutive unsure or unsupported utterances on a side that is not CONFIRMED ask once per call for the keypad menu.
@@ -49,7 +49,7 @@ Each change is published as the CallEvent `lang` `{side, lang, state, confidence
 
 ## Translating before the language is known
 
-- **The auto side's speech** goes through the English pivot (`stt: sarvam-translate`, `mt_src: en-IN`), so translating it never needs its language. STT opens with `language_code=auto` (`AUTO_STT_OPEN=auto`, the default). The switch `guess` opens it in the side's best language so far (resolved, else hint, else Hindi) and reopens on a change (the warm pool is keyed by language). Measured 21 Oct (one Bulbul line per language): `mode=translate` opened in `hi-IN` gave the same English as opened in the speaker's own language for all of hi, mr, gu, kn, ta, en, te; finals 114–281 ms. Sarvam rejects `unknown`.
+- **The auto side's speech** goes through the English pivot (`stt: sarvam-translate`, `mt_src: en-IN`), so translating it never needs its language. By default (`AUTO_STT_OPEN=guess`) STT opens in the side's best language so far (resolved, else hint, else Hindi) and reopens once that changes (the warm pool is keyed by language; prewarm warms the same one). Measured 21 Oct (one Bulbul line per language): `mode=translate` opened in `hi-IN` gave the same English as opened in the speaker's own language for all of hi, mr, gu, kn, ta, en, te; finals 114–281 ms. The switch `auto` opens it with `language_code=auto` instead (Sarvam rejects `unknown`).
 - **The target for a listener** is that listener's resolved language; while it is UNKNOWN, its hint, else Hindi. When it resolves, later translations use it (MT target, Bulbul voice per language from pairs.yaml, and MT is skipped when the speaker's pivot English already is the target). A translation already through MT keeps the language it was made in.
 - **The effective pair** is rebuilt on every change (`config.pairs.effective_pair`) from the per-language side defaults in pairs.yaml (`language_sides`, shared with ward mode). Each side's STT provider and the pair-level knobs (`eou_ms`, `early_final_ms`, …) stay those the call started with (`auto_pair`).
 - The co-located cross-talk language check (a final in the other side's language is cross-talk) only runs once both sides' languages are known.
@@ -75,6 +75,9 @@ When both sides are resolved (a fixed side counts as resolved) to one language, 
 | c_zx7uu2n3n6 | `clinic-mr-en`, B (English) auto | 1400 / 1440 | A's 1st line went to B in Hindi (fallback); B CONFIRMED en-IN on its 1st line; then A→B skipped MT (heard 700 / 880) |
 | c_f4h2dho56j | `delivery-gu-hi`, both auto, before the English rule | 1480 / 6920 | B (Hindi) unsure twice (STT en-IN 0.99 vs LID hi-IN 0.95): keypad menu, a translation held 5.5 s |
 | c_iaxjjfwyog | same, with the English rule | 1480 / 1740 | A gu-IN and B hi-IN CONFIRMED on their 1st lines, 0.9 / 0.8 s after speech end; no menu |
+| c_hez5stsvje | same, final defaults (`guess`, 2.0 s, LID v3+v4 vote) | 1560 / 1740 | both CONFIRMED on their 1st lines from the LID alone (0.997), 1.5 / 0.8 s after speech end (the first LID call is cold); no menu |
+
+The first four calls ran with `AUTO_STT_OPEN=auto` and `min_speech_ms` 1500, before L8 landed.
 
 Scripted Bulbul speakers on wideband audio: real callers on 8 kHz PSTN, with accents and noise, will be less clean. Fakes (`tests/session/test_lang_auto_session.py`, `tests/test_integration_lang_auto.py`) cover the state machine, retargeting, code-mixing, the menu, DTMF and the bridge.
 
