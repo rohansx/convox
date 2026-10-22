@@ -1,12 +1,12 @@
 /* convox stage dashboard (templates/demo.html). Light on purpose: projectors wash out
-   dark themes. Inter when online, system fonts offline. No build step. */
+   dark themes. Geist when online, like the landing page, system fonts offline. No build step. */
 :root {
-  --bg: #fafafa;
+  --bg: #f6f4ef;
   --card: #ffffff;
-  --ink: #0a0a0a;
-  --ink-2: #404040;
-  --muted: #737373;
-  --line: #ebebeb;
+  --ink: #1f1c17;
+  --ink-2: #48443c;
+  --muted: #7a746a;
+  --line: #e9e5dc;
   --a: #ff5b14;
   --a-soft: #fff1ea;
   --a-mid: #f6b895;
@@ -19,10 +19,10 @@
   --warn-soft: #fbefd9;
   --bad: #c0362c;
   --bad-soft: #fbe5e2;
-  --k-eou: #d4d4d4; --k-stt: #a3a3a3; --k-mt: #ff5b14; --k-tts: #0a0a0a; --k-play: #737373;
-  --font: Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans", "Noto Sans Devanagari",
+  --k-eou: #e2dbcf; --k-stt: #bdb4a5; --k-mt: #ff5b14; --k-tts: #1f1c17; --k-play: #7a746a;
+  --font: "Geist", system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans", "Noto Sans Devanagari",
     "Noto Sans Gujarati", "Noto Sans Kannada", "Noto Sans Tamil", "Helvetica Neue", Arial, sans-serif;
-  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --mono: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   color-scheme: light;
 }
 * { box-sizing: border-box; }
@@ -36,7 +36,7 @@ h1, h2, p { margin: 0; }
 
 /* --- top bar -------------------------------------------------------------------- */
 .top { display: flex; align-items: center; gap: 20px; padding: 14px 28px; background: var(--card); border-bottom: 1px solid var(--line); }
-.logo { display: inline-flex; align-items: center; gap: 9px; font-weight: 650; font-size: 19px; letter-spacing: -.03em; text-decoration: none; }
+.logo { display: inline-flex; align-items: center; gap: 9px; font-weight: 500; font-size: 19px; letter-spacing: -.035em; text-decoration: none; }
 .mark { width: 24px; height: 24px; color: var(--ink); }
 .top-pair { display: inline-flex; align-items: center; gap: 10px; font-size: 22px; }
 .top-pair b:first-child { color: var(--a); }
@@ -135,6 +135,8 @@ h1, h2, p { margin: 0; }
 
 /* --- conversation --------------------------------------------------------------- */
 .convo { display: flex; flex-direction: column; min-height: 460px; height: calc(100vh - 420px); }
+/* the landing page frames a fixed 1440x1280 copy, so size by that, not the window */
+.is-embed .convo { height: 566px; }
 .timeline { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; padding-right: 4px; scroll-behavior: smooth; }
 .empty { margin: auto; text-align: center; max-width: 30em; display: flex; flex-direction: column; gap: 6px; font-size: 17px; }
 .turn { max-width: 78%; border-radius: 18px; padding: 12px 16px; animation: pop .35s cubic-bezier(.2,.9,.3,1.15) both; border: 1px solid transparent; }

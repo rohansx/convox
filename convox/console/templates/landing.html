@@ -5,11 +5,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Convox AI · live interpreter for phone calls</title>
   <meta name="description" content="Convox joins an ordinary phone call and interprets both ways in real time across Indian languages: मराठी, हिन्दी, ગુજરાતી, English, ಕನ್ನಡ, தமிழ். No app, any phone.">
-  <meta name="theme-color" content="#ffffff">
+  <meta name="theme-color" content="#fbfaf7">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
-  <link rel="stylesheet" href="/static/console/landing.css">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@300..600&family=Geist+Mono:wght@400;500&display=swap">
+  <link rel="stylesheet" href="/static/console/landing.css?v=5">
 </head>
 <body>
 
@@ -17,34 +17,47 @@
 <svg class="mark {{ cls }}" viewBox="0 0 24 24" aria-hidden="true"><rect width="24" height="24" rx="7" fill="currentColor"/><rect x="5" y="9" width="2.4" height="6" rx="1.2" fill="#fff"/><rect x="9" y="6" width="2.4" height="12" rx="1.2" fill="#fff"/><rect x="13" y="8" width="2.4" height="8" rx="1.2" fill="#ff5b14"/><rect x="17" y="10" width="2.4" height="4" rx="1.2" fill="#ff5b14"/></svg>
 {%- endmacro %}
 
+<div class="page">
+
 <header class="nav">
-  <div class="wrap nav-in">
+  <div class="nav-in">
     <a class="logo" href="/">{{ mark() }}<span>convox</span></a>
     <nav>
       <a href="#how">How it works</a>
       <a href="#dashboard">Dashboard</a>
       <a href="#usecases">Use cases</a>
     </nav>
-    <a class="btn btn-dark btn-sm" href="/demo">Live demo</a>
+    <div class="nav-end">
+      <a class="nav-link" href="/demo/preview">Sample call</a>
+      <a class="btn btn-dark btn-sm" href="/demo">Live demo <span class="arr" aria-hidden="true">→</span></a>
+    </div>
   </div>
 </header>
 
 <main>
-<section class="hero wrap">
-  <a class="badge" href="#call"><span class="dot"></span>Live in मराठी, हिन्दी, ગુજરાતી, English, ಕನ್ನಡ and தமிழ்</a>
-  <h1>Phone calls,<br>interpreted live.</h1>
-  <p class="sub">Convox joins an ordinary phone call and interprets both ways in real time. Each person speaks their own language and hears the other in theirs, about a second after they pause.</p>
-  <div class="ctas">
-    <a class="btn btn-dark" href="/demo">Try the live demo</a>
-    <button class="btn btn-light" type="button" data-sound-toggle data-scroll>
-      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>Hear a call
-    </button>
+<section class="hero">
+  <p class="langs" aria-label="Languages">मराठी <i>·</i> हिन्दी <i>·</i> ગુજરાતી <i>·</i> English <i>·</i> ಕನ್ನಡ <i>·</i> தமிழ்</p>
+  <div class="hero-grid">
+    <h1>Phone calls,<br>interpreted live.</h1>
+    <div class="hero-side">
+      <p class="sub">Convox joins an ordinary phone call and interprets both ways. Each person speaks their own language and hears the other in theirs, about a second after they pause.</p>
+      <div class="ctas">
+        <a class="btn btn-dark" href="/demo">Try the live demo <span class="arr" aria-hidden="true">→</span></a>
+        <button class="btn btn-ghost" type="button" data-sound-toggle data-scroll>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>Hear a call
+        </button>
+      </div>
+    </div>
   </div>
 </section>
 
-<section class="wrap" id="call">
-  <div class="panel" id="stage">
-    <div class="panel-bar">
+<section class="stage-wrap" id="call">
+  <div class="stage" id="stage">
+    <div class="stage-art" aria-hidden="true">
+      <svg class="skyline" viewBox="0 0 1200 160" preserveAspectRatio="none"><path d="M0 160V112h38V92h22v20h30V70h16V52h10v18h18v42h26V96h44v-26h12V46h8v24h20v42h40V84h28v28h22V64l18-14 18 14v48h34V88h46v24h16V58h30v54h28V98h40v14h22V74h12V40h10v34h14v38h36V90h52v22h18V66h24v46h30V82h38v30h26V56h20V38h8v18h18v56h40V94h34v18h22V72h30v40h28V86h44v26h30V62h16v50h30V90h40v22h18V78h26v34h40V96h36v64Z"/></svg>
+    </div>
+
+    <div class="stage-bar">
       <div class="tabs" role="tablist" aria-label="Example call">
         <button role="tab" class="tab" data-scene="delivery" aria-selected="true">Delivery</button>
         <button role="tab" class="tab" data-scene="clinic" aria-selected="false">Clinic</button>
@@ -92,47 +105,52 @@
       {% endfor %}
     </div>
 
-    <p class="panel-note"><span id="stage-caption"></span> The speakers are synthetic voices. The translation and the interpreter's voice are Convox's real output (Sarvam Mayura and Bulbul), with times measured when it was generated.</p>
-  </div>
-  <p class="built">Built on <b>Sarvam AI</b> speech models and <b>Exotel</b> telephony, for the <b>Bolna Symphony Buildathon</b>.</p>
-</section>
-
-<section class="wrap section split" id="problem">
-  <div>
-    <p class="eyebrow">The problem</p>
-    <h2>22 languages.<br>One phone call.</h2>
-  </div>
-  <div class="prose">
-    <p>More than 45 crore Indians live away from where they were born (Census 2011). They deliver parcels, drive cabs, repair homes and call clinics, often in a language that isn't theirs.</p>
-    <p>When the two people on a call don't share a language, the call quietly fails. The rider can't find the gate, the dosage is half understood, the OTP is misheard. Today's fix is a relative on speakerphone, or hanging up.</p>
-    <dl class="stats">
-      <div><dt>22</dt><dd>scheduled languages</dd></div>
-      <div><dt>45 cr+</dt><dd>internal migrants, Census 2011</dd></div>
-      <div><dt>0</dt><dd>apps needed to use Convox</dd></div>
-    </dl>
+    <p class="stage-note"><span id="stage-caption"></span> Speakers are synthetic voices; the translation and the interpreter's voice are Convox's real output, timed when generated.</p>
   </div>
 </section>
 
-<section class="wrap section" id="how">
-  <p class="eyebrow">How it works</p>
-  <h2 class="narrow">An interpreter that joins the call and stays out of the way.</h2>
+<section class="strip">
+  <p>Built on</p>
+  <ul>
+    <li>Sarvam AI</li>
+    <li>Exotel</li>
+    <li>Bolna</li>
+  </ul>
+  <p class="strip-end">Saaras recognition · Mayura translation · Bulbul voices</p>
+</section>
+
+<section class="block" id="problem">
+  <p class="label">The problem</p>
+  <p class="statement">More than 45 crore Indians live away from where they were born. <span>They deliver parcels, drive cabs and call clinics in a language that isn't theirs. When the two people on a call don't share one, the call quietly fails: the rider can't find the gate, the dosage is half understood, the OTP is misheard.</span></p>
+  <dl class="figures">
+    <div><dt>45 cr+</dt><dd>internal migrants in India, Census 2011</dd></div>
+    <div><dt>22</dt><dd>scheduled languages, and a call carries one at a time</dd></div>
+    <div><dt>0</dt><dd>apps to install. It's an ordinary phone call</dd></div>
+  </dl>
+</section>
+
+<section class="block" id="how">
+  <div class="head">
+    <p class="label">How it works</p>
+    <h2>An interpreter that joins the call and stays out of the way.</h2>
+  </div>
   <ol class="steps">
     <li><span class="n">01</span><h3>Listens</h3><p>Knows when you've finished a thought. A "haan" or "hmm" doesn't interrupt.</p></li>
     <li><span class="n">02</span><h3>Understands</h3><p>Sarvam speech recognition in six Indian languages, detected from your first two seconds.</p></li>
-    <li><span class="n">03</span><h3>Translates</h3><p>Sarvam Mayura translation. Every number is read back and checked, so 47296 stays 47296.</p></li>
-    <li><span class="n">04</span><h3>Speaks</h3><p>A natural Bulbul voice in the listener's language, matched to the speaker, after a soft chime.</p></li>
+    <li><span class="n">03</span><h3>Translates</h3><p>Sarvam Mayura translation. Every number is checked, so 47296 stays 47296.</p></li>
+    <li><span class="n">04</span><h3>Speaks</h3><p>A natural Bulbul voice in the listener's language, after a soft chime.</p></li>
   </ol>
   <div class="numbers">
     <div class="num-card">
       <p class="num-k">Pause to translated voice</p>
-      <p class="num-v">1.4 s</p>
+      <p class="num-v">1.4<small>s</small></p>
       <div class="bar"><span style="--w:39%" class="s1"></span><span style="--w:18%" class="s2"></span><span style="--w:25%" class="s3"></span><span style="--w:18%" class="s4"></span></div>
       <ul class="legend"><li class="s1">end of turn</li><li class="s2">recognise</li><li class="s3">translate</li><li class="s4">voice</li></ul>
       <p class="num-foot">Median on live calls, Hindi → Kannada.</p>
     </div>
     <div class="num-card">
       <p class="num-k">Long sentences start before you finish</p>
-      <p class="num-v">7.7 s <span>→</span> 4.3 s</p>
+      <p class="num-v">7.7<small>s</small> <span>→</span> 4.3<small>s</small></p>
       <div class="race">
         <div><span>Whole sentence</span><i class="slow" style="--w:100%"></i></div>
         <div><span>Clause by clause</span><i class="fast" style="--w:56%"></i></div>
@@ -142,21 +160,29 @@
   </div>
 </section>
 
-<section class="wrap section" id="dashboard">
-  <p class="eyebrow">The dashboard</p>
-  <h2 class="narrow">See every turn, as it happens.</h2>
-  <p class="lead">Both languages side by side, how long each line took, where the time went, who has the line, and every number check. This is the real dashboard playing a sample call.</p>
-  <div class="browser">
-    <div class="browser-bar"><i></i><i></i><i></i><span>convox · demo</span></div>
-    <div class="browser-view" id="dash-view">
-      <iframe title="Convox dashboard playing a sample call" data-src="/demo/preview" tabindex="-1"></iframe>
+<section class="block" id="dashboard">
+  <div class="head split">
+    <div>
+      <p class="label">The dashboard</p>
+      <h2>See every turn, as it happens.</h2>
+    </div>
+    <p class="lead">Both languages side by side, how long each line took, where the time went, who has the line, and every number check. This is the real dashboard playing a sample call.</p>
+  </div>
+  <div class="showcase">
+    <div class="browser">
+      <div class="browser-bar"><i></i><i></i><i></i><span>convox · demo</span></div>
+      <div class="browser-view" id="dash-view">
+        <iframe title="Convox dashboard playing a sample call" data-src="/demo/preview?embed=1" tabindex="-1"></iframe>
+      </div>
     </div>
   </div>
 </section>
 
-<section class="wrap section" id="features">
-  <p class="eyebrow">Why it feels like a real call</p>
-  <h2 class="narrow">Built for how India talks on the phone.</h2>
+<section class="block" id="features">
+  <div class="head">
+    <p class="label">Why it feels like a real call</p>
+    <h2>Built for how India talks on the phone.</h2>
+  </div>
   <div class="grid">
     <article><h3>One voice at a time</h3><p>A floor controller decides who has the line, so nobody hears two voices at once. Speak up to cut in.</p></article>
     <article><h3>Numbers come out right</h3><p>OTPs, amounts, flat and phone numbers are checked digit by digit between what was said and what is heard.</p></article>
@@ -167,9 +193,11 @@
   </div>
 </section>
 
-<section class="wrap section" id="usecases">
-  <p class="eyebrow">Use cases</p>
-  <h2 class="narrow">Every call where language is the blocker.</h2>
+<section class="block" id="usecases">
+  <div class="head">
+    <p class="label">Use cases</p>
+    <h2>Every call where language is the blocker.</h2>
+  </div>
   <ul class="uses">
     <li><b>Delivery and logistics</b><span>Directions, gates and OTPs between riders and customers.</span><em>मराठी ⇄ हिन्दी</em></li>
     <li><b>Clinics and teleconsults</b><span>Symptoms in the patient's words, dosage that arrives intact.</span><em>ગુજરાતી ⇄ English</em></li>
@@ -179,23 +207,26 @@
   </ul>
 </section>
 
-<section class="wrap">
+<section class="closing">
   <div class="cta">
+    <div class="stage-art" aria-hidden="true"></div>
     <h2>Try it with two phones.</h2>
     <p>Open the demo on a laptop, pick two languages, and scan one QR code with each phone. Then just talk.</p>
     <div class="ctas">
-      <a class="btn btn-white" href="/demo">Open the live demo</a>
-      <a class="btn btn-outline" href="/demo/preview">Watch a sample call</a>
+      <a class="btn btn-white" href="/demo">Open the live demo <span class="arr" aria-hidden="true">→</span></a>
+      <a class="btn btn-glass" href="/demo/preview">Watch a sample call</a>
     </div>
   </div>
 </section>
 </main>
 
-<footer class="wrap foot">
+<footer class="foot">
   <a class="logo" href="/">{{ mark() }}<span>convox</span></a>
   <span>© 2026 Convox AI · Speech by Sarvam AI · Telephony by Exotel</span>
 </footer>
 
-<script src="/static/console/landing.js" defer></script>
+</div>
+
+<script src="/static/console/landing.js?v=5" defer></script>
 </body>
 </html>
