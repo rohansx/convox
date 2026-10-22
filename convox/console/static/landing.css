@@ -240,8 +240,8 @@ h3 { font-size: 17px; font-weight: 500; letter-spacing: -.02em; }
 .browser-bar { display: flex; align-items: center; gap: 6px; height: 38px; padding: 0 14px; border-bottom: 1px solid #eee; background: #fafafa; }
 .browser-bar i { width: 10px; height: 10px; border-radius: 50%; background: #e5e5e5; }
 .browser-bar span { margin: 0 auto; font: 12px var(--mono); color: #a3a3a3; padding-right: 46px; }
-.browser-view { position: relative; aspect-ratio: 1440 / 1280; overflow: hidden; }
-.browser-view iframe { position: absolute; top: 0; left: 0; width: 1440px; height: 1280px; border: 0; transform-origin: 0 0; pointer-events: none; }
+.browser-view { position: relative; aspect-ratio: 1440 / 960; overflow: hidden; }
+.browser-view iframe { position: absolute; top: 0; left: 0; width: 1440px; height: 960px; border: 0; transform-origin: 0 0; pointer-events: none; }
 
 /* features: a ruled grid that runs between the rails */
 .grid { display: grid; grid-template-columns: repeat(3, 1fr); margin: 0 calc(-1 * var(--gut)); border-top: 1px solid var(--line); }
@@ -324,4 +324,26 @@ kbd { font: 500 12px var(--mono); padding: 1px 6px; border-radius: 5px; border: 
 }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
+}
+
+/* latency: one real turn drawn to scale (medians from 65 lines on 9 live calls) */
+.turnline { border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); padding: 32px 0 28px; display: flex; flex-direction: column; gap: 12px; }
+.tl-row { display: grid; grid-template-columns: 96px 1fr; align-items: center; gap: 16px; }
+.tl-who { font-size: 14px; color: var(--ink-2); }
+.tl-track { position: relative; height: 40px; border-radius: 10px; background: #f3f0ea; }
+.tl-track i { position: absolute; top: 0; bottom: 0; left: var(--x); width: var(--w); border-radius: 10px; display: flex; align-items: center; padding: 0 14px; font: 500 13px var(--sans); font-style: normal; white-space: nowrap; overflow: hidden; }
+.tl-talk { background: var(--ink); color: #fbfaf7; }
+.tl-quiet { background: repeating-linear-gradient(135deg, #ffd9c6 0 6px, #ffeadf 6px 12px); color: #a8410f; justify-content: center; padding: 0 !important; }
+.tl-quiet b { font: 500 13px var(--mono); }
+.tl-hear { background: var(--accent); color: #fff; }
+.tl-split { list-style: none; display: flex; flex-wrap: wrap; gap: 8px 28px; padding: 0; margin: 10px 0 0 112px; font-size: 14px; color: var(--ink-2); }
+.tl-split b { font: 500 14px var(--mono); color: var(--ink); margin-right: 4px; }
+.tl-split .tl-note { color: var(--faint); font-size: 13px; }
+.showcase-foot { margin-top: 18px; font-size: 14px; color: var(--muted); }
+.showcase-foot a { color: var(--ink); text-decoration: underline; text-underline-offset: 3px; text-decoration-color: var(--line-2); }
+#latency .numbers { border-top: 0; }
+@media (max-width: 640px) {
+  .tl-row { grid-template-columns: 64px 1fr; gap: 10px; }
+  .tl-track i { font-size: 11px; padding: 0 8px; }
+  .tl-split { margin-left: 0; }
 }

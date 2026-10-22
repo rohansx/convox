@@ -8,7 +8,6 @@ import re
 from pathlib import Path
 
 from tests.api.test_loopback import Env, _close_clients  # noqa: F401
-from tests.join.test_routes import figures
 
 FORM = {"content-type": "application/x-www-form-urlencoded"}
 
@@ -84,24 +83,6 @@ def test_plain_join_still_redirects_to_join():
         "/join", content="a_lang=mr-IN&b_lang=hi-IN", headers=h, follow_redirects=False
     )
     assert r.headers["location"].startswith("/join/c_")
-
-
-def test_dashboard_shows_qr_codes_and_wires_the_event_stream():
-    env = Env()
-    call_id = start_demo(env).headers["location"].rsplit("/", 1)[1]
-    r = env.client.get(f"/demo/{call_id}")
-    assert r.status_code == 200
-    page = r.text
-    figs = figures(page)
-    assert set(figs) == {"a", "b"}
-    for side, (url, svg) in figs.items():
-        assert url.startswith(f"https://dev.convox.in/join/{call_id}/{side}?t=")
-        assert svg.startswith("<svg")
-    assert f'data-events="/console/events?call={call_id}"' in page
-    assert 'id="demo"' in page and "/static/console/demo.js" in page
-    for hook in ('id="timeline"', 'id="pipeline"', 'id="floor-lane"', 'id="ticker"'):
-        assert hook in page, hook
-    assert "मराठी" in page and "हिन्दी" in page
 
 
 def test_dashboard_for_unknown_call_is_404():

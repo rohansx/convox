@@ -42,6 +42,7 @@ from convox.api.schemas import ApiError, LoopbackCallRequest, validation_error
 from convox.config.pairs import AUTO, PairConfig, find_pair, language_sides
 from convox.config.settings import Settings
 from convox.console.sse import sse_stream
+from convox.demo import stories
 from convox.events import EventBus
 from convox.interp.langid import SUPPORTED_LANGS
 from convox.join.tokens import make_join_token, verify_join_token
@@ -175,7 +176,10 @@ async def join_start(
     if "pair" in form and "a_lang" not in form:  # the picker posts "a|b"
         form["a_lang"], _, form["b_lang"] = form.pop("pair").partition("|")
     form.pop("pair", None)
-    view = form.pop("view", "")  # "demo": land on the stage dashboard (api/site.py)
+    view = form.pop("view", "")  # "demo": land on the live stage (api/site.py)
+    story = form.pop("story", "")  # demo/stories.py key; kept on the stage URL
+    if story and stories.story(story) is not None and "vertical" not in form:
+        form["vertical"] = stories.STORIES[story]["vertical"]
     form["record"] = form.get("record", "true")  # the stage's turn log keeps text (step 5)
     try:
         req = LoopbackCallRequest.model_validate(form)
@@ -186,8 +190,10 @@ async def join_start(
         return _picker(request, pairs, validation_error(e).message, 400)
     except ApiError as e:
         return _picker(request, pairs, e.message, e.status)
-    base = "/demo" if view == "demo" else "/join"
-    return RedirectResponse(f"{base}/{out.call_id}", status_code=303)
+    if view == "demo":
+        q = f"?story={story}" if stories.story(story) is not None else ""
+        return RedirectResponse(f"/demo/{out.call_id}{q}", status_code=303)
+    return RedirectResponse(f"/join/{out.call_id}", status_code=303)
 
 
 @host.get("/join/{call_id}", response_class=HTMLResponse)
@@ -263,6 +269,7 @@ async def join_phone(
     sessions: Sessions,
     book: Book,
     t: str | None = None,
+    story: str | None = None,
 ) -> HTMLResponse:
     try:
         session = _phone_session(request, sessions, call_id, side, t)
@@ -297,6 +304,8 @@ async def join_phone(
             "ui_en": UI["en"],
             "ws_path": f"/ws/loopback?{q}",
             "events_url": f"/join/{call_id}/{side}/events?t={t}",
+            # the live demo's story: this phone's role and a few lines to try
+            "role": stories.side_of(story, side),
         },
         headers={"cache-control": "no-store"},
     )

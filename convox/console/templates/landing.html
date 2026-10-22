@@ -11,7 +11,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@300..600&family=Geist+Mono:wght@400;500&display=swap">
   {{ favicon() }}
-  <link rel="stylesheet" href="/static/console/landing.css?v=8">
+  <link rel="stylesheet" href="/static/console/landing.css?v=10">
 </head>
 <body>
 
@@ -23,7 +23,8 @@
     {{ logo() }}
     <nav>
       <a href="#how">How it works</a>
-      <a href="#dashboard">Dashboard</a>
+      <a href="#latency">Latency</a>
+      <a href="#dashboard">Live demo</a>
       <a href="#usecases">Use cases</a>
     </nav>
     <div class="nav-end">
@@ -152,13 +153,41 @@
     <li><span class="n">03</span><h3>Translates</h3><p>Sarvam Mayura translation. Every number is checked, so 47296 stays 47296.</p></li>
     <li><span class="n">04</span><h3>Speaks</h3><p>A natural Bulbul voice in the listener's language, after a soft chime.</p></li>
   </ol>
+</section>
+
+<section class="block" id="latency">
+  <div class="head split">
+    <div>
+      <p class="label">Latency, honestly</p>
+      <h2>A beat of quiet after each line.</h2>
+    </div>
+    <p class="lead">Convox interprets the way a person does: it waits until you finish a thought, then the other person hears it in their language. That wait is the price of a whole sentence instead of broken fragments. Here is what it costs on real calls.</p>
+  </div>
+  <div class="turnline" aria-label="One turn on a real call">
+    <div class="tl-row">
+      <span class="tl-who">Speaker</span>
+      <div class="tl-track"><i class="tl-talk" style="--x:0%;--w:44%">talks · 4.8 s</i></div>
+    </div>
+    <div class="tl-row">
+      <span class="tl-who">Convox</span>
+      <div class="tl-track"><i class="tl-quiet" style="--x:44%;--w:12.3%"><b>1.3 s</b></i></div>
+    </div>
+    <div class="tl-row">
+      <span class="tl-who">Listener</span>
+      <div class="tl-track"><i class="tl-hear" style="--x:56.3%;--w:43.7%">hears the translation</i></div>
+    </div>
+    <ul class="tl-split">
+      <li><b>0.30 s</b> knowing you've stopped</li>
+      <li><b>0.66 s</b> translating</li>
+      <li><b>0.19 s</b> the voice starting</li>
+      <li class="tl-note">medians of each step; they don't add up exactly</li>
+    </ul>
+  </div>
   <div class="numbers">
     <div class="num-card">
-      <p class="num-k">Pause to translated voice</p>
-      <p class="num-v">1.4<small>s</small></p>
-      <div class="bar"><span style="--w:39%" class="s1"></span><span style="--w:18%" class="s2"></span><span style="--w:25%" class="s3"></span><span style="--w:18%" class="s4"></span></div>
-      <ul class="legend"><li class="s1">end of turn</li><li class="s2">recognise</li><li class="s3">translate</li><li class="s4">voice</li></ul>
-      <p class="num-foot">Median on live calls, Hindi → Kannada.</p>
+      <p class="num-k">Typical quiet before the other person hears you</p>
+      <p class="num-v">1.3<small>s</small></p>
+      <p class="num-foot">Median of 65 lines on 9 live calls. The slowest one line in ten waited 3.9 s or more.</p>
     </div>
     <div class="num-card">
       <p class="num-k">Long sentences start before you finish</p>
@@ -175,19 +204,20 @@
 <section class="block" id="dashboard">
   <div class="head split">
     <div>
-      <p class="label">The dashboard</p>
-      <h2>See every turn, as it happens.</h2>
+      <p class="label">The live demo</p>
+      <h2>Watch a call get through.</h2>
     </div>
-    <p class="lead">Both languages side by side, how long each line took, where the time went, who has the line, and every number check. This is the real dashboard playing a sample call.</p>
+    <p class="lead">Two phones, two people, no shared language. Each column is one person's screen, entirely in their language; between them, the quiet before each line is heard. When they hang up, Convox writes down what they agreed, in both languages. This is the real demo screen playing a sample call.</p>
   </div>
   <div class="showcase">
     <div class="browser">
-      <div class="browser-bar"><i></i><i></i><i></i><span>convox · demo</span></div>
+      <div class="browser-bar"><i></i><i></i><i></i><span>convox · live demo</span></div>
       <div class="browser-view" id="dash-view">
-        <iframe title="Convox dashboard playing a sample call" data-src="/demo/preview?embed=1" tabindex="-1"></iframe>
+        <iframe title="Convox live demo playing a sample call" data-src="/demo/preview?embed=1" tabindex="-1"></iframe>
       </div>
     </div>
   </div>
+  <p class="showcase-foot">For engineers, every call also has an <a href="/demo/preview/details">under-the-hood view</a>: the pipeline split of each line, who has the floor, and every number check.</p>
 </section>
 
 <section class="block" id="features">
@@ -239,6 +269,6 @@
 
 </div>
 
-<script src="/static/console/landing.js?v=8" defer></script>
+<script src="/static/console/landing.js?v=10" defer></script>
 </body>
 </html>
