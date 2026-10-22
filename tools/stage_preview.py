@@ -1,4 +1,4 @@
-"""Generate the live stage's sample call (/demo/preview) from the real pipeline: each scripted
+"""Generate the live stage's sample call (the Auto story) (/demo/preview) from the real pipeline: each scripted
 line translated by Sarvam Mayura (speaker gender passed), the Bulbul voice's time to first
 byte measured, and the outcome card written by Claude over the speakers' own words.
 
@@ -30,16 +30,16 @@ from convox.providers.sarvam_tts import BulbulTTS  # noqa: E402
 OUT = ROOT / "convox" / "console" / "static" / "stage" / "preview.json"
 EOU_MS, STT_MS = 300, 60  # live medians (out/live, 65 turns)
 VOICE = {"f": "ishita", "m": "shubh"}
-GENDER = {"a": "m", "b": "f"}  # Manjunath, Pooja
+GENDER = {"a": "m", "b": "f"}  # Basavaraj, Neha
 
 # ruff: noqa: E501
 LINES = [
-    ("a", "ಹೇಳಿ, ಏನು ಸಮಸ್ಯೆ?"),
-    ("b", "दो दिन से पानी नहीं आ रहा है।"),
-    ("a", "ಇವತ್ತು ಸಂಜೆ 6 ಗಂಟೆಗೆ ಪ್ಲಂಬರ್ ಕಳುಹಿಸುತ್ತೇನೆ."),
-    ("b", "ठीक है, मैं शाम को घर पर रहूँगी।"),
-    ("a", "ಈ ತಿಂಗಳ ಬಾಡಿಗೆ 15000 ರೂಪಾಯಿ, 5ನೇ ತಾರೀಖಿನೊಳಗೆ ಕೊಡಿ."),
-    ("b", "किराया मैं 5 तारीख तक दे दूँगी।"),
+    ("a", "ಹಲೋ ಮೇಡಂ, ನೀವು ಎಲ್ಲಿದ್ದೀರಾ?"),
+    ("b", "मैं मेट्रो स्टेशन के गेट नंबर 2 पर खड़ी हूँ।"),
+    ("a", "ಸರಿ, ಎರಡು ನಿಮಿಷದಲ್ಲಿ ಅಲ್ಲಿಗೆ ಬರ್ತೀನಿ. ಬಿಳಿ ಆಟೋ, ನಂಬರ್ 4417."),
+    ("b", "ठीक है, मैंने नीली ड्रेस पहनी है।"),
+    ("a", "ಕಾಣಿಸ್ತು, ನಾನು ನಿಮ್ಮ ಎದುರಿಗೇ ಇದ್ದೀನಿ."),
+    ("b", "हाँ, दिख गया। आ रही हूँ।"),
 ]
 
 
@@ -56,7 +56,7 @@ async def main() -> None:
     s = Settings()
     if not s.sarvam_api_key or not s.anthropic_api_key:
         sys.exit("SARVAM_API_KEY and ANTHROPIC_API_KEY are needed")
-    story = STORIES["rent"]
+    story = STORIES["auto"]
     langs = {k: story[k]["lang"] for k in ("a", "b")}
     mt, tts = SarvamMT(s.sarvam_api_key), BulbulTTS(s.sarvam_api_key)
     turns = []
@@ -87,7 +87,7 @@ async def main() -> None:
         json.dumps(
             {
                 "generated_with": f"Sarvam Mayura + Bulbul v3; outcome by {s.anthropic_model}",
-                "story": "rent",
+                "story": "auto",
                 "turns": turns,
                 "outcome": outcome,
             },

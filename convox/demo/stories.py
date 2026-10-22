@@ -12,6 +12,32 @@ from __future__ import annotations
 from typing import Any
 
 STORIES: dict[str, dict[str, Any]] = {
+    "auto": {
+        "title": "Auto",
+        "headline": "The auto can't find the pickup",
+        "stakes": "Driver and passenger must meet at a metro gate. He speaks Kannada, she Hindi.",
+        "vertical": "delivery",
+        "a": {
+            "role": "Driver",
+            "name": "Basavaraj",
+            "lang": "kn-IN",
+            "lines": [
+                "ಹಲೋ ಮೇಡಂ, ನೀವು ಎಲ್ಲಿದ್ದೀರಾ?",
+                "ಸರಿ, ಎರಡು ನಿಮಿಷದಲ್ಲಿ ಅಲ್ಲಿಗೆ ಬರ್ತೀನಿ.",
+                "ಬಿಳಿ ಆಟೋ, ನಂಬರ್ 4417.",
+            ],
+        },
+        "b": {
+            "role": "Passenger",
+            "name": "Neha",
+            "lang": "hi-IN",
+            "lines": [
+                "मैं मेट्रो स्टेशन के गेट नंबर 2 पर खड़ी हूँ।",
+                "मैंने नीली ड्रेस पहनी है।",
+                "ठीक है, मैं वहीं इंतज़ार करती हूँ।",
+            ],
+        },
+    },
     "rent": {
         "title": "Rent",
         "headline": "The water has been off for two days",
@@ -39,7 +65,7 @@ STORIES: dict[str, dict[str, Any]] = {
         },
     },
     "delivery": {
-        "title": "Delivery",
+        "title": "Parcel",
         "headline": "The rider is at the gate",
         "stakes": "The customer is out and the parcel needs an OTP. They don't share a language.",
         "vertical": "delivery",

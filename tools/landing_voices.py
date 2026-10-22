@@ -37,6 +37,16 @@ INTERPRETER = {"f": "ishita", "m": "shubh"}  # the call's default voices (sarvam
 # Speakers' own lines. Marathi, Gujarati and Kannada need a native speaker's check (PQ5).
 # ruff: noqa: E501 (one speaker per line reads better than wrapped dicts)
 SCENES = {
+    "auto": {
+        "caption": "A Kannada-speaking auto driver and a Hindi-speaking passenger, finding the pickup.",
+        "a": {"name": "Basavaraj", "lang": "kn-IN", "native": "ಕನ್ನಡ", "g": "m", "voice": "vijay"},
+        "b": {"name": "Neha", "lang": "hi-IN", "native": "हिन्दी", "g": "f", "voice": "priya"},
+        "lines": [
+            ("a", "ಹಲೋ ಮೇಡಂ, ನೀವು ಎಲ್ಲಿದ್ದೀರಾ?"),
+            ("b", "मैं मेट्रो स्टेशन के गेट नंबर 2 पर खड़ी हूँ।"),
+            ("a", "ಸರಿ, ಎರಡು ನಿಮಿಷದಲ್ಲಿ ಅಲ್ಲಿಗೆ ಬರ್ತೀನಿ. ಆಟೋ ನಂಬರ್ 4417."),
+        ],
+    },
     "rent": {
         "caption": "A Kannada-speaking landlord and a Hindi-speaking tenant.",
         "a": {"name": "Manjunath", "lang": "kn-IN", "native": "ಕನ್ನಡ", "g": "m", "voice": "vijay"},

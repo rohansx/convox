@@ -26,6 +26,7 @@ def call_of(r) -> str:
 def test_picker_offers_the_three_stories_as_one_click_starts():
     page = Env().client.get("/demo").text
     for story, pair in (
+        ("auto", "kn-IN|hi-IN"),
         ("rent", "kn-IN|hi-IN"),
         ("delivery", "mr-IN|hi-IN"),
         ("clinic", "gu-IN|en-IN"),
@@ -35,8 +36,8 @@ def test_picker_offers_the_three_stories_as_one_click_starts():
         f = form.group(0)
         assert 'action="/join"' in f and f'value="{pair}"' in f
         assert f'name="story" value="{story}"' in f and 'name="view" value="demo"' in f
-    assert page.index('data-story="rent"') < page.index('data-story="delivery"')
-    assert "Landlord" in page and "Tenant" in page
+    assert page.index('data-story="auto"') < page.index('data-story="rent"')
+    assert "Driver" in page and "Passenger" in page and "Landlord" in page
 
 
 def test_start_with_a_story_keeps_it_on_the_stage_url_and_sets_the_languages():
@@ -108,7 +109,7 @@ def test_preview_stage_is_public_scripted_and_links_its_details():
     env = Env(convox_env="dev", console_password="pw")
     page = env.client.get("/demo/preview").text
     assert 'id="stage"' in page and 'data-preview="1"' in page and "Sample data" in page
-    assert "data-events" not in page and "Landlord" in page
+    assert "data-events" not in page and "Driver" in page and "Passenger" in page
     assert 'href="/demo/preview/details"' in page
     details = env.client.get("/demo/preview/details")
     assert details.status_code == 200 and 'id="demo"' in details.text
