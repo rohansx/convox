@@ -175,6 +175,7 @@ async def join_start(
     if "pair" in form and "a_lang" not in form:  # the picker posts "a|b"
         form["a_lang"], _, form["b_lang"] = form.pop("pair").partition("|")
     form.pop("pair", None)
+    view = form.pop("view", "")  # "demo": land on the stage dashboard (api/site.py)
     form["record"] = form.get("record", "true")  # the stage's turn log keeps text (step 5)
     try:
         req = LoopbackCallRequest.model_validate(form)
@@ -185,7 +186,8 @@ async def join_start(
         return _picker(request, pairs, validation_error(e).message, 400)
     except ApiError as e:
         return _picker(request, pairs, e.message, e.status)
-    return RedirectResponse(f"/join/{out.call_id}", status_code=303)
+    base = "/demo" if view == "demo" else "/join"
+    return RedirectResponse(f"{base}/{out.call_id}", status_code=303)
 
 
 @host.get("/join/{call_id}", response_class=HTMLResponse)

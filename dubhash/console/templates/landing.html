@@ -1,0 +1,207 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>dubhash · live interpreter for phone calls</title>
+  <meta name="description" content="dubhash joins an ordinary phone call and interprets both ways in real time: मराठी, हिन्दी, ગુજરાતી, English, ಕನ್ನಡ, தமிழ். No app, any phone.">
+  <meta name="theme-color" content="#fbf7f0">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter:wght@400;500;600;700&family=Noto+Sans+Devanagari:wght@400;600&family=Noto+Sans+Gujarati:wght@400;600&display=swap">
+  <link rel="stylesheet" href="/static/console/landing.css">
+</head>
+<body>
+
+<header class="nav">
+  <a class="logo" href="/"><span class="logo-mark" aria-hidden="true"><i></i><i></i></span>dubhash</a>
+  <nav>
+    <a href="#problem">Problem</a>
+    <a href="#how">How it works</a>
+    <a href="#usecases">Use cases</a>
+    <a class="nav-cta" href="/demo">Live demo</a>
+  </nav>
+</header>
+
+<main>
+<!-- hero --------------------------------------------------------------------------- -->
+<section class="hero">
+  <div class="hero-copy">
+    <p class="eyebrow"><span lang="hi">दुभाषी</span> · a live interpreter inside the phone call</p>
+    <h1>Speak your language.<br><em>Be understood in theirs.</em></h1>
+    <p class="lead">dubhash joins an ordinary phone call and interprets both ways, in real time. Each person talks in their own language and hears the other in theirs, about a second after they pause.</p>
+    <div class="ctas">
+      <a class="btn btn-primary" href="/demo">See the live demo <span aria-hidden="true">→</span></a>
+      <a class="btn btn-ghost" href="/demo/preview">Watch a sample call</a>
+    </div>
+    <ul class="hero-facts">
+      <li><b>~1.4 s</b><span>pause to translated voice</span></li>
+      <li><b>6</b><span>Indian languages, auto-detected</span></li>
+      <li><b>0</b><span>apps to install</span></li>
+    </ul>
+  </div>
+
+  <div class="stage" id="stage" aria-label="Animated example: two phones on one call, interpreted by dubhash">
+    <div class="scenes" role="tablist" aria-label="Use case">
+      <button role="tab" class="scene-tab" data-scene="delivery" aria-selected="true">Delivery</button>
+      <button role="tab" class="scene-tab" data-scene="clinic" aria-selected="false">Clinic</button>
+      <button role="tab" class="scene-tab" data-scene="rent" aria-selected="false">Rent</button>
+    </div>
+    <div class="phones">
+      {% for side in ("a", "b") %}
+      <div class="iphone" data-side="{{ side }}">
+        <span class="btn-side btn-action"></span><span class="btn-side btn-vol-up"></span><span class="btn-side btn-vol-down"></span><span class="btn-side btn-power"></span>
+        <div class="screen">
+          <div class="island"></div>
+          <div class="statusbar"><span>9:41</span><span class="sb-icons"><i class="sig"></i><i class="bat"></i></span></div>
+          <div class="callhead">
+            <div class="avatar" data-role="avatar">S</div>
+            <div class="who">
+              <b data-role="name">Sunita</b>
+              <span class="via">via dubhash · <span data-role="timer">00:00</span></span>
+            </div>
+            <span class="lang-chip" data-role="lang">मराठी</span>
+          </div>
+          <div class="convo" data-role="convo" aria-live="polite"></div>
+          <div class="callfoot">
+            <div class="wave" data-role="wave">{% for i in range(24) %}<i style="--i:{{ i }}"></i>{% endfor %}</div>
+            <p class="status" data-role="status">Listening</p>
+            <div class="callbtns" aria-hidden="true">
+              <span class="cb"><svg viewBox="0 0 24 24"><path d="M12 15a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3Zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.9V21h2v-2.1A7 7 0 0 0 19 12h-2Z"/></svg></span>
+              <span class="cb"><svg viewBox="0 0 24 24"><circle cx="6" cy="5" r="1.6"/><circle cx="12" cy="5" r="1.6"/><circle cx="18" cy="5" r="1.6"/><circle cx="6" cy="11" r="1.6"/><circle cx="12" cy="11" r="1.6"/><circle cx="18" cy="11" r="1.6"/><circle cx="6" cy="17" r="1.6"/><circle cx="12" cy="17" r="1.6"/><circle cx="18" cy="17" r="1.6"/><circle cx="12" cy="22" r="1.4"/></svg></span>
+              <span class="cb"><svg viewBox="0 0 24 24"><path d="M3 9v6h4l5 5V4L7 9H3Zm13.5 3A4.5 4.5 0 0 0 14 8v8a4.5 4.5 0 0 0 2.5-4Zm-2.5-9v2.1a7 7 0 0 1 0 13.8V21a9 9 0 0 0 0-18Z"/></svg></span>
+              <span class="cb cb-end"><svg viewBox="0 0 24 24"><path d="M12 9c-1.6 0-3.2.3-4.6.8v3.1c0 .4-.2.7-.6.9-1 .5-1.9 1.1-2.7 1.8-.2.2-.4.3-.7.3s-.5-.1-.7-.3L.3 13.2a1 1 0 0 1 0-1.4C3.4 8.9 7.5 7 12 7s8.6 1.9 11.7 4.8a1 1 0 0 1 0 1.4l-2.4 2.4c-.2.2-.4.3-.7.3s-.5-.1-.7-.3c-.8-.7-1.7-1.3-2.7-1.8-.3-.2-.6-.5-.6-.9V9.8C15.2 9.3 13.6 9 12 9Z"/></svg></span>
+            </div>
+          </div>
+          <div class="homebar"></div>
+        </div>
+      </div>
+      {% if side == "a" %}
+      <div class="bridge" aria-hidden="true">
+        <svg class="bridge-line" viewBox="0 0 120 40" preserveAspectRatio="none"><path d="M0 20 C 40 0, 80 40, 120 20"/></svg>
+        <span class="pulse"></span>
+        <div class="bridge-pill"><span class="logo-mark"><i></i><i></i></span><span data-role="bridge">listening</span></div>
+      </div>
+      {% endif %}
+      {% endfor %}
+    </div>
+    <p class="stage-caption" id="stage-caption">A Marathi-speaking customer and a Hindi-speaking delivery rider, on one ordinary call.</p>
+  </div>
+</section>
+
+<section class="langs" aria-label="Supported languages">
+  {% for native, english in langs %}<span class="lang" title="{{ english }}"><b>{{ native }}</b>{% if native != english %}<small>{{ english }}</small>{% endif %}</span>{% endfor %}
+</section>
+
+<!-- problem ------------------------------------------------------------------------- -->
+<section class="section" id="problem">
+  <p class="kicker">The problem</p>
+  <h2>India talks in 22 scheduled languages.<br><em>Most phone calls assume one.</em></h2>
+  <p class="section-lead">Over 45 crore people in India live away from where they were born (Census 2011). They deliver our parcels, drive our cabs, fix our pipes and call our clinics, often in a language that isn't theirs. When the two sides of a call don't share one, the call quietly fails.</p>
+  <div class="cards three">
+    <article class="card">
+      <span class="card-num">01</span>
+      <h3>The parcel goes back</h3>
+      <p>A rider from Bihar is lost in a Pune housing society. The customer explains the way in Marathi; he understands half. Ten minutes later the order is marked "customer unreachable".</p>
+    </article>
+    <article class="card">
+      <span class="card-num">02</span>
+      <h3>The symptom gets lost</h3>
+      <p>A Gujarati-speaking grandmother on a teleconsult with an English-speaking doctor. A grandson translates what he can. "Twice a day after food" arrives as "twice a day".</p>
+    </article>
+    <article class="card">
+      <span class="card-num">03</span>
+      <h3>One digit, wrong</h3>
+      <p>OTPs, flat numbers, rupee amounts. Misheard across a language gap, a single wrong digit sends everyone back to the start of the call.</p>
+    </article>
+  </div>
+  <p class="today">Today's workarounds: a relative on speakerphone, a supervisor on a three-way call, or hanging up.</p>
+</section>
+
+<!-- solution / how ------------------------------------------------------------------ -->
+<section class="section dark" id="how">
+  <p class="kicker">The solution</p>
+  <h2>An interpreter that joins the call,<br><em>and gets out of the way.</em></h2>
+  <p class="section-lead">dubhash sits between the two phones. Nobody installs anything or presses a button: they talk the way they always do, and dubhash makes sure each of them hears the other in their own language.</p>
+
+  <ol class="flow">
+    <li><span class="flow-ico">◉</span><h3>Listens</h3><p>Knows when you've finished a thought, not just when you've gone quiet. A "haan" or "hmm" never interrupts.</p></li>
+    <li><span class="flow-ico">✎</span><h3>Understands</h3><p>Indian speech recognition by Sarvam, in six languages. It works out which language you're speaking in the first two seconds.</p></li>
+    <li><span class="flow-ico">⇄</span><h3>Translates</h3><p>Every number is read back and checked against the translation, so OTP 47296 stays 47296.</p></li>
+    <li><span class="flow-ico">♪</span><h3>Speaks</h3><p>A natural Indian voice in the listener's language, after a soft chime, so they know it's the interpreter.</p></li>
+    <li><span class="flow-ico">⏵</span><h3>Takes turns</h3><p>One voice at a time, like a real interpreter. Talk over it to cut in; press 1 on the keypad to hear the last line again.</p></li>
+  </ol>
+
+  <div class="timing">
+    <div class="timing-card">
+      <h3>From your pause to their ear</h3>
+      <div class="bar" role="img" aria-label="End of turn 0.55 seconds, then recognition, translation and voice, about 1.4 seconds in all">
+        <span style="--w:39%" class="seg s1">end of turn<b>0.55 s</b></span>
+        <span style="--w:18%" class="seg s2">recognise</span>
+        <span style="--w:25%" class="seg s3">translate</span>
+        <span style="--w:18%" class="seg s4">voice</span>
+      </div>
+      <p class="timing-total"><b>~1.4 s</b> median, measured on live calls (Hindi → Kannada)</p>
+    </div>
+    <div class="timing-card">
+      <h3>Long sentences? It starts before you finish.</h3>
+      <div class="race">
+        <div class="race-row"><span class="race-label">Waiting for the whole sentence</span><span class="race-bar slow" style="--w:100%"><b>7.7 s</b></span></div>
+        <div class="race-row"><span class="race-label">dubhash, clause by clause</span><span class="race-bar fast" style="--w:56%"><b>4.3 s</b></span></div>
+      </div>
+      <p class="timing-total">Speech start to first translated word, live Marathi → English. dubhash speaks each clause at a natural pause and never splits a number.</p>
+    </div>
+  </div>
+</section>
+
+<!-- features ------------------------------------------------------------------------ -->
+<section class="section" id="features">
+  <p class="kicker">Why it feels like a real call</p>
+  <h2>Built for the way India <em>actually talks on the phone.</em></h2>
+  <div class="cards grid">
+    <article class="feat"><h3>One voice at a time</h3><p>A floor controller decides who has the line, so you never hear two voices at once. Short back-channels are ignored; speak up to interrupt.</p></article>
+    <article class="feat"><h3>Numbers come out right</h3><p>OTPs, amounts, flat and phone numbers are checked digit by digit between what you said and what the other person hears.</p></article>
+    <article class="feat"><h3>Knows your language</h3><p>Detected automatically from your first words. If it can't tell, the keypad menu lets you choose in one press.</p></article>
+    <article class="feat"><h3>No app, any phone</h3><p>Works on a normal phone call through Exotel, even from a ₹1,200 feature phone. For stage demos, two phones just scan a QR code.</p></article>
+    <article class="feat"><h3>Keypad control</h3><p><kbd>1</kbd> replays the last translation. <kbd>0</kbd> turns interpreting off when both people turn out to share a language.</p></article>
+    <article class="feat"><h3>Private by default</h3><p>Calls are not recorded in production. Transcripts are kept only with consent, in line with India's DPDP Act.</p></article>
+  </div>
+</section>
+
+<!-- use cases ----------------------------------------------------------------------- -->
+<section class="section tint" id="usecases">
+  <p class="kicker">Where it helps</p>
+  <h2>Every call where <em>language is the blocker.</em></h2>
+  <div class="cards uses">
+    <article class="use"><span class="use-pair">मराठी ⇄ हिन्दी</span><h3>Delivery &amp; logistics</h3><p>Riders and customers sort out directions, gates and OTPs without hanging up.</p></article>
+    <article class="use"><span class="use-pair">ગુજરાતી ⇄ English</span><h3>Clinics &amp; teleconsults</h3><p>Patients describe symptoms in their own words; dosage instructions arrive intact.</p></article>
+    <article class="use"><span class="use-pair">ಕನ್ನಡ ⇄ हिन्दी</span><h3>Rentals &amp; home services</h3><p>Tenants, landlords, plumbers and electricians agree on what, when and how much.</p></article>
+    <article class="use"><span class="use-pair">தமிழ் ⇄ हिन्दी</span><h3>Customer support</h3><p>One support desk serves every state, without routing calls by language.</p></article>
+    <article class="use"><span class="use-pair">Any ⇄ Any</span><h3>Helplines &amp; public services</h3><p>Citizens reach help in the language they think in.</p></article>
+    <article class="use"><span class="use-pair">हिन्दी ⇄ ಕನ್ನಡ</span><h3>Blue-collar hiring</h3><p>Employers and workers from different states settle shifts and wages on one call.</p></article>
+  </div>
+</section>
+
+<!-- try it -------------------------------------------------------------------------- -->
+<section class="section try">
+  <h2>Try it with <em>two phones.</em></h2>
+  <ol class="steps">
+    <li><b>1</b><span>Open the live demo on a laptop and pick two languages.</span></li>
+    <li><b>2</b><span>Each person scans their QR code with their own phone.</span></li>
+    <li><b>3</b><span>Just talk. Watch the interpretation happen live on the dashboard.</span></li>
+  </ol>
+  <div class="ctas center">
+    <a class="btn btn-primary" href="/demo">Open the live demo <span aria-hidden="true">→</span></a>
+    <a class="btn btn-ghost" href="/demo/preview">Watch a sample call</a>
+  </div>
+</section>
+</main>
+
+<footer class="foot">
+  <span class="logo small"><span class="logo-mark" aria-hidden="true"><i></i><i></i></span>dubhash</span>
+  <span>Built for the Bolna Symphony Buildathon 2026 · Speech by Sarvam AI · Telephony by Exotel</span>
+</footer>
+
+<script src="/static/console/landing.js" defer></script>
+</body>
+</html>

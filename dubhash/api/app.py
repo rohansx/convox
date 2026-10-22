@@ -17,7 +17,7 @@ from typing import Any
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
-from dubhash.api import calls, console, health, legs_ws, login, loopback, webhooks
+from dubhash.api import calls, console, health, legs_ws, login, loopback, site, webhooks
 from dubhash.api.deps import CallRegistry, InMemoryCallRegistry
 from dubhash.api.schemas import ApiError, api_error_handler
 from dubhash.config.settings import Settings, get_settings
@@ -105,6 +105,8 @@ def create_app(
     app.include_router(loopback.router)
     app.include_router(join_routes.phone)
     app.include_router(join_routes.host)
+    app.include_router(site.public)  # before site.demo: /demo/preview is not a call id
+    app.include_router(site.demo)
     app.add_exception_handler(ApiError, api_error_handler)
     app.include_router(ward_routes.router)
     app.mount("/static/console", StaticFiles(directory=console.STATIC_DIR), name="console-static")
