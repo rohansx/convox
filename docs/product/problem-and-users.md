@@ -1,6 +1,6 @@
 # Problem and users
 
-This document covers who dubhash is for, which call fails for each group today, and why no existing product fixes it. It ends with two worked calls (a delivery call through a platform and a hospital ward conversation) that show what the product does from first second to last. Use it to settle "does this feature serve a real user?" questions and as the source for demo scenarios and eval scripts ([evaluation and metrics](../engineering/evaluation-and-metrics.md)).
+This document covers who Convox is for, which call fails for each group today, and why no existing product fixes it. It ends with two worked calls (a delivery call through a platform and a hospital ward conversation) that show what the product does from first second to last. Use it to settle "does this feature serve a real user?" questions and as the source for demo scenarios and eval scripts ([evaluation and metrics](../engineering/evaluation-and-metrics.md)).
 
 ## The setting
 
@@ -23,7 +23,7 @@ Each of these conversations fails, shrinks to gestures and numbers, or depends o
 | **Migrant worker and the city**: 450M internal migrants | A Bengali worker in Surat calls a Gujarati landlord, a police station, a hospital or a government office. The call ends in two minutes with nothing understood. | They find a friend who speaks a bit, or they do not make the call. |
 | **Sales team and a new region**: D2C brands, insurers, lenders | A Mumbai telesales team wants to call Tamil Nadu leads. It either hires Tamil callers for a pilot or skips the state. | They skip the state, or run a 6-week hiring cycle. |
 
-How each group maps to a way dubhash ships:
+How each group maps to a way Convox ships:
 
 | User group | Ships as | v1 buildathon scope |
 |---|---|---|
@@ -48,7 +48,7 @@ How each group maps to a way dubhash ships:
 
 ## Example call 1: the delivery (platform integration)
 
-A rider speaks Hindi and a customer speaks Kannada. The call takes 15 seconds and runs through the platform's masked-call path, with dubhash as the bridge.
+A rider speaks Hindi and a customer speaks Kannada. The call takes 15 seconds and runs through the platform's masked-call path, with Convox as the bridge.
 
 | t (s) | Rider (Hindi) hears / says | Customer (Kannada) hears / says |
 |---|---|---|
@@ -71,7 +71,7 @@ What the call exercises in the [floor controller](../tech-spec/floor-controller.
 sequenceDiagram
     autonumber
     participant R as Rider (leg A, hi)
-    participant F as dubhash floor controller
+    participant F as Convox floor controller
     participant C as Customer (leg B, kn)
     F->>R: opening line (hi)
     F->>C: opening line (kn)
@@ -98,7 +98,7 @@ Rules this call demonstrates:
 
 Sister Mary works at a Mumbai cancer hospital. Her patient, Birsa, is from Jharkhand. He speaks Santali and some Hindi.
 
-1. She opens dubhash on the ward phone and picks **Marathi ⇄ Hindi**. Santali is not supported yet, but Hindi is his second language and that pair works.
+1. She opens Convox on the ward phone and picks **Marathi ⇄ Hindi**. Santali is not supported yet, but Hindi is his second language and that pair works.
 2. She holds the phone between them.
 3. She presses her side and gives the discharge instructions in Marathi, sentence by sentence. He hears Hindi.
 4. He presses his side and asks whether he can eat rice. She hears Marathi.
@@ -110,7 +110,7 @@ The conversation takes twenty minutes. Before, it needed a relative who might no
 ```mermaid
 sequenceDiagram
     participant N as Nurse (mr)
-    participant P as Ward phone (dubhash web app)
+    participant P as Ward phone (Convox web app)
     participant B as Patient (hi)
     N->>P: press "my side", speak Marathi sentence
     P->>B: Hindi audio + both texts on screen

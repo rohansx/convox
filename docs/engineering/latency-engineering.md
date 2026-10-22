@@ -1,6 +1,6 @@
 # Latency engineering
 
-This document covers where dubhash's latency comes from, how we cut it, and how we measure it. The product succeeds only if the pause between one person finishing and the other hearing the translation feels like interpretation, not failure. The doc gives the stage-by-stage budget, every technique in scope (marked v1 or v2), the rule that published numbers come from real PSTN calls, and the exact timestamps every turn must log.
+This document covers where Convox's latency comes from, how we cut it, and how we measure it. The product succeeds only if the pause between one person finishing and the other hearing the translation feels like interpretation, not failure. The doc gives the stage-by-stage budget, every technique in scope (marked v1 or v2), the rule that published numbers come from real PSTN calls, and the exact timestamps every turn must log.
 
 ## Targets
 

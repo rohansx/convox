@@ -1,5 +1,5 @@
-from dubhash.audio.frames import FRAME_BYTES, FRAME_MS
-from dubhash.interp.endpoint import Discard, Endpointer, SpeechStart, Utterance
+from convox.audio.frames import FRAME_BYTES, FRAME_MS
+from convox.interp.endpoint import Discard, Endpointer, SpeechStart, Utterance
 
 
 def _frame(i: int) -> bytes:

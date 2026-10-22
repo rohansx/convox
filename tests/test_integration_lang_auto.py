@@ -1,5 +1,5 @@
 """lang "auto" through the real app: POST /loopback/calls with an auto side, two websocket
-tabs, real CallSession and WebRtcLeg, fake vendors (DUBHASH_ENV=test, so FakeLID, which
+tabs, real CallSession and WebRtcLeg, fake vendors (CONVOX_ENV=test, so FakeLID, which
 is never sure). Two long utterances from the auto side get no confident guess, so its
 leg hears the keypad menu; the page's digit picks Tamil; GET /v1/calls shows it and B's
 reply is translated into Tamil."""

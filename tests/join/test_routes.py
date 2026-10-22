@@ -8,9 +8,9 @@ from urllib.parse import parse_qs, urlparse
 import pytest
 import segno
 
-from dubhash.config.pairs import find_pair, load_pairs
-from dubhash.join import routes
-from dubhash.join.tokens import make_join_token, verify_join_token
+from convox.config.pairs import find_pair, load_pairs
+from convox.join import routes
+from convox.join.tokens import make_join_token, verify_join_token
 from tests.api.test_loopback import Env, _close_clients  # noqa: F401
 
 FORM = {"content-type": "application/x-www-form-urlencoded"}
@@ -69,7 +69,7 @@ def test_offered_pairs_skip_fakes_and_duplicates():
 
 
 def test_host_pages_need_console_auth_but_the_phone_page_does_not():
-    env = Env(dubhash_env="dev", console_password="pw")
+    env = Env(convox_env="dev", console_password="pw")
     assert env.client.get("/join").status_code == 401
     assert start(env).status_code == 401
     assert env.client.get("/join", headers=basic("pw")).status_code == 200
@@ -99,7 +99,7 @@ def test_start_call_shows_two_qr_codes_for_the_public_url():
     for side, (url, svg) in figs.items():
         u = urlparse(url)
         # settings.public_base_url, not the test client's host
-        assert f"{u.scheme}://{u.netloc}" == "https://dev.dubhash.in"
+        assert f"{u.scheme}://{u.netloc}" == "https://dev.convox.in"
         assert u.path == f"/join/{call_id}/{side}"
         assert verify_join_token(s, parse_qs(u.query)["t"][0], call_id, side)
         assert svg == routes.qr_svg(url)  # the QR encodes exactly that URL
@@ -110,9 +110,9 @@ def test_start_call_shows_two_qr_codes_for_the_public_url():
 
 
 def test_qr_svg_is_inline_and_self_contained():
-    svg = routes.qr_svg("https://dev.dubhash.in/join/c_1/a?t=1.ab")
+    svg = routes.qr_svg("https://dev.convox.in/join/c_1/a?t=1.ab")
     assert svg.startswith("<svg") and "<?xml" not in svg and "viewBox" in svg
-    q = segno.make("https://dev.dubhash.in/join/c_1/a?t=1.ab", error="m")
+    q = segno.make("https://dev.convox.in/join/c_1/a?t=1.ab", error="m")
     assert q.error == "M"
 
 

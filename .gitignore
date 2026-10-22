@@ -12,7 +12,7 @@ __pycache__/
 .mypy_cache/
 *.egg-info/
 
-# app log (logs/dubhash.log, rotating)
+# app log (logs/convox.log, rotating)
 logs/
 
 # audio artifacts from bench/fake runs

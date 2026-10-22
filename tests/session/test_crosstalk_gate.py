@@ -5,7 +5,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from dubhash.session.crosstalk import CrosstalkGate, frame_dbfs
+from convox.session.crosstalk import CrosstalkGate, frame_dbfs
 
 
 def frame_at(dbfs: float, f0: float = 140.0) -> bytes:

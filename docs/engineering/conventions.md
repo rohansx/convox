@@ -1,6 +1,6 @@
 # Engineering conventions
 
-This document lists the rules every dubhash PR follows. Some protect the hot path and the floor controller: interfaces with fakes, a single owner of transport control, no storage in the hot path, one asyncio task per call. The rest keep five people working in parallel for 10 days without stepping on each other: logging and metric names, branching, commit style. Rules marked **(spec)** come from the tech spec. The rest are proposed team conventions, and changing one means a PR to this file.
+This document lists the rules every Convox PR follows. Some protect the hot path and the floor controller: interfaces with fakes, a single owner of transport control, no storage in the hot path, one asyncio task per call. The rest keep five people working in parallel for 10 days without stepping on each other: logging and metric names, branching, commit style. Rules marked **(spec)** come from the tech spec. The rest are proposed team conventions, and changing one means a PR to this file.
 
 ## Architecture rules
 
@@ -81,7 +81,7 @@ This document lists the rules every dubhash PR follows. Some protect the hot pat
 ## Metrics
 
 - The `turns` table is the metrics store for latency. Field names match the schema exactly: `t_speech_start`, `t_speech_end`, `t_eou`, `t_stt_final`, `t_mt`, `t_tts_ttfb`, `t_play_start`, `t_play_end`, `clipped_ms`.
-- In-process metric names, if we add an exporter later: `dubhash_<area>_<name>_<unit>`, e.g. `dubhash_stt_final_latency_ms`, `dubhash_floor_queue_depth`, `dubhash_leg_gaps_total`. Labels: `pair`, `side`, `provider`. Never `call_id` (unbounded cardinality).
+- In-process metric names, if we add an exporter later: `convox_<area>_<name>_<unit>`, e.g. `convox_stt_final_latency_ms`, `convox_floor_queue_depth`, `convox_leg_gaps_total`. Labels: `pair`, `side`, `provider`. Never `call_id` (unbounded cardinality).
 - Reports always state p50 **and** p95, plus n, and whether the source is PSTN, bench or loopback.
 
 ## Code style

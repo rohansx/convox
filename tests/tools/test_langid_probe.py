@@ -1,6 +1,6 @@
 import numpy as np
 
-from dubhash.interp.langid import SUPPORTED_LANGS
+from convox.interp.langid import SUPPORTED_LANGS
 from tools.langid_probe import (
     CORPUS,
     VOICES,

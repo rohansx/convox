@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from dubhash.store.timeline import analyze, clock_offset, script_of
+from convox.store.timeline import analyze, clock_offset, script_of
 
 META = {
     "kind": "rec.meta",

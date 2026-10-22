@@ -1,11 +1,11 @@
 import asyncio
 import json
 
-from dubhash.audio.frames import FRAME_BYTES
-from dubhash.clock import FakeClock
-from dubhash.legs.base import LegTransport
-from dubhash.legs.webrtc import WebRtcLeg
-from dubhash.legs.ws import MemoryWS, ws_pair
+from convox.audio.frames import FRAME_BYTES
+from convox.clock import FakeClock
+from convox.legs.base import LegTransport
+from convox.legs.webrtc import WebRtcLeg
+from convox.legs.ws import MemoryWS, ws_pair
 
 
 async def settle() -> None:

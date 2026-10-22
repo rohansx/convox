@@ -14,8 +14,8 @@ import pytest
 import uvicorn
 import websockets
 
-from dubhash.api.app import create_app
-from dubhash.config.settings import Settings
+from convox.api.app import create_app
+from convox.config.settings import Settings
 from tests.audio_fixtures import frames, silence, speech
 
 
@@ -29,7 +29,7 @@ def _serve(**kw):
     port = _free_port()
     settings = Settings(
         _env_file=None,
-        dubhash_env="test",
+        convox_env="test",
         public_base_url=f"http://127.0.0.1:{port}",
         edge_wss_base=f"ws://127.0.0.1:{port}",
         **kw,

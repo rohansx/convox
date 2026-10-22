@@ -1,5 +1,5 @@
-from dubhash.api.deps import CallRegistry, InMemoryCallRegistry
-from dubhash.types import CallEvent, Turn
+from convox.api.deps import CallRegistry, InMemoryCallRegistry
+from convox.types import CallEvent, Turn
 
 
 def make() -> InMemoryCallRegistry:

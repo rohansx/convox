@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-PAGE = Path(__file__).parents[2] / "dubhash" / "legs" / "static" / "loopback.html"
+PAGE = Path(__file__).parents[2] / "convox" / "legs" / "static" / "loopback.html"
 NODE = shutil.which("node")
 
 

@@ -1,6 +1,6 @@
 # ADR 0001: Python 3.12 + asyncio, hot path in numpy/onnx
 
-This ADR records the choice of implementation language and concurrency model for the dubhash server, and the condition under which part of it would be ported to Rust.
+This ADR records the choice of implementation language and concurrency model for the Convox server, and the condition under which part of it would be ported to Rust.
 
 ## Status
 

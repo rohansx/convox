@@ -5,9 +5,9 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from pydantic import ValidationError
 
-from dubhash.api.auth import parse_api_keys, require_platform_key
-from dubhash.api.schemas import ApiError, CreateCallRequest, api_error_handler, error_code_for
-from dubhash.config.settings import Settings
+from convox.api.auth import parse_api_keys, require_platform_key
+from convox.api.schemas import ApiError, CreateCallRequest, api_error_handler, error_code_for
+from convox.config.settings import Settings
 
 BODY = {
     "a": {"number": "+919812345678", "lang": "hi-IN"},
@@ -65,7 +65,7 @@ def test_parse_api_keys():
 
 def _app(env: str, keys: str = "swiggy:sk_1,zomato:sk_2") -> TestClient:
     app = FastAPI()
-    app.state.settings = Settings(_env_file=None, dubhash_env=env, platform_api_keys=keys)
+    app.state.settings = Settings(_env_file=None, convox_env=env, platform_api_keys=keys)
     app.add_exception_handler(ApiError, api_error_handler)
 
     from typing import Annotated

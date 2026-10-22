@@ -5,20 +5,20 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from dubhash.audio.earcon import EARCON
-from dubhash.clock import FakeClock
-from dubhash.config.pairs import load_pairs
-from dubhash.legs.fake import FakeLeg
-from dubhash.providers.fakes import EnergyVAD, FakeMT, FakeSTT, FakeTTS
-from dubhash.session.call_session import CallSession
-from dubhash.session.prompts import opening_text
-from dubhash.session.providers import Providers
-from dubhash.types import Turn
+from convox.audio.earcon import EARCON
+from convox.clock import FakeClock
+from convox.config.pairs import load_pairs
+from convox.legs.fake import FakeLeg
+from convox.providers.fakes import EnergyVAD, FakeMT, FakeSTT, FakeTTS
+from convox.session.call_session import CallSession
+from convox.session.prompts import opening_text
+from convox.session.providers import Providers
+from convox.types import Turn
 from tests.audio_fixtures import conversation, speech
 from tests.floor_helpers import RecordingBus
 from tools.bench import drive_lockstep
 
-PAIRS = load_pairs(Path(__file__).resolve().parent.parent / "dubhash" / "config" / "pairs.yaml")
+PAIRS = load_pairs(Path(__file__).resolve().parent.parent / "convox" / "config" / "pairs.yaml")
 PAIR = PAIRS["fake-fake"]
 MS_PER_CHAR = 60  # FakeTTS: 60 ms per char is 3 frames, so every utterance is frame-aligned
 

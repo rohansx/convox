@@ -13,7 +13,7 @@ def test_compose_services_and_single_worker():
     assert services["redis"]["image"] == "redis:7"
     assert services["caddy"]["image"] == "caddy:2"
     cmd = " ".join(services["app"]["command"])
-    assert "dubhash.api.app:app" in cmd and "--workers 1" in cmd
+    assert "convox.api.app:app" in cmd and "--workers 1" in cmd
     assert all(" " not in arg for arg in services["app"]["command"])  # one argv item each
     # only caddy is exposed; the stores stay on the compose network
     assert "ports" not in services["postgres"] and "ports" not in services["redis"]
@@ -24,7 +24,7 @@ def test_compose_services_and_single_worker():
 def test_caddyfile_serves_both_domains_without_buffering():
     caddy = (ROOT / "Caddyfile").read_text()
     assert "{$EDGE_DOMAIN" in caddy and "{$API_DOMAIN" in caddy
-    assert "edge.dubhash.in" in caddy and "api.dubhash.in" in caddy
+    assert "edge.convox.in" in caddy and "api.convox.in" in caddy
     assert "reverse_proxy app:8000" in caddy
     assert "flush_interval -1" in caddy
 

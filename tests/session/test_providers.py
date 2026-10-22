@@ -2,22 +2,22 @@ from pathlib import Path
 
 import pytest
 
-from dubhash.config.pairs import load_pairs
-from dubhash.config.settings import Settings
-from dubhash.interp import vad as vad_mod
-from dubhash.interp.mt_cache import CachedMT
-from dubhash.providers.errors import ProviderUnavailable
-from dubhash.providers.fakes import EnergyVAD, FakeMT, FakeSTT, FakeTTS
-from dubhash.providers.sarvam_tts import BulbulTTS
-from dubhash.providers.tts_cache import CachedTTS
-from dubhash.session import providers as providers_mod
-from dubhash.session.providers import Providers, build_providers
+from convox.config.pairs import load_pairs
+from convox.config.settings import Settings
+from convox.interp import vad as vad_mod
+from convox.interp.mt_cache import CachedMT
+from convox.providers.errors import ProviderUnavailable
+from convox.providers.fakes import EnergyVAD, FakeMT, FakeSTT, FakeTTS
+from convox.providers.sarvam_tts import BulbulTTS
+from convox.providers.tts_cache import CachedTTS
+from convox.session import providers as providers_mod
+from convox.session.providers import Providers, build_providers
 
-PAIRS = load_pairs(Path(__file__).resolve().parents[2] / "dubhash" / "config" / "pairs.yaml")
+PAIRS = load_pairs(Path(__file__).resolve().parents[2] / "convox" / "config" / "pairs.yaml")
 
 
 def settings(**kw) -> Settings:
-    return Settings(_env_file=None, dubhash_env="dev", **kw)
+    return Settings(_env_file=None, convox_env="dev", **kw)
 
 
 def test_fake_pair_maps_to_fakes_per_side_and_cached_mt():
@@ -102,6 +102,6 @@ def test_real_tts_shares_one_process_store_with_disk(tmp_path):
 
 
 def test_tts_cache_dir_empty_means_memory_only():
-    s = Settings(_env_file=None, dubhash_env="dev", tts_cache_dir="")
+    s = Settings(_env_file=None, convox_env="dev", tts_cache_dir="")
     assert s.tts_cache_dir is None
     assert settings().tts_cache_mb == 64

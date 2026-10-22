@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-from dubhash.interp.langid import LangGuess
-from dubhash.session.language import (
+from convox.interp.langid import LangGuess
+from convox.session.language import (
     MENU_DIGITS,
     LangState,
     LanguageResolver,
@@ -325,6 +325,6 @@ def test_the_stt_finals_english_never_outvotes_a_sure_indic_lid_guess():
 def test_lang_is_a_call_event_kind():
     from typing import get_args
 
-    from dubhash.types import EventKind
+    from convox.types import EventKind
 
     assert "lang" in get_args(EventKind)

@@ -11,17 +11,17 @@ from pathlib import Path
 
 import numpy as np
 
-from dubhash.clock import FakeClock
-from dubhash.config.pairs import load_pairs
-from dubhash.legs.fake import FakeLeg
-from dubhash.providers.fakes import EnergyVAD, FakeMT, FakeSTT, FakeTTS
-from dubhash.session.call_session import CallSession
-from dubhash.session.providers import Providers
+from convox.clock import FakeClock
+from convox.config.pairs import load_pairs
+from convox.legs.fake import FakeLeg
+from convox.providers.fakes import EnergyVAD, FakeMT, FakeSTT, FakeTTS
+from convox.session.call_session import CallSession
+from convox.session.providers import Providers
 from tests.audio_fixtures import silence, speech, tone
 from tests.floor_helpers import RecordingBus
 from tools.bench import drive_lockstep
 
-PAIR = load_pairs(Path(__file__).resolve().parents[2] / "dubhash" / "config" / "pairs.yaml")[
+PAIR = load_pairs(Path(__file__).resolve().parents[2] / "convox" / "config" / "pairs.yaml")[
     "fake-fake"
 ]
 A_SAYS = "bhaiya main gate ke bahar hoon"

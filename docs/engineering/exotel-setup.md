@@ -1,12 +1,12 @@
 # Exotel setup
 
-This page gets a real phone call running through dubhash on Exotel. It covers the five values dubhash needs, where each one comes from in the Exotel dashboard, and how to check them without spending credits. API details are from [developer.exotel.com/docs/voice](https://developer.exotel.com/docs/voice) and the [connect-to-flow reference](https://developer.exotel.com/docs/voice-v1/api-reference/connect-to-flow).
+This page gets a real phone call running through Convox on Exotel. It covers the five values Convox needs, where each one comes from in the Exotel dashboard, and how to check them without spending credits. API details are from [developer.exotel.com/docs/voice](https://developer.exotel.com/docs/voice) and the [connect-to-flow reference](https://developer.exotel.com/docs/voice-v1/api-reference/connect-to-flow).
 
-## How a dubhash call uses Exotel
+## How a Convox call uses Exotel
 
-dubhash places **two** outbound calls, one per leg, with `POST /v1/Accounts/{sid}/Calls/connect`. Each call connects its person to a call flow whose only applet is a **Voicebot** applet. The applet opens a websocket to dubhash, and dubhash joins the two legs itself. See [telephony integration](../architecture/telephony-integration.md).
+Convox places **two** outbound calls, one per leg, with `POST /v1/Accounts/{sid}/Calls/connect`. Each call connects its person to a call flow whose only applet is a **Voicebot** applet. The applet opens a websocket to Convox, and Convox joins the two legs itself. See [telephony integration](../architecture/telephony-integration.md).
 
-The applet is configured with dubhash's **dynamic URL endpoint**: `https://<public host>/telephony/exotel/stream`. Exotel calls it at answer time, and dubhash returns `{"url": "wss://<public host>/ws/leg?call=…&side=…&sample-rate=16000"}`. dubhash identifies the leg from `CustomField=<call_id>:<side>`, which it sends on every `Calls/connect`. If that is missing, it falls back to looking up the CallSid.
+The applet is configured with Convox's **dynamic URL endpoint**: `https://<public host>/telephony/exotel/stream`. Exotel calls it at answer time, and Convox returns `{"url": "wss://<public host>/ws/leg?call=…&side=…&sample-rate=16000"}`. Convox identifies the leg from `CustomField=<call_id>:<side>`, which it sends on every `Calls/connect`. If that is missing, it falls back to looking up the CallSid.
 
 ## Values
 
@@ -17,7 +17,7 @@ The applet is configured with dubhash's **dynamic URL endpoint**: `https://<publ
 | `EXOTEL_API_HOST` | Region: Singapore = `api.exotel.com` (default), India = `api.in.exotel.com` | default (Singapore) |
 | `EXOTEL_EXOPHONE` | ExoPhones page: the virtual number used as `CallerId` | **needed**. The API lists none yet |
 | `EXOTEL_FLOW_URL` | App Bazaar → create an app (flow) with one **Voicebot** applet → its app id → `http://my.exotel.com/rohan28/exoml/start_voice/<app_id>` | **needed** |
-| `PUBLIC_BASE_URL`, `EDGE_WSS_BASE` | A public HTTPS host for dubhash. Exotel cannot reach localhost: use a tunnel (e.g. `cloudflared tunnel --url http://localhost:8000`) or the ap-south-1 VM | **needed** for real calls |
+| `PUBLIC_BASE_URL`, `EDGE_WSS_BASE` | A public HTTPS host for convox. Exotel cannot reach localhost: use a tunnel (e.g. `cloudflared tunnel --url http://localhost:8000`) or the ap-south-1 VM | **needed** for real calls |
 | `STT_IMPL`, `MT_IMPL`, `TTS_IMPL` | Set to `real` for live calls (default `fake`) | set when ready |
 
 Optional: `EXOTEL_WS_BASIC_USER` / `EXOTEL_WS_BASIC_PASS` (Basic auth Exotel sends on the websocket) or `EXOTEL_ALLOWED_IPS`.
@@ -25,7 +25,7 @@ Optional: `EXOTEL_WS_BASIC_USER` / `EXOTEL_WS_BASIC_PASS` (Basic auth Exotel sen
 ## Voicebot applet settings
 
 - **URL:** `https://<public host>/telephony/exotel/stream` (dynamic endpoint, HTTPS).
-- **Sample rate:** 16000 if the applet offers it. dubhash reads the real rate from the `start` message and resamples 8 kHz if needed (open question 1).
+- **Sample rate:** 16000 if the applet offers it. Convox reads the real rate from the `start` message and resamples 8 kHz if needed (open question 1).
 - The Voicebot applet may need to be enabled on the account by Exotel (ask the sponsor channel or hello@exotel.com).
 
 ## Check without spending credits

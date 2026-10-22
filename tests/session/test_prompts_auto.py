@@ -1,7 +1,7 @@
 """Prompts for lang "auto": the neutral opening, the partner-unknown opening and the
 keypad language menu (session/prompts.py)."""
 
-from dubhash.session.prompts import (
+from convox.session.prompts import (
     auto_opening_text,
     language_menu_text,
     partner_auto_opening_text,
@@ -23,7 +23,7 @@ def test_auto_opening_in_english_is_said_once():
 
 
 def test_auto_opening_has_a_line_for_every_supported_language():
-    from dubhash.interp.langid import SUPPORTED_LANGS
+    from convox.interp.langid import SUPPORTED_LANGS
 
     for lang in SUPPORTED_LANGS:
         assert auto_opening_text(lang).endswith("Please speak in your language.")

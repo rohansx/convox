@@ -2,9 +2,9 @@ from pathlib import Path
 
 import pytest
 
-from dubhash.audio.frames import FRAME_BYTES
-from dubhash.interp.contracts import VAD
-from dubhash.interp.vad import DEFAULT_MODEL_PATH, SileroVAD, VADModelError
+from convox.audio.frames import FRAME_BYTES
+from convox.interp.contracts import VAD
+from convox.interp.vad import DEFAULT_MODEL_PATH, SileroVAD, VADModelError
 from tests.audio_fixtures import frames, silence, speech
 
 needs_model = pytest.mark.skipif(not DEFAULT_MODEL_PATH.exists(), reason="silero model missing")

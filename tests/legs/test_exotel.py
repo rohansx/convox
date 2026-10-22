@@ -5,10 +5,10 @@ import logging
 
 import numpy as np
 
-from dubhash.audio.frames import FRAME_BYTES
-from dubhash.legs.base import LegTransport
-from dubhash.legs.exotel import ExotelLeg
-from dubhash.legs.ws import MemoryWS, ws_pair
+from convox.audio.frames import FRAME_BYTES
+from convox.legs.base import LegTransport
+from convox.legs.exotel import ExotelLeg
+from convox.legs.ws import MemoryWS, ws_pair
 
 
 def start_msg(rate: str | None = "16000", sid: str = "ST1") -> str:
@@ -104,7 +104,7 @@ async def test_media_base64_decoded_into_640_byte_frames_and_stop_ends_frames():
 
 
 async def test_8k_start_resamples_inbound_and_logs_once(caplog):
-    caplog.set_level(logging.WARNING, logger="dubhash.legs.exotel")
+    caplog.set_level(logging.WARNING, logger="convox.legs.exotel")
     leg, client, task = await started("8000")
     assert leg.sample_rate == 8000
     t = np.arange(8000) / 8000

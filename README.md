@@ -1,6 +1,6 @@
-# dubhash
+# Convox
 
-dubhash is a live interpreter inside a phone call between two people who speak different Indian languages.
+Convox is a live interpreter inside a phone call between two people who speak different Indian languages.
 The server joins two telephony legs itself, so A hears B translated and B hears A translated, about 1.5 s after each one stops speaking.
 The listener hears a gender-matched natural voice with the original speaker ducked underneath; pressing 0 turns interpretation off.
 
@@ -53,7 +53,7 @@ Latency numbers we quote come from real PSTN calls only; loopback numbers are fo
 ## Repo layout
 
 ```text
-dubhash/
+convox/
   api/          FastAPI app factory, console routes, health, dependencies
   audio/        frames (640-byte 20 ms frames), resample (soxr), mixer + earcon, wav I/O
   config/       settings.py (env), pairs.py + pairs.yaml (per language pair)

@@ -1,4 +1,4 @@
-"""Place one real interpreted phone call through a running dubhash app and watch it.
+"""Place one real interpreted phone call through a running convox app and watch it.
 
     uv run python tools/call.py 9172522532 mr-IN <your number> hi-IN
     uv run python tools/call.py A_NUMBER A_LANG B_NUMBER B_LANG --base http://127.0.0.1:8000
@@ -22,7 +22,7 @@ import httpx
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from dubhash.config.settings import Settings  # noqa: E402
+from convox.config.settings import Settings  # noqa: E402
 
 ENDED = {"completed", "failed", "ended", "no_answer", "busy"}
 

@@ -3,9 +3,9 @@ import asyncio
 import pytest
 from starlette.websockets import WebSocket
 
-from dubhash.audio.frames import FRAME_BYTES
-from dubhash.clock import FakeClock, MonotonicClock
-from dubhash.legs.ws import (
+from convox.audio.frames import FRAME_BYTES
+from convox.clock import FakeClock, MonotonicClock
+from convox.legs.ws import (
     ChunkGapDetector,
     InboundAudio,
     OutboundAudio,

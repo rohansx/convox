@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from dubhash.config.pairs import (
+from convox.config.pairs import (
     auto_pair,
     auto_side,
     default_side,
@@ -14,9 +14,9 @@ from dubhash.config.pairs import (
     language_sides,
     load_pairs,
 )
-from dubhash.interp.langid import SUPPORTED_LANGS
+from convox.interp.langid import SUPPORTED_LANGS
 
-PAIRS = load_pairs(Path(__file__).resolve().parents[1] / "dubhash" / "config" / "pairs.yaml")
+PAIRS = load_pairs(Path(__file__).resolve().parents[1] / "convox" / "config" / "pairs.yaml")
 
 
 def test_every_supported_language_has_a_side_in_pairs_yaml():

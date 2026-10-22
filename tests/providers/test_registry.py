@@ -1,27 +1,27 @@
 import pytest
 
-from dubhash.config.settings import Settings
-from dubhash.providers.deepgram_stt import DeepgramSTT
-from dubhash.providers.eleven_tts import ElevenTTS
-from dubhash.providers.fakes import FakeLID
-from dubhash.providers.registry import (
+from convox.config.settings import Settings
+from convox.providers.deepgram_stt import DeepgramSTT
+from convox.providers.eleven_tts import ElevenTTS
+from convox.providers.fakes import FakeLID
+from convox.providers.registry import (
     ProviderUnavailable,
     build_lid,
     build_mt,
     build_stt,
     build_tts,
 )
-from dubhash.providers.sarvam_lid import SarvamLID
-from dubhash.providers.sarvam_mt import SarvamMT
-from dubhash.providers.sarvam_stt import SarvamSTT
-from dubhash.providers.sarvam_stt_translate import SarvamSTTTranslate
-from dubhash.providers.sarvam_tts import BulbulTTS
+from convox.providers.sarvam_lid import SarvamLID
+from convox.providers.sarvam_mt import SarvamMT
+from convox.providers.sarvam_stt import SarvamSTT
+from convox.providers.sarvam_stt_translate import SarvamSTTTranslate
+from convox.providers.sarvam_tts import BulbulTTS
 
 
 def _settings(**kw) -> Settings:
     base = dict(
         _env_file=None,
-        dubhash_env="dev",
+        convox_env="dev",
         stt_impl="real",
         mt_impl="real",
         tts_impl="real",
@@ -71,9 +71,9 @@ def test_unknown_name_raises_provider_unavailable(build):
 
 def test_build_lid_real_fake_and_errors():
     assert isinstance(build_lid("sarvam", _settings(sarvam_api_key="sk")), SarvamLID)
-    # LID follows STT_IMPL (it is a speech provider) and DUBHASH_ENV=test
+    # LID follows STT_IMPL (it is a speech provider) and CONVOX_ENV=test
     assert isinstance(build_lid("sarvam", _settings(stt_impl="fake")), FakeLID)
-    assert isinstance(build_lid("sarvam", _settings(dubhash_env="test")), FakeLID)
+    assert isinstance(build_lid("sarvam", _settings(convox_env="test")), FakeLID)
     assert isinstance(build_lid("fake", _settings()), FakeLID)
     with pytest.raises(ProviderUnavailable, match="SARVAM_API_KEY"):
         build_lid("sarvam", _settings())

@@ -1,8 +1,8 @@
 import asyncio
 from urllib.parse import parse_qs, urlparse
 
-from dubhash.interp.contracts import STT, STTStream
-from dubhash.providers.deepgram_stt import DeepgramSTT
+from convox.interp.contracts import STT, STTStream
+from convox.providers.deepgram_stt import DeepgramSTT
 from tests.providers.wsmock import Conn, ws_server
 
 F1, F2 = b"\x01\x00" * 320, b"\x02\x00" * 320

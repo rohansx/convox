@@ -1,6 +1,6 @@
 import pytest
 
-from dubhash.interp.gender import detect_gender, estimate_f0
+from convox.interp.gender import detect_gender, estimate_f0
 from tests.audio_fixtures import harmonic, silence, speech, tone
 
 

@@ -1,6 +1,6 @@
 # Deployment
 
-This document describes how dubhash runs in production for the buildathon. It covers: one VM in AWS ap-south-1 (Mumbai) running Docker Compose with four services, TLS via Caddy, the hard rule that both legs of a call land on the same process, provider allowlisting, data handling, observability, and how we would scale later. The compose file and Caddyfile don't exist yet. Snippets marked *proposed* are what the Day 1 scaffolding should produce.
+This document describes how Convox runs in production for the buildathon. It covers: one VM in AWS ap-south-1 (Mumbai) running Docker Compose with four services, TLS via Caddy, the hard rule that both legs of a call land on the same process, provider allowlisting, data handling, observability, and how we would scale later. The compose file and Caddyfile don't exist yet. Snippets marked *proposed* are what the Day 1 scaffolding should produce.
 
 ## Why one VM in Mumbai
 
@@ -20,7 +20,7 @@ flowchart LR
       OP["Team / judges<br/>console in browser"]
     end
     subgraph VM["VM · ap-south-1 (Mumbai) · Docker Compose"]
-      CA["caddy<br/>:443 TLS<br/>edge.dubhash.in"]
+      CA["caddy<br/>:443 TLS<br/>edge.convox.in"]
       AP["app<br/>FastAPI + uvicorn<br/>1 process, asyncio"]
       PG[("postgres<br/>calls, legs, turns, events")]
       RD[("redis<br/>call registry")]
@@ -60,12 +60,12 @@ services:
   app:
     build: .
     env_file: .env
-    command: uvicorn dubhash.api.app:app --host 0.0.0.0 --port 8000 --workers 1
+    command: uvicorn convox.api.app:app --host 0.0.0.0 --port 8000 --workers 1
     depends_on: [postgres, redis]
     restart: unless-stopped
   postgres:
     image: postgres:16
-    environment: { POSTGRES_USER: dubhash, POSTGRES_PASSWORD: ${PG_PASSWORD}, POSTGRES_DB: dubhash }
+    environment: { POSTGRES_USER: Convox, POSTGRES_PASSWORD: ${PG_PASSWORD}, POSTGRES_DB: Convox }
     volumes: [pgdata:/var/lib/postgresql/data]
     restart: unless-stopped
   redis:
@@ -83,14 +83,14 @@ volumes: { pgdata: {}, caddy_data: {} }
 Proposed `Caddyfile`:
 
 ```text
-edge.dubhash.in, api.dubhash.in {
+edge.convox.in, api.convox.in {
     reverse_proxy app:8000 {
         flush_interval -1        # do not buffer SSE
     }
 }
 ```
 
-The overview uses `api.dubhash.in` for the platform API and `edge.dubhash.in` for leg websockets. Both are served by the same Caddy site pointing at the same `app`; one hostname would also work. Final DNS layout and domain ownership: TBD, see [open questions](../plan/open-questions.md) (PQ10).
+The overview uses `api.convox.in` for the platform API and `edge.convox.in` for leg websockets. Both are served by the same Caddy site pointing at the same `app`; one hostname would also work. Final DNS layout and domain ownership: TBD, see [open questions](../plan/open-questions.md) (PQ10).
 
 Only ports 80 and 443 are exposed. Postgres and Redis listen on the compose network only.
 
@@ -98,7 +98,7 @@ Only ports 80 and 443 are exposed. Postgres and Redis listen on the compose netw
 
 A call's two legs share one `CallSession` and one `FloorController`, in memory. They **must** land on the same OS process.
 
-- Each leg's websocket URL carries the call id: `wss://edge.dubhash.in/ws/leg?call=c_91&side=a&sample-rate=16000`. Exotel allows 3 custom params, and `call` and `side` are two of them.
+- Each leg's websocket URL carries the call id: `wss://edge.convox.in/ws/leg?call=c_91&side=a&sample-rate=16000`. Exotel allows 3 custom params, and `call` and `side` are two of them.
 - `api/` looks up the `CallSession` by `call` in an in-process dict and attaches the leg to side `a` or `b`.
 - **Run uvicorn with `--workers 1`.** Multiple workers in one container would send the two legs to different processes and break the call. Do not add workers to "scale". See *Scaling later*.
 - The session starts interpreting once both websockets have sent `start`. If one leg doesn't answer within 25 s, the other hears "doosri taraf se jawab nahi aaya" and is hung up.
@@ -141,8 +141,8 @@ sequenceDiagram
 ## Deploying (proposed)
 
 ```bash
-ssh dubhash-vm
-cd /srv/dubhash && git pull origin main
+ssh convox-vm
+cd /srv/Convox && git pull origin main
 docker compose build app && docker compose up -d
 docker compose logs -f app
 ```

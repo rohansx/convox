@@ -8,10 +8,10 @@ import asyncio
 
 import httpx
 
-from dubhash.interp.mt_cache import CachedMT
-from dubhash.providers.fakes import FakeMT, FakeSTT, FakeTTS
-from dubhash.providers.sarvam_mt import SarvamMT
-from dubhash.session.providers import Providers, prewarm
+from convox.interp.mt_cache import CachedMT
+from convox.providers.fakes import FakeMT, FakeSTT, FakeTTS
+from convox.providers.sarvam_mt import SarvamMT
+from convox.session.providers import Providers, prewarm
 from tests.session.test_call_session import PAIR, attach_both, make, providers
 
 
@@ -76,9 +76,9 @@ async def test_prewarm_opens_stt_in_the_language_the_side_will_use():
 
 
 async def test_an_auto_session_prewarms_its_auto_side_with_auto():
-    from dubhash.config.pairs import auto_pair, language_sides
-    from dubhash.session.call_session import CallSession
-    from dubhash.session.language import AutoLang
+    from convox.config.pairs import auto_pair, language_sides
+    from convox.session.call_session import CallSession
+    from convox.session.language import AutoLang
     from tests.floor_helpers import RecordingBus
     from tests.session.test_lang_auto_session import PAIRS as pairs
 
@@ -138,11 +138,11 @@ async def test_a_call_that_never_connects_closes_its_prewarmed_sockets():
 async def test_the_session_factory_prewarms():
     from types import SimpleNamespace
 
-    from dubhash.api.deps import get_session_factory
-    from dubhash.config.settings import Settings
-    from dubhash.events import EventBus
+    from convox.api.deps import get_session_factory
+    from convox.config.settings import Settings
+    from convox.events import EventBus
 
-    settings = Settings(_env_file=None, dubhash_env="test")  # type: ignore[call-arg]
+    settings = Settings(_env_file=None, convox_env="test")  # type: ignore[call-arg]
     state = SimpleNamespace(settings=settings, bus=EventBus(), writer=None)
     factory = get_session_factory(SimpleNamespace(app=SimpleNamespace(state=state)))  # type: ignore[arg-type]
     session = factory("c_x", PAIR)

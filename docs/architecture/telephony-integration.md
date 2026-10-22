@@ -1,6 +1,6 @@
 # Telephony integration
 
-This document explains how dubhash gets inside a phone call, which is the part the whole product depends on and the part that is least obvious. It covers why a direct call cannot be touched, how number masking already routes gig-platform calls through a CPaaS, the two-voicebot-leg trick that makes dubhash the bridge, the Exotel voicebot applet message protocol, the Plivo equivalent, outbound two-leg setup with the 25 s no-answer rule, the consumer dial-in IVR flow, and what a platform changes to integrate. Implementation detail of each transport class is in [leg-transports.md](../tech-spec/leg-transports.md).
+This document explains how Convox gets inside a phone call, which is the part the whole product depends on and the part that is least obvious. It covers why a direct call cannot be touched, how number masking already routes gig-platform calls through a CPaaS, the two-voicebot-leg trick that makes Convox the bridge, the Exotel voicebot applet message protocol, the Plivo equivalent, outbound two-leg setup with the 25 s no-answer rule, the consumer dial-in IVR flow, and what a platform changes to integrate. Implementation detail of each transport class is in [leg-transports.md](../tech-spec/leg-transports.md).
 
 ## A direct call cannot be touched
 
@@ -8,24 +8,24 @@ When Ramesh dials Priya, the audio goes phone → tower → Airtel or Jio switch
 
 In India the legal, scalable way to do that is a **CPaaS**: Exotel, Plivo, Ozonetel. They own virtual numbers, carrier interconnects and a media server. When a call touches one of their numbers it terminates in their cloud, and from there their API decides what happens: ring another phone and bridge, play audio, record, or stream the audio to us.
 
-Carriers (Jio, Airtel) could ship interpretation network-side; they have not, and their incentive is minutes, not comprehension. dubhash goes through the CPaaS instead.
+Carriers (Jio, Airtel) could ship interpretation network-side; they have not, and their incentive is minutes, not comprehension. Convox goes through the CPaaS instead.
 
 ## Gig platforms already do this: number masking
 
 When a Swiggy rider taps "call customer", his phone does not dial the customer. The app calls Swiggy's backend, which calls Exotel's API: dial the rider (leg A), dial the customer (leg B), connect them, show both a virtual number. Exotel's media server sits between the two legs. That is why the caller ID is a 0806-something number and why neither party learns the other's real number.
 
-Every one of these calls already passes through a CPaaS cloud. **dubhash does not create an interception point. It asks to sit in one that exists.** The phones, the numbers and the masking are unchanged.
+Every one of these calls already passes through a CPaaS cloud. **Convox does not create an interception point. It asks to sit in one that exists.** The phones, the numbers and the masking are unchanged.
 
 ## The two-voicebot-leg trick
 
 Exotel's call flow is a chain of "applets":
 
-| Applet | Direction | Use to dubhash |
+| Applet | Direction | Use to Convox |
 |---|---|---|
 | Stream applet | one-way: Exotel forks audio to us; we cannot speak | not usable |
 | **Voicebot applet** | two-way: Exotel opens a websocket to our server, sends the caller's audio, and plays what we send back | the whole interception story |
 
-One voicebot applet gives a two-way channel with **one** human. So dubhash does not ask Exotel to connect A to B. It asks for **two calls**, each with a voicebot applet pointed at its own websocket, and joins them itself. Exotel thinks it is running two separate voice bots. dubhash is the only thing joining them, so it hears and speaks on both sides. This applet is how Bolna and Pipecat connect to Exotel today; Plivo ships an equivalent.
+One voicebot applet gives a two-way channel with **one** human. So Convox does not ask Exotel to connect A to B. It asks for **two calls**, each with a voicebot applet pointed at its own websocket, and joins them itself. Exotel thinks it is running two separate voice bots. Convox is the only thing joining them, so it hears and speaks on both sides. This applet is how Bolna and Pipecat connect to Exotel today; Plivo ships an equivalent.
 
 ```mermaid
 flowchart LR
@@ -38,15 +38,15 @@ flowchart LR
 
 ```mermaid
 flowchart LR
-  subgraph AFTER["B · the same call with dubhash (two voicebot legs, we are the bridge)"]
+  subgraph AFTER["B · the same call with Convox (two voicebot legs, we are the bridge)"]
     R2([rider]) <--> EXA["Exotel<br/>voicebot applet, leg A"]
-    EXA <-- wss --> DS["dubhash server<br/>holds 2 websockets<br/>translates A→B and B→A"]
+    EXA <-- wss --> DS["Convox server<br/>holds 2 websockets<br/>translates A→B and B→A"]
     DS <-- wss --> EXB["Exotel<br/>voicebot applet, leg B"]
     EXB <--> C2([customer])
   end
 ```
 
-The platform backend changes one line: it calls dubhash instead of Exotel. dubhash calls Exotel.
+The platform backend changes one line: it calls Convox instead of Exotel. Convox calls Exotel.
 
 ## Exotel voicebot applet: message protocol
 
@@ -55,12 +55,12 @@ The platform backend changes one line: it calls dubhash instead of Exotel. dubha
 Each leg's voicebot applet points at:
 
 ```
-wss://edge.dubhash.in/ws/leg?call=c_91&side=a&sample-rate=16000
+wss://edge.convox.in/ws/leg?call=c_91&side=a&sample-rate=16000
 ```
 
 Exotel allows 3 custom params; `call` and `side` are two of them. The `/ws/leg` handler uses `call` to find the `CallSession` and `side` (`a` | `b`) to attach the leg ([system-overview.md](system-overview.md#one-process-per-call)).
 
-### Inbound (Exotel → dubhash)
+### Inbound (Exotel → Convox)
 
 ```mermaid
 sequenceDiagram
@@ -85,7 +85,7 @@ sequenceDiagram
 
 Audio is raw 16-bit PCM, mono, base64. The overview says **8 kHz by default or 16 kHz on request**; the spec calls Exotel's documentation ambiguous, so treat this as unconfirmed until tested (next section).
 
-### Outbound (dubhash → Exotel)
+### Outbound (Convox → Exotel)
 
 | Message | Meaning | Who sends it |
 |---|---|---|
@@ -124,7 +124,7 @@ Twilio was rejected: India numbers and quality are worse, and it is not a sponso
 ```
 # POST /v1/calls → CallSession.create() → for each side:
 #   exotel: POST /v1/Accounts/{sid}/Calls/connect  From=<number>  CallerId=<exophone>  Url=<applet-flow-url>
-#           the flow has one Voicebot applet pointing at wss://edge.dubhash.in/ws/leg?call=c_91&side=a
+#           the flow has one Voicebot applet pointing at wss://edge.convox.in/ws/leg?call=c_91&side=a
 #   plivo:  POST /v1/Account/{id}/Call/  to=<number>  from=<plivo number>  answer_url=<xml with Stream element>
 # both legs ring at once. the session starts interpreting when both websockets have sent `start`.
 # if one leg fails to answer within 25 s, the other hears "doosri taraf se jawab nahi aaya" and is hung up.
@@ -153,7 +153,7 @@ Notes:
 
 ## Dial-in IVR flow (consumer)
 
-A consumer dials one public dubhash number, enters the number to reach, and says one sentence so dubhash detects their language. dubhash dials the other side and bridges. No app.
+A consumer dials one public Convox number, enters the number to reach, and says one sentence so Convox detects their language. Convox dials the other side and bridges. No app.
 
 ```
 # dial-in flow (consumer): exotel applet chain on the public number
@@ -167,10 +167,10 @@ sequenceDiagram
   autonumber
   participant C as Caller (leg a)
   participant EX as Exotel (public number)
-  participant API as dubhash /dialin/target
+  participant API as Convox /dialin/target
   participant S as CallSession
   participant T as Target (leg b)
-  C->>EX: dials public dubhash number
+  C->>EX: dials public Convox number
   EX->>C: Gather(digits=10)
   C->>EX: enters 10-digit target number
   EX->>API: Passthru with digits
@@ -195,7 +195,7 @@ POST https://api.exotel.com/v1/Accounts/{sid}/Calls/connect
   From=+91RIDER  To=+91CUSTOMER  CallerId=+9180XXXXXXX
 
 # after: one line changes
-POST https://api.dubhash.in/v1/calls
+POST https://api.convox.in/v1/calls
   { "a": {"number": "+91RIDER",    "lang": "hi-IN"},
     "b": {"number": "+91CUSTOMER", "lang": "kn-IN"},
     "provider": "exotel",
@@ -206,12 +206,12 @@ POST https://api.dubhash.in/v1/calls
     "record": false }
 → 201 { "call_id": "c_91", "status": "ringing" }
 
-# dubhash then calls exotel twice, each with a voicebot applet:
-#   leg a → wss://edge.dubhash.in/ws/leg?call=c_91&side=a&sample-rate=16000
-#   leg b → wss://edge.dubhash.in/ws/leg?call=c_91&side=b&sample-rate=16000
+# Convox then calls exotel twice, each with a voicebot applet:
+#   leg a → wss://edge.convox.in/ws/leg?call=c_91&side=a&sample-rate=16000
+#   leg b → wss://edge.convox.in/ws/leg?call=c_91&side=b&sample-rate=16000
 ```
 
-The platform invokes dubhash only when the two profiles' languages differ, and is billed per interpreted minute. What it gets back:
+The platform invokes Convox only when the two profiles' languages differ, and is billed per interpreted minute. What it gets back:
 
 | Event | Payload |
 |---|---|
@@ -219,7 +219,7 @@ The platform invokes dubhash only when the two profiles' languages differ, and i
 | `turn` (per utterance) | side, source text, translated text, latency to first audio, whether it was clipped by barge-in |
 | `call.ended` | duration, interpreted minutes, turns, p50/p95 latency, escape used (y/n), both-side transcript if the platform opted in |
 
-Plus `GET /v1/calls/{id}/turns`: the per-turn log a platform's support team uses to see exactly what each side heard when a dispute comes in. The DTMF 0 escape hatch and this audit log are what get dubhash through a platform's trust review. Full API: [api.md](../tech-spec/api.md).
+Plus `GET /v1/calls/{id}/turns`: the per-turn log a platform's support team uses to see exactly what each side heard when a dispute comes in. The DTMF 0 escape hatch and this audit log are what get Convox through a platform's trust review. Full API: [api.md](../tech-spec/api.md).
 
 ## Related
 

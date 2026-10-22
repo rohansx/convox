@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import asyncio
 
-from dubhash.audio.frames import FRAME_BYTES
+from convox.audio.frames import FRAME_BYTES
 from tests.floor_helpers import (
     LINE_CHECK_MARKER,
     FeedAudio,

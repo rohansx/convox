@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import pytest
 
-from dubhash.interp.phrases import load_pack
+from convox.interp.phrases import load_pack
 from tools import live_loopback as ll
 
 
@@ -65,7 +65,7 @@ def test_summary_adds_from_start_and_hit_rates():
 
 @pytest.fixture
 def server():
-    with ll.serve({"dubhash_env": "test", "phrase_prefill_rps": 1000.0}, None) as srv:
+    with ll.serve({"convox_env": "test", "phrase_prefill_rps": 1000.0}, None) as srv:
         yield srv
 
 

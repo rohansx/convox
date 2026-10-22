@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#f5f7f6" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#101413" media="(prefers-color-scheme: dark)">
+  <title>Ward · Convox</title>
+  <link rel="stylesheet" href="/static/console/ward.css">
+</head>
+<body>
+<div class="app" id="app" data-ws-token="{{ ws_token }}">
+  <header class="bar">
+    <div class="brand"><span class="dot" id="conn" title="connection"></span>convox <span>ward</span></div>
+    <div class="bar-actions">
+      <button type="button" class="ghost" id="new-btn">New patient</button>
+      <button type="button" class="ghost strong" id="save-btn">Save transcript</button>
+    </div>
+  </header>
+
+  <section class="langs" aria-label="Languages">
+    {% for side, current in (("a", default_a), ("b", default_b)) %}
+    <label class="lang lang-{{ side }}">
+      <span class="sr">Side {{ side | upper }} language</span>
+      <select id="lang-{{ side }}" data-side="{{ side }}">
+        {% for l in langs %}
+        <option value="{{ l.code }}"{% if l.code == current %} selected{% endif %}>{{ l.native }}{% if l.native != l.name %} · {{ l.name }}{% endif %}</option>
+        {% endfor %}
+      </select>
+    </label>
+    {% if side == "a" %}<button type="button" class="swap" id="swap-btn" aria-label="Swap languages">&#8644;</button>{% endif %}
+    {% endfor %}
+  </section>
+  <nav class="presets" aria-label="Quick language choices">
+    {% for p in presets %}
+    <button type="button" class="ghost preset" data-preset-a="{{ p.a }}" data-preset-b="{{ p.b }}">{{ p.label }}</button>
+    {% endfor %}
+  </nav>
+
+  <main class="transcript" id="transcript" aria-live="polite">
+    <div class="empty-state" id="empty-state">
+      <p class="lead">Hold your side's button and speak one sentence.</p>
+      <p>Release to translate. The other language plays from the speaker and both texts appear here.</p>
+      <p class="fine">Machine translation. Read numbers and doses back to the patient.</p>
+    </div>
+  </main>
+
+  <p class="hint" id="hint" role="status"></p>
+
+  <section class="pads" aria-label="Push to talk">
+    {% for side in ("a", "b") %}
+    <button type="button" class="pad pad-{{ side }}" id="pad-{{ side }}" data-side="{{ side }}">
+      <span class="pad-lang" id="pad-lang-{{ side }}"></span>
+      <span class="pad-state" id="pad-state-{{ side }}">Hold to talk</span>
+      <span class="meter"><i id="meter-{{ side }}"></i></span>
+    </button>
+    {% endfor %}
+  </section>
+
+  <div class="gate" id="gate">
+    <div class="gate-card">
+      <h1>Ward interpreter</h1>
+      <p>One phone between nurse and patient. Each person holds their own button to speak.</p>
+      <button type="button" class="primary" id="start-btn">Start</button>
+      <p class="fine" id="gate-msg">Allows the microphone. Nothing is recorded or stored on the server.</p>
+    </div>
+  </div>
+</div>
+
+<script id="ward-worklet" type="text/worklet">
+// Mic -> 16 kHz PCM16, 20 ms (320-sample) frames. Box-filter decimation from the context rate.
+class Capture extends AudioWorkletProcessor {
+  constructor() {
+    super();
+    this.ratio = sampleRate / 16000;
+    this.phase = 0; this.acc = 0; this.n = 0;
+    this.frame = new Int16Array(320); this.i = 0; this.peak = 0;
+  }
+  process(inputs) {
+    const ch = inputs[0] && inputs[0][0];
+    if (!ch) return true;
+    for (let k = 0; k < ch.length; k++) {
+      this.acc += ch[k]; this.n++; this.phase += 1;
+      if (this.phase >= this.ratio) {
+        this.phase -= this.ratio;
+        let v = this.acc / this.n;
+        this.acc = 0; this.n = 0;
+        v = Math.max(-1, Math.min(1, v));
+        this.peak = Math.max(this.peak, Math.abs(v));
+        this.frame[this.i++] = v < 0 ? v * 0x8000 : v * 0x7fff;
+        if (this.i === 320) {
+          const out = this.frame.buffer;
+          this.port.postMessage({ type: 'frame', pcm: out, peak: this.peak }, [out]);
+          this.frame = new Int16Array(320); this.i = 0; this.peak = 0;
+        }
+      }
+    }
+    return true;
+  }
+}
+registerProcessor('ward-capture', Capture);
+
+// Queue of 16 kHz float chunks played at the context rate with linear interpolation.
+// Posts 'started' when a chunk begins after silence and 'idle' when the queue drains.
+class Player extends AudioWorkletProcessor {
+  constructor() {
+    super();
+    this.step = 16000 / sampleRate;
+    this.q = []; this.pos = 0; this.playing = false;
+    this.port.onmessage = (e) => {
+      const m = e.data;
+      if (m.type === 'push') this.q.push(new Float32Array(m.pcm));
+      else if (m.type === 'clear') { this.q = []; this.pos = 0; }
+    };
+  }
+  process(_inputs, outputs) {
+    const out = outputs[0][0];
+    for (let k = 0; k < out.length; k++) {
+      const s = this.q[0];
+      if (!s) { out[k] = 0; continue; }
+      if (!this.playing) { this.playing = true; this.port.postMessage({ type: 'started' }); }
+      const i = Math.floor(this.pos), f = this.pos - i;
+      const a = s[i], b = i + 1 < s.length ? s[i + 1] : a;
+      out[k] = a + (b - a) * f;
+      this.pos += this.step;
+      if (this.pos >= s.length) { this.pos -= s.length; this.q.shift(); }
+    }
+    if (this.playing && !this.q.length) { this.playing = false; this.port.postMessage({ type: 'idle' }); }
+    for (let c = 1; c < outputs[0].length; c++) outputs[0][c].set(out);
+    return true;
+  }
+}
+registerProcessor('ward-player', Player);
+</script>
+<script src="/static/console/ward.js" defer></script>
+</body>
+</html>

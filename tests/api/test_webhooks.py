@@ -6,13 +6,13 @@ import xml.etree.ElementTree as ET
 
 import httpx
 
-from dubhash.api import calls
-from dubhash.api.app import create_app
-from dubhash.api.calls import CallBook, CallHandle, LegState
-from dubhash.api.webhooks import PlatformNotifier, sign
-from dubhash.config.pairs import load_pairs
-from dubhash.config.settings import Settings
-from dubhash.types import CallEvent, Turn
+from convox.api import calls
+from convox.api.app import create_app
+from convox.api.calls import CallBook, CallHandle, LegState
+from convox.api.webhooks import PlatformNotifier, sign
+from convox.config.pairs import load_pairs
+from convox.config.settings import Settings
+from convox.types import CallEvent, Turn
 from tests.api.session_double import FakeSession, install, until
 
 
@@ -20,7 +20,7 @@ class Env:
     def __init__(self, provider="exotel", **kw):
         s = Settings(
             _env_file=None,
-            **{"dubhash_env": "test", "edge_wss_base": "wss://edge.x", **kw},
+            **{"convox_env": "test", "edge_wss_base": "wss://edge.x", **kw},
         )
         self.app = create_app(s)
         self.bus = self.app.state.bus
@@ -163,7 +163,7 @@ async def test_exotel_stream_url_resolves_custom_field_or_sid():
 
 def verify(secret: str, req: httpx.Request) -> dict:
     expected = "sha256=" + hmac.new(secret.encode(), req.content, hashlib.sha256).hexdigest()
-    assert req.headers["x-dubhash-signature"] == expected
+    assert req.headers["x-convox-signature"] == expected
     assert req.headers["content-type"] == "application/json"
     return json.loads(req.content)
 
@@ -293,7 +293,7 @@ async def test_notifier_retries_network_errors():
 
 
 async def test_create_call_with_webhook_starts_notifier():
-    from dubhash.telephony.base import FakeDialer
+    from convox.telephony.base import FakeDialer
 
     env = Env()
     env.app.dependency_overrides[calls.get_dialer_factory] = lambda: lambda p: FakeDialer()
@@ -323,7 +323,7 @@ class _Leg:
 
 async def test_exotel_stream_url_logs_request_shape_with_numbers_masked(caplog):
     env = Env()
-    caplog.set_level("INFO", logger="dubhash.api.webhooks")
+    caplog.set_level("INFO", logger="convox.api.webhooks")
     async with env.client() as c:
         await c.post(
             "/telephony/exotel/stream",

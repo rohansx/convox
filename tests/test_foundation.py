@@ -1,11 +1,11 @@
 import asyncio
 
-from dubhash.audio.frames import FRAME_BYTES, FRAME_SAMPLES, bytes_to_ms, ms_to_bytes
-from dubhash.clock import FakeClock
-from dubhash.config.pairs import find_pair, load_pairs
-from dubhash.config.settings import Settings
-from dubhash.events import EventBus
-from dubhash.types import CallEvent, direction, other
+from convox.audio.frames import FRAME_BYTES, FRAME_SAMPLES, bytes_to_ms, ms_to_bytes
+from convox.clock import FakeClock
+from convox.config.pairs import find_pair, load_pairs
+from convox.config.settings import Settings
+from convox.events import EventBus
+from convox.types import CallEvent, direction, other
 
 
 def test_frame_constants():
@@ -69,7 +69,7 @@ async def test_event_bus_filters_by_call():
 
 def test_relative_pairs_file_resolves_from_any_cwd(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
-    for rel in ("config/pairs.yaml", "dubhash/config/pairs.yaml"):
+    for rel in ("config/pairs.yaml", "convox/config/pairs.yaml"):
         s = Settings(_env_file=None, pairs_file=rel)
         assert s.pairs_file.exists(), rel
 

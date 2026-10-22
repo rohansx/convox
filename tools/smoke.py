@@ -37,8 +37,8 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from dubhash.audio.frames import FRAME_BYTES, FRAME_MS  # noqa: E402
-from dubhash.audio.wav import read_wav, write_wav  # noqa: E402
+from convox.audio.frames import FRAME_BYTES, FRAME_MS  # noqa: E402
+from convox.audio.wav import read_wav, write_wav  # noqa: E402
 
 CHECKS = ("mt", "tts", "stt")
 HI_SENTENCES = (
@@ -89,11 +89,11 @@ class Factories:
 
 
 def real_factories() -> Factories:
-    from dubhash.providers.deepgram_stt import DeepgramSTT
-    from dubhash.providers.eleven_tts import ElevenTTS
-    from dubhash.providers.sarvam_mt import SarvamMT
-    from dubhash.providers.sarvam_stt import SarvamSTT
-    from dubhash.providers.sarvam_tts import BulbulTTS
+    from convox.providers.deepgram_stt import DeepgramSTT
+    from convox.providers.eleven_tts import ElevenTTS
+    from convox.providers.sarvam_mt import SarvamMT
+    from convox.providers.sarvam_stt import SarvamSTT
+    from convox.providers.sarvam_tts import BulbulTTS
 
     return Factories(
         mt=SarvamMT,
@@ -105,7 +105,7 @@ def real_factories() -> Factories:
 
 
 def load_keys(env_file: Path) -> Keys:
-    from dubhash.config.settings import Settings
+    from convox.config.settings import Settings
 
     s = Settings(_env_file=env_file if Path(env_file).exists() else None)  # type: ignore[call-arg]
     return Keys(sarvam=s.sarvam_api_key, eleven=s.elevenlabs_api_key, deepgram=s.deepgram_api_key)

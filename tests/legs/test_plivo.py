@@ -4,11 +4,11 @@ import json
 
 import numpy as np
 
-from dubhash.audio.codec import ulaw_decode, ulaw_encode
-from dubhash.audio.frames import FRAME_BYTES
-from dubhash.legs.base import LegTransport
-from dubhash.legs.plivo import PlivoLeg, parse_media_format
-from dubhash.legs.ws import MemoryWS, ws_pair
+from convox.audio.codec import ulaw_decode, ulaw_encode
+from convox.audio.frames import FRAME_BYTES
+from convox.legs.base import LegTransport
+from convox.legs.plivo import PlivoLeg, parse_media_format
+from convox.legs.ws import MemoryWS, ws_pair
 
 
 def start_msg(encoding: str = "audio/x-l16", rate: int | None = 16000) -> str:

@@ -5,8 +5,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from dubhash.audio.wav import read_wav
-from dubhash.providers.fakes import EnergyVAD
+from convox.audio.wav import read_wav
+from convox.providers.fakes import EnergyVAD
 from tools import gen_fixtures as gf
 
 FIXTURES = Path(__file__).resolve().parents[1] / "fixtures"

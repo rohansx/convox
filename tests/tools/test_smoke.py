@@ -4,8 +4,8 @@ from pathlib import Path
 
 import pytest
 
-from dubhash.providers.errors import ProviderError
-from dubhash.providers.fakes import FakeMT, FakeSTT, FakeTTS
+from convox.providers.errors import ProviderError
+from convox.providers.fakes import FakeMT, FakeSTT, FakeTTS
 from tools import smoke
 
 ALL_KEYS = smoke.Keys(sarvam="k1", eleven="k2", deepgram="k3")

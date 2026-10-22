@@ -6,7 +6,7 @@ direction) over the leg log."""
 
 from __future__ import annotations
 
-from dubhash.types import Side, Translation
+from convox.types import Side, Translation
 from tests.floor_helpers import FeedAudio, Rig, check_all_ended, frames_of
 
 

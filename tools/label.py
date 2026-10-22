@@ -278,7 +278,7 @@ class RateIn(BaseModel):
 
 
 def create_app(turns: list[LabelTurn], ratings_path: Path, rater: str = "") -> FastAPI:
-    app = FastAPI(title="dubhash label")
+    app = FastAPI(title="convox label")
     index = {t.turn_id: i for i, t in enumerate(turns)}
     lock = threading.Lock()
     ratings = read_ratings(ratings_path)
@@ -345,7 +345,7 @@ def create_app(turns: list[LabelTurn], ratings_path: Path, rater: str = "") -> F
 PAGE = """<!doctype html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>dubhash label</title>
+<title>convox label</title>
 <style>
 :root { --bg:#fafaf8; --fg:#1d1d1b; --muted:#6b6b66; --card:#fff; --line:#e3e3de;
   --kept:#2f7d4f; --partly:#b07a12; --lost:#b23b3b; }
@@ -375,7 +375,7 @@ table { border-collapse:collapse; width:100%; font-size:14px; }
 td, th { text-align:left; padding:4px 8px; border-bottom:1px solid var(--line); }
 td.num, th.num { text-align:right; font-variant-numeric:tabular-nums; }
 </style></head><body><main>
-<header><h1>dubhash meaning rating</h1><span class="muted" id="progress"></span></header>
+<header><h1>convox meaning rating</h1><span class="muted" id="progress"></span></header>
 <div class="card" id="card">
   <div class="lbl" id="srclbl">source</div><div class="txt" id="src"></div>
   <div class="lbl" id="tgtlbl">heard</div><div class="txt" id="tgt"></div>

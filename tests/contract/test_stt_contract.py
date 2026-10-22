@@ -2,8 +2,8 @@ from collections.abc import Callable
 
 import pytest
 
-from dubhash.interp.contracts import STT, STTStream
-from dubhash.providers.fakes import FakeSTT
+from convox.interp.contracts import STT, STTStream
+from convox.providers.fakes import FakeSTT
 from tests.audio_fixtures import frames, silence, speech
 
 IMPLS: list = [

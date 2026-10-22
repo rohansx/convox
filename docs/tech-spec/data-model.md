@@ -1,6 +1,6 @@
 # Data model
 
-This document defines what dubhash persists and where: the Postgres tables (`calls`, `legs`, `turns`, `events`), the Redis call registry, the opt-in S3 recordings, and the retention rules that keep transcripts and audio out of storage by default. It also covers the background writer, which keeps every database write off the audio hot path. The column lists come from tech spec §6. The **types, keys, indexes and constraints are proposed** (inferred by us) and should be settled in `store/models.py` (SQLAlchemy) when the turn log moves into Postgres (see the [10-day plan](../plan/buildathon-10-day-plan.md)).
+This document defines what Convox persists and where: the Postgres tables (`calls`, `legs`, `turns`, `events`), the Redis call registry, the opt-in S3 recordings, and the retention rules that keep transcripts and audio out of storage by default. It also covers the background writer, which keeps every database write off the audio hot path. The column lists come from tech spec §6. The **types, keys, indexes and constraints are proposed** (inferred by us) and should be settled in `store/models.py` (SQLAlchemy) when the turn log moves into Postgres (see the [10-day plan](../plan/buildathon-10-day-plan.md)).
 
 ## Principles
 
@@ -11,7 +11,7 @@ This document defines what dubhash persists and where: the Postgres tables (`cal
 
 ```mermaid
 flowchart LR
-    subgraph proc["dubhash process (hot path)"]
+    subgraph proc["Convox process (hot path)"]
         CS[CallSession] --> FC[FloorController]
         FC -- Turn / Event objects --> Q[(in-memory asyncio.Queue)]
     end

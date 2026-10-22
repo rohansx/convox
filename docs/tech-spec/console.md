@@ -1,6 +1,6 @@
 # Console
 
-The console is the live web view of dubhash calls. It serves two audiences with one surface. On stage it is the **demo surface**: the hall watches both transcripts and per-turn latency while two phones talk. For a platform it is the **trust-review surface**: their trust and support team looks at it to see exactly what each side said and heard before signing, and after a dispute. In the spec's words, "it has to look finished." This doc defines what the console shows, the SSE event stream that feeds it from the floor controller, the layout, and the build constraints. Owner: **P4** (console, ward mode, SSE).
+The console is the live web view of Convox calls. It serves two audiences with one surface. On stage it is the **demo surface**: the hall watches both transcripts and per-turn latency while two phones talk. For a platform it is the **trust-review surface**: their trust and support team looks at it to see exactly what each side said and heard before signing, and after a dispute. In the spec's words, "it has to look finished." This doc defines what the console shows, the SSE event stream that feeds it from the floor controller, the layout, and the build constraints. Owner: **P4** (console, ward mode, SSE).
 
 ## Constraints
 

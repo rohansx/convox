@@ -8,12 +8,12 @@ from pathlib import Path
 
 import pytest
 
-from dubhash.audio.frames import FRAME_BYTES, SAMPLE_RATE
-from dubhash.config.settings import Settings
-from dubhash.providers.eleven_tts import ElevenTTS
-from dubhash.providers.sarvam_mt import SarvamMT
-from dubhash.providers.sarvam_stt import SarvamSTT
-from dubhash.providers.sarvam_tts import BulbulTTS
+from convox.audio.frames import FRAME_BYTES, SAMPLE_RATE
+from convox.config.settings import Settings
+from convox.providers.eleven_tts import ElevenTTS
+from convox.providers.sarvam_mt import SarvamMT
+from convox.providers.sarvam_stt import SarvamSTT
+from convox.providers.sarvam_tts import BulbulTTS
 
 pytestmark = pytest.mark.live
 

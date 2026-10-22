@@ -1,6 +1,6 @@
 # TLS for the platform API (api.*) and the provider leg websockets (edge.*), both proxied to
 # the single app process. Domains come from env (EDGE_DOMAIN, API_DOMAIN).
-{$EDGE_DOMAIN:edge.dubhash.in}, {$API_DOMAIN:api.dubhash.in} {
+{$EDGE_DOMAIN:edge.convox.in}, {$API_DOMAIN:api.convox.in} {
 	reverse_proxy app:8000 {
 		# do not buffer SSE (/console/events); websockets upgrade automatically
 		flush_interval -1

@@ -7,12 +7,12 @@ services:
       - path: .env
         required: false
     environment:
-      DATABASE_URL: postgresql+asyncpg://dubhash:${PG_PASSWORD:-dubhash}@postgres:5432/dubhash
+      DATABASE_URL: postgresql+asyncpg://convox:${PG_PASSWORD:-convox}@postgres:5432/convox
       REDIS_URL: redis://redis:6379/0
     # --workers 1 is load-bearing: both legs of a call must land in the same process
     command:
       - uvicorn
-      - dubhash.api.app:app
+      - convox.api.app:app
       - --host
       - 0.0.0.0
       - --port
@@ -32,13 +32,13 @@ services:
   postgres:
     image: postgres:16
     environment:
-      POSTGRES_USER: dubhash
-      POSTGRES_PASSWORD: ${PG_PASSWORD:-dubhash}
-      POSTGRES_DB: dubhash
+      POSTGRES_USER: convox
+      POSTGRES_PASSWORD: ${PG_PASSWORD:-convox}
+      POSTGRES_DB: convox
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U dubhash -d dubhash"]
+      test: ["CMD-SHELL", "pg_isready -U convox -d convox"]
       interval: 5s
       timeout: 3s
       retries: 10
@@ -54,8 +54,8 @@ services:
       - "80:80"
       - "443:443"
     environment:
-      EDGE_DOMAIN: ${EDGE_DOMAIN:-edge.dubhash.in}
-      API_DOMAIN: ${API_DOMAIN:-api.dubhash.in}
+      EDGE_DOMAIN: ${EDGE_DOMAIN:-edge.convox.in}
+      API_DOMAIN: ${API_DOMAIN:-api.convox.in}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data

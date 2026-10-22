@@ -1,5 +1,5 @@
-from dubhash.audio.clock import FrameClock
-from dubhash.clock import FakeClock
+from convox.audio.clock import FrameClock
+from convox.clock import FakeClock
 
 
 def test_stamps_are_monotonic_20ms_steps():

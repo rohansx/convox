@@ -5,8 +5,8 @@ import json
 import pytest
 from starlette.websockets import WebSocketDisconnect
 
-from dubhash.join.tokens import make_join_token
-from dubhash.legs.webrtc import WebRtcLeg
+from convox.join.tokens import make_join_token
+from convox.legs.webrtc import WebRtcLeg
 from tests.api.test_loopback import Env, _close_clients, wait_for  # noqa: F401
 
 

@@ -4,13 +4,13 @@ import re
 import httpx
 import pytest
 
-from dubhash.api import calls
-from dubhash.api.app import create_app
-from dubhash.api.calls import CallBook, new_call_id
-from dubhash.config.settings import Settings
-from dubhash.telephony import ProviderUnavailable
-from dubhash.telephony.base import FakeDialer
-from dubhash.types import Turn
+from convox.api import calls
+from convox.api.app import create_app
+from convox.api.calls import CallBook, new_call_id
+from convox.config.settings import Settings
+from convox.telephony import ProviderUnavailable
+from convox.telephony.base import FakeDialer
+from convox.types import Turn
 from tests.api.session_double import install, until
 
 BODY = {
@@ -24,7 +24,7 @@ BODY = {
 def settings(**kw) -> Settings:
     return Settings(
         _env_file=None,
-        **{"dubhash_env": "test", "edge_wss_base": "wss://edge.dubhash.in", **kw},
+        **{"convox_env": "test", "edge_wss_base": "wss://edge.convox.in", **kw},
     )
 
 
@@ -72,7 +72,7 @@ async def test_create_call_dials_both_legs_and_registers_session():
     assert dialed["a"].number == "+919812345678" and dialed["b"].number == "+919876543210"
     assert dialed["a"].caller_id == "+918047123456"
     assert dialed["a"].ws_url == (
-        f"wss://edge.dubhash.in/ws/leg?call={call_id}&side=a&sample-rate=16000"
+        f"wss://edge.convox.in/ws/leg?call={call_id}&side=a&sample-rate=16000"
     )
     assert dialed["b"].ws_url.endswith(f"call={call_id}&side=b&sample-rate=16000")
     handle = env.book.get(call_id)
@@ -113,7 +113,7 @@ async def test_bad_body_is_400(body, code):
 
 
 async def test_requires_api_key_outside_test_env():
-    env = Env(dubhash_env="dev", platform_api_keys="swiggy:sk_live_1")
+    env = Env(convox_env="dev", platform_api_keys="swiggy:sk_live_1")
     async with env.client() as c:
         r = await c.post("/v1/calls", json=BODY)
         assert r.status_code == 401 and r.json()["error"]["code"] == "unauthorized"

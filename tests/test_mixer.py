@@ -4,9 +4,9 @@ from collections.abc import AsyncIterator
 import numpy as np
 import pytest
 
-from dubhash.audio.earcon import EARCON
-from dubhash.audio.frames import FRAME_BYTES
-from dubhash.audio.mixer import RenderStats, db_to_gain, mix, passthrough_gain, render_playback
+from convox.audio.earcon import EARCON
+from convox.audio.frames import FRAME_BYTES
+from convox.audio.mixer import RenderStats, db_to_gain, mix, passthrough_gain, render_playback
 
 
 def _const(value: int, samples: int) -> bytes:

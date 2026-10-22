@@ -3,9 +3,9 @@ import time
 
 import numpy as np
 
-from dubhash.audio.frames import FRAME_BYTES
-from dubhash.interp.contracts import MT, STT, TTS, VAD
-from dubhash.providers.fakes import EnergyVAD, FakeMT, FakeSTT, FakeTTS
+from convox.audio.frames import FRAME_BYTES
+from convox.interp.contracts import MT, STT, TTS, VAD
+from convox.providers.fakes import EnergyVAD, FakeMT, FakeSTT, FakeTTS
 from tests.audio_fixtures import frames, silence, speech
 
 
@@ -133,7 +133,7 @@ def test_energy_vad_empty_frame_is_silence():
 
 
 async def test_fake_mt_delay_on_fake_clock_and_cancel_count():
-    from dubhash.clock import FakeClock
+    from convox.clock import FakeClock
 
     clock = FakeClock()
     mt = FakeMT(delay_ms=1200, clock=clock)
@@ -152,7 +152,7 @@ async def test_fake_mt_delay_on_fake_clock_and_cancel_count():
 
 
 async def test_fake_stt_final_delay_and_tts_ttfb_on_fake_clock():
-    from dubhash.clock import FakeClock
+    from convox.clock import FakeClock
 
     clock = FakeClock()
     stt = FakeSTT(script=["ek do teen"], final_delay_ms=290, clock=clock)

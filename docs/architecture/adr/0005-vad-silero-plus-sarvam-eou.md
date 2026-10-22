@@ -1,6 +1,6 @@
 # ADR 0005: VAD and endpointing: Silero VAD v5 per leg + Sarvam streaming end-of-utterance
 
-This ADR records how dubhash decides a speaker has finished (end of utterance, EOU), which is the single biggest latency and quality lever in the product.
+This ADR records how Convox decides a speaker has finished (end of utterance, EOU), which is the single biggest latency and quality lever in the product.
 
 ## Status
 

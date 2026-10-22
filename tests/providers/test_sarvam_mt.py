@@ -3,9 +3,9 @@ import json
 import httpx
 import pytest
 
-from dubhash.interp.contracts import MT
-from dubhash.providers.registry import ProviderError
-from dubhash.providers.sarvam_mt import SarvamMT
+from convox.interp.contracts import MT
+from convox.providers.registry import ProviderError
+from convox.providers.sarvam_mt import SarvamMT
 
 
 def _mt(handler) -> SarvamMT:

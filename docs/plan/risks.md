@@ -1,6 +1,6 @@
 # Risk Register
 
-This is the risk register for dubhash. It covers every risk named in the product overview, the risks implied by the tech spec's open questions and testing plan, and two that come from the current situation: the schedule compressed from 13 to 10 days, and a repo that starts empty. Each risk has a likelihood, an impact, a mitigation, an owner, and a **trigger**: the observable event that means the risk is happening and the mitigation should start now. Likelihood and impact are H / M / L. The register is reviewed at standup on Day 2, at CP1, and at CP2.
+This is the risk register for convox. It covers every risk named in the product overview, the risks implied by the tech spec's open questions and testing plan, and two that come from the current situation: the schedule compressed from 13 to 10 days, and a repo that starts empty. Each risk has a likelihood, an impact, a mitigation, an owner, and a **trigger**: the observable event that means the risk is happening and the mitigation should start now. Likelihood and impact are H / M / L. The register is reviewed at standup on Day 2, at CP1, and at CP2.
 
 ## Register
 

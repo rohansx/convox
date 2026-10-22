@@ -36,21 +36,21 @@ from typing import Any
 
 import numpy as np
 
-from dubhash.audio.frames import FRAME_BYTES, FRAME_MS, SAMPLE_RATE
-from dubhash.audio.wav import read_wav, write_wav
-from dubhash.clock import Clock, FakeClock, MonotonicClock
-from dubhash.config.pairs import PairConfig, load_pairs
-from dubhash.config.settings import Settings
-from dubhash.events import EventBus
-from dubhash.interp.mt_cache import CachedMT
-from dubhash.legs.fake import FakeLeg
-from dubhash.providers.fakes import EnergyVAD, FakeMT, FakeSTT, FakeTTS
-from dubhash.session.call_session import CallSession
-from dubhash.session.providers import Providers, build_providers
-from dubhash.session.registry import new_call_id
-from dubhash.store.timeline import utterance_metrics
-from dubhash.store.writer import percentile
-from dubhash.types import Side, Turn
+from convox.audio.frames import FRAME_BYTES, FRAME_MS, SAMPLE_RATE
+from convox.audio.wav import read_wav, write_wav
+from convox.clock import Clock, FakeClock, MonotonicClock
+from convox.config.pairs import PairConfig, load_pairs
+from convox.config.settings import Settings
+from convox.events import EventBus
+from convox.interp.mt_cache import CachedMT
+from convox.legs.fake import FakeLeg
+from convox.providers.fakes import EnergyVAD, FakeMT, FakeSTT, FakeTTS
+from convox.session.call_session import CallSession
+from convox.session.providers import Providers, build_providers
+from convox.session.registry import new_call_id
+from convox.store.timeline import utterance_metrics
+from convox.store.writer import percentile
+from convox.types import Side, Turn
 
 SILENT_FRAME = b"\x00" * FRAME_BYTES
 

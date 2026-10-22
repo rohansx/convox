@@ -5,18 +5,18 @@ import pytest
 from starlette.testclient import TestClient
 from starlette.websockets import WebSocketDisconnect
 
-from dubhash.api.app import create_app
-from dubhash.config.settings import Settings
-from dubhash.providers.fakes import FakeMT, FakeSTT, FakeTTS
-from dubhash.ward import routes
-from dubhash.ward.service import WardProviders
+from convox.api.app import create_app
+from convox.config.settings import Settings
+from convox.providers.fakes import FakeMT, FakeSTT, FakeTTS
+from convox.ward import routes
+from convox.ward.service import WardProviders
 from tests.audio_fixtures import harmonic
 
 PRESS = harmonic(1000, f0=120.0)
 
 
 def settings(**kw) -> Settings:
-    return Settings(_env_file=None, **{"dubhash_env": "test", **kw})
+    return Settings(_env_file=None, **{"convox_env": "test", **kw})
 
 
 class Factory:
@@ -91,7 +91,7 @@ def test_ward_page_offers_marathi_preset_buttons(client):
 
 
 def test_old_ward_stub_is_gone():
-    from dubhash.api import console
+    from convox.api import console
 
     assert "/ward" not in [getattr(r, "path", None) for r in console.router.routes]
     assert "/ward" in [getattr(r, "path", None) for r in routes.router.routes]

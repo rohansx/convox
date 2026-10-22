@@ -1,6 +1,6 @@
 # ADR 0002: Own the topology (FastAPI + websockets + asyncio); borrow Pipecat classes, not its pipeline
 
-This ADR records why dubhash writes its own call topology and floor controller instead of running an existing voice-agent framework's pipeline.
+This ADR records why Convox writes its own call topology and floor controller instead of running an existing voice-agent framework's pipeline.
 
 ## Status
 
@@ -9,7 +9,7 @@ Accepted (October 2026).
 ## Context
 
 - Pipecat, LiveKit Agents and Bolna model **one human + one bot on one transport**.
-- dubhash is **two humans and two transports joined by a controller**: two legs, two mirrored interpreter pipelines, one `FloorController` that is the only code allowed to `send()`, `clear()` and `mark()` on either leg. See [floor-controller.md](../../tech-spec/floor-controller.md).
+- Convox is **two humans and two transports joined by a controller**: two legs, two mirrored interpreter pipelines, one `FloorController` that is the only code allowed to `send()`, `clear()` and `mark()` on either leg. See [floor-controller.md](../../tech-spec/floor-controller.md).
 - Some Pipecat pieces are useful on their own: Silero VAD wrapper, Exotel serializer, Sarvam/ElevenLabs clients.
 
 ## Decision

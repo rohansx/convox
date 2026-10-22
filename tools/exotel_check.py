@@ -20,7 +20,7 @@ import httpx
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from dubhash.config.settings import Settings  # noqa: E402
+from convox.config.settings import Settings  # noqa: E402
 
 REQUIRED = {
     "EXOTEL_ACCOUNT_SID": "exotel_account_sid",

@@ -1,6 +1,6 @@
 # Configuration
 
-This document defines how dubhash is configured. `config/pairs.yaml` holds the per-language-pair tuning (STT, TTS engine, voices, EOU and barge-in thresholds, duck level). `config/settings.py` holds environment variables (vendor credentials, database URLs, hostnames, global timing constants). The `pairs.yaml` shape and the hi-kn values come from tech spec §4 and are normative. The env var names and the global-constant knobs are **proposed**, and P3 and Rohan should confirm them on Day 1. The rule from the spec applies: TTS engine choice per language "is a config table, not an architecture decision", so changing a vendor for a language must never need a code change.
+This document defines how Convox is configured. `config/pairs.yaml` holds the per-language-pair tuning (STT, TTS engine, voices, EOU and barge-in thresholds, duck level). `config/settings.py` holds environment variables (vendor credentials, database URLs, hostnames, global timing constants). The `pairs.yaml` shape and the hi-kn values come from tech spec §4 and are normative. The env var names and the global-constant knobs are **proposed**, and P3 and Rohan should confirm them on Day 1. The rule from the spec applies: TTS engine choice per language "is a config table, not an architecture decision", so changing a vendor for a language must never need a code change.
 
 ## `config/pairs.yaml`
 
@@ -114,9 +114,9 @@ Read with pydantic-settings from the environment (`.env` in dev, Compose `env_fi
 
 | Var | Example | Required | Notes |
 |---|---|---|---|
-| `DUBHASH_ENV` | `dev` \| `prod` \| `test` | yes | `test` forces fakes |
-| `PUBLIC_BASE_URL` | `https://api.dubhash.in` | yes | platform API, provider webhook callback base, Passthru URL |
-| `EDGE_WSS_BASE` | `wss://edge.dubhash.in` | yes | base for `/ws/leg?call=…&side=…` given to Exotel and Plivo |
+| `CONVOX_ENV` | `dev` \| `prod` \| `test` | yes | `test` forces fakes |
+| `PUBLIC_BASE_URL` | `https://api.convox.in` | yes | platform API, provider webhook callback base, Passthru URL |
+| `EDGE_WSS_BASE` | `wss://edge.convox.in` | yes | base for `/ws/leg?call=…&side=…` given to Exotel and Plivo |
 | `PAIRS_FILE` | `config/pairs.yaml` | no | |
 | `DEFAULT_PROVIDER` | `exotel` | no | used when `POST /v1/calls` omits `provider` |
 | `LOG_LEVEL` | `INFO` | no | |
@@ -126,9 +126,9 @@ Read with pydantic-settings from the environment (`.env` in dev, Compose `env_fi
 
 | Var | Example | Notes |
 |---|---|---|
-| `DATABASE_URL` | `postgresql+asyncpg://dubhash:…@postgres:5432/dubhash` | Compose service `postgres` |
+| `DATABASE_URL` | `postgresql+asyncpg://convox:…@postgres:5432/convox` | Compose service `postgres` |
 | `REDIS_URL` | `redis://redis:6379/0` | call registry only |
-| `S3_BUCKET` | `dubhash-recordings` | opt-in recordings only, ap-south-1 |
+| `S3_BUCKET` | `convox-recordings` | opt-in recordings only, ap-south-1 |
 | `AWS_REGION` | `ap-south-1` | India-region hosting |
 | `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` | — | or an instance role (preferred) |
 
@@ -176,9 +176,9 @@ Every component is behind an interface with a fake, and the pipeline must run en
 | `TTS_IMPL` | `real` \| `fake` | `FakeTTS` |
 | `ENABLE_WEBRTC_LEG` | `true` in dev | exposes the loopback signalling page |
 | `BENCH_REALTIME` | `true` \| `false` | FakeLeg plays wav at real time or faster for tests |
-| `CALL_RECORDING` | `true` \| `false`; unset = `true` only when `DUBHASH_ENV=dev` | per-call recording (`store/recorder.py`): `a_in/b_in.wav` (each mic), `a_out/b_out.wav` (what each leg was sent, on the same timeline), `events.jsonl` (every CallEvent plus leg marks, clears, DTMF), `client.jsonl` (phone telemetry) and `summary.json`. Read one with `tools/call_report.py <call_id>`. **Dev and test only**: it stores both callers' voices, so it needs their consent (DPDP) and is never on by default in prod. Transcript text is kept only when the call has `record: true` |
+| `CALL_RECORDING` | `true` \| `false`; unset = `true` only when `CONVOX_ENV=dev` | per-call recording (`store/recorder.py`): `a_in/b_in.wav` (each mic), `a_out/b_out.wav` (what each leg was sent, on the same timeline), `events.jsonl` (every CallEvent plus leg marks, clears, DTMF), `client.jsonl` (phone telemetry) and `summary.json`. Read one with `tools/call_report.py <call_id>`. **Dev and test only**: it stores both callers' voices, so it needs their consent (DPDP) and is never on by default in prod. Transcript text is kept only when the call has `record: true` |
 | `CALL_RECORDING_DIR` | `out/calls` | recordings land in `<dir>/<YYYY-MM-DD>/<call_id>/` (gitignored, never commit them) |
-| `LOG_FILE` | `logs/dubhash.log` | the app also writes its log as JSON lines here (with `call_id` when known), rotating at 10 MB, 5 files kept, appended across restarts. Empty = stdout only. Not written in `DUBHASH_ENV=test` |
+| `LOG_FILE` | `logs/convox.log` | the app also writes its log as JSON lines here (with `call_id` when known), rotating at 10 MB, 5 files kept, appended across restarts. Empty = stdout only. Not written in `CONVOX_ENV=test` |
 | `LOOPBACK_OPENING_LINE` | `short` (default) \| `full` \| `off` | the opening line of `/loopback` and `/join` calls; a loopback request may pass `opening_line` itself (L7) |
 | `PSTN_OPENING_LINE` | `full` (default) \| `short` \| `off` | the opening line of `POST /v1/calls` calls (`full` = the disclosure sentence, plus the record sentence with `record: true`) |
 | `AUTO_STT_OPEN` | `guess` (default) \| `auto` | how a `lang: "auto"` side's STT opens: `guess` = its best language so far (resolved, else hint, else `hi-IN`), reopened when it changes; `auto` = Sarvam realtime `language_code=auto` (finals report a language and confidence, in translate mode too, but unreliable on short lines, [L8](../plan/open-questions.md#answer-log)). Sarvam rejects `unknown`. [Language detection](language-detection.md) |

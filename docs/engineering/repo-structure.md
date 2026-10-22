@@ -1,13 +1,13 @@
 # Repository structure
 
-This document describes how the dubhash codebase is laid out: which module owns which responsibility, where each interface (Protocol) lives, where its fakes live, and who owns each module. The layout comes from the tech spec's module list. Nothing exists yet because the repo is empty with no commits, so treat this as the target layout for Day 1 of the [10-day plan](../plan/buildathon-10-day-plan.md). If you want to add a top-level module, change this doc in the same PR.
+This document describes how the Convox codebase is laid out: which module owns which responsibility, where each interface (Protocol) lives, where its fakes live, and who owns each module. The layout comes from the tech spec's module list. Nothing exists yet because the repo is empty with no commits, so treat this as the target layout for Day 1 of the [10-day plan](../plan/buildathon-10-day-plan.md). If you want to add a top-level module, change this doc in the same PR.
 
 ## Layout from the tech spec
 
 The spec gives this tree, kept here exactly as written:
 
 ```text
-dubhash/
+convox/
   api/          fastapi app: /v1/calls, /v1/calls/{id}, /ws/leg, /webhooks, /console (sse)
   session/      CallSession, FloorController, TurnLog
   interp/       Interpreter pipeline: vad.py, endpoint.py, stt.py, mt.py, tts.py, pipeline.py
@@ -23,16 +23,16 @@ dubhash/
 
 ### Proposed concrete repo tree
 
-The spec doesn't say where packaging files go. This is our proposal: the spec's modules sit inside an importable `dubhash/` package, and `tools/` and `tests/` sit at the repo root so they never get imported by the app. Everything else matches the spec.
+The spec doesn't say where packaging files go. This is our proposal: the spec's modules sit inside an importable `convox/` package, and `tools/` and `tests/` sit at the repo root so they never get imported by the app. Everything else matches the spec.
 
 ```text
 /                              repo root (git)
 ├── pyproject.toml             python 3.12, deps, ruff/pytest config        (proposed)
 ├── docker-compose.yml         app, postgres, redis, caddy                   (proposed)
-├── Caddyfile                  TLS for edge.dubhash.in                       (proposed)
+├── Caddyfile                  TLS for edge.convox.in                       (proposed)
 ├── .env.example               every env var, no secrets                    (proposed)
 ├── docs/                      this documentation
-├── dubhash/
+├── convox/
 │   ├── api/                   app.py, calls.py, legs_ws.py, webhooks.py, console.py
 │   ├── session/               call_session.py, floor.py, turn_log.py
 │   ├── interp/                vad.py, endpoint.py, stt.py, mt.py, tts.py, pipeline.py
@@ -77,13 +77,13 @@ Every component sits behind an interface, and every interface has a fake (see [c
 
 | Interface | Defined in | Real implementations | Fake |
 |---|---|---|---|
-| `LegTransport` | `dubhash/legs/base.py` | `ExotelLeg` (`exotel.py`), `PlivoLeg` (`plivo.py`), `WebRtcLeg` (`webrtc.py`) | `FakeLeg` (`legs/fake.py`) |
-| STT stream | `dubhash/interp/stt.py` | `SarvamStream` (`providers/sarvam_stt.py`), `DeepgramStream` (`providers/deepgram_stt.py`) | `FakeSTT` (`providers/fakes.py`) |
-| MT | `dubhash/interp/mt.py` | `SarvamMT` (`providers/sarvam_mt.py`) | `FakeMT` (`providers/fakes.py`) |
-| TTS stream | `dubhash/interp/tts.py` | `BulbulStream` (`providers/sarvam_tts.py`), `ElevenStream` (`providers/eleven_tts.py`) | `FakeTTS` (`providers/fakes.py`) |
-| VAD | `dubhash/interp/vad.py` | Silero VAD v5 (onnx) | scripted speech/silence segments (proposed, in `providers/fakes.py`) |
-| `Translation` (value type) | `dubhash/interp/pipeline.py` (proposed) | text + async audio iterator | built directly in tests |
-| Turn write queue | `dubhash/store/writer.py` | async batch insert to Postgres | in-memory list (tests) |
+| `LegTransport` | `convox/legs/base.py` | `ExotelLeg` (`exotel.py`), `PlivoLeg` (`plivo.py`), `WebRtcLeg` (`webrtc.py`) | `FakeLeg` (`legs/fake.py`) |
+| STT stream | `convox/interp/stt.py` | `SarvamStream` (`providers/sarvam_stt.py`), `DeepgramStream` (`providers/deepgram_stt.py`) | `FakeSTT` (`providers/fakes.py`) |
+| MT | `convox/interp/mt.py` | `SarvamMT` (`providers/sarvam_mt.py`) | `FakeMT` (`providers/fakes.py`) |
+| TTS stream | `convox/interp/tts.py` | `BulbulStream` (`providers/sarvam_tts.py`), `ElevenStream` (`providers/eleven_tts.py`) | `FakeTTS` (`providers/fakes.py`) |
+| VAD | `convox/interp/vad.py` | Silero VAD v5 (onnx) | scripted speech/silence segments (proposed, in `providers/fakes.py`) |
+| `Translation` (value type) | `convox/interp/pipeline.py` (proposed) | text + async audio iterator | built directly in tests |
+| Turn write queue | `convox/store/writer.py` | async batch insert to Postgres | in-memory list (tests) |
 
 The `LegTransport` Protocol, quoted from the spec:
 

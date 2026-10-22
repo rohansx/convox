@@ -34,8 +34,8 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from dubhash.audio.frames import FRAME_BYTES, FRAME_MS  # noqa: E402
-from dubhash.audio.wav import read_wav, write_wav  # noqa: E402
+from convox.audio.frames import FRAME_BYTES, FRAME_MS  # noqa: E402
+from convox.audio.wav import read_wav, write_wav  # noqa: E402
 
 OUT = ROOT / "out" / "pivot"
 HI, KN, EN = "hi-IN", "kn-IN", "en-IN"
@@ -173,7 +173,7 @@ async def run_sentence(
 
 
 async def _synth_clips(key: str, sentences: tuple[Sentence, ...]) -> list[bytes]:
-    from dubhash.providers.sarvam_tts import BulbulTTS
+    from convox.providers.sarvam_tts import BulbulTTS
 
     OUT.mkdir(parents=True, exist_ok=True)
     tts = BulbulTTS(key)
@@ -227,10 +227,10 @@ def _print(rows: list[Row], summary: dict[str, dict[str, int | None]]) -> None:
 
 
 async def main_async(opts: argparse.Namespace) -> int:
-    from dubhash.config.settings import Settings
-    from dubhash.providers.sarvam_mt import SarvamMT
-    from dubhash.providers.sarvam_stt import SarvamSTT
-    from dubhash.providers.sarvam_stt_translate import SarvamSTTTranslate
+    from convox.config.settings import Settings
+    from convox.providers.sarvam_mt import SarvamMT
+    from convox.providers.sarvam_stt import SarvamSTT
+    from convox.providers.sarvam_stt_translate import SarvamSTTTranslate
 
     key = Settings(_env_file=ROOT / ".env").sarvam_api_key  # type: ignore[call-arg]
     if not key:

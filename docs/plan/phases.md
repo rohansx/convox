@@ -1,6 +1,6 @@
 # Phases
 
-This doc splits dubhash into three phases: Phase 0 is the Bolna Symphony Buildathon build, which runs to submission on 31 Oct 2026. Phase 1 runs Nov 2026 to Jan 2027 and covers the finale, the first pilots and latency work. Phase 2 runs Feb to Jun 2027 and covers platform hardening and the first paid contract. For each phase it lists the goal, what is in and out of scope, and the exit criteria. It ends with a v1 vs v2 feature table that includes the explicit non-goals. "v1" means what ships in Phase 0. "v2" means what comes after it; most v2 work lands in Phase 1 or Phase 2, and the table says which. The day-by-day Phase 0 schedule is in [buildathon-10-day-plan.md](buildathon-10-day-plan.md).
+This doc splits Convox into three phases: Phase 0 is the Bolna Symphony Buildathon build, which runs to submission on 31 Oct 2026. Phase 1 runs Nov 2026 to Jan 2027 and covers the finale, the first pilots and latency work. Phase 2 runs Feb to Jun 2027 and covers platform hardening and the first paid contract. For each phase it lists the goal, what is in and out of scope, and the exit criteria. It ends with a v1 vs v2 feature table that includes the explicit non-goals. "v1" means what ships in Phase 0. "v2" means what comes after it; most v2 work lands in Phase 1 or Phase 2, and the table says which. The day-by-day Phase 0 schedule is in [buildathon-10-day-plan.md](buildathon-10-day-plan.md).
 
 ## Timeline at a glance
 
@@ -25,7 +25,7 @@ The 20 Nov finale falls inside Phase 1. Phase 1 starts by getting ready for the 
 
 ### In scope (v1)
 
-- Two-leg bridge: two outbound calls, each on an Exotel voicebot applet pointed at `wss://edge.dubhash.in/ws/leg?call=…&side=a|b&sample-rate=16000`. Behind the `LegTransport` interface there are four transports: `ExotelLeg`, `PlivoLeg` (fallback), `WebRtcLeg` (dev and fallback demo) and `FakeLeg` (tests). See [leg-transports](../tech-spec/leg-transports.md).
+- Two-leg bridge: two outbound calls, each on an Exotel voicebot applet pointed at `wss://edge.convox.in/ws/leg?call=…&side=a|b&sample-rate=16000`. Behind the `LegTransport` interface there are four transports: `ExotelLeg`, `PlivoLeg` (fallback), `WebRtcLeg` (dev and fallback demo) and `FakeLeg` (tests). See [leg-transports](../tech-spec/leg-transports.md).
 - Interpreter pipeline per direction: Silero VAD v5, plus Sarvam end-of-utterance when it is available (start at `eou_ms = 550`), then Sarvam streaming STT (Saarika/Saaras; Deepgram Nova as the English/Hinglish fallback), then Sarvam Mayura translate, then streaming TTS. TTS uses Sarvam Bulbul for Indic targets and ElevenLabs Flash v2.5 for Hindi/English targets, chosen per language in `config/pairs.yaml`. See [interpreter-pipeline](../tech-spec/interpreter-pipeline.md).
 - Mixer: a 120 ms earcon, TTS at 0 dB and the original speaker ducked to −14 dB. See [audio](../tech-spec/audio.md).
 - Floor controller with states `IDLE`, `A_SPEAKING`, `B_SPEAKING`, `PLAYING_AB` and `PLAYING_BA`. It has a never-drop queue, the backchannel rule (< 600 ms), barge-in at > 1200 ms, a forced play after 4 s of silence with a queued item, a 10 s "aap line par hain?" prompt, DTMF 1 (replay) and DTMF 0 (bypass). See [floor-controller](../tech-spec/floor-controller.md).
@@ -88,7 +88,7 @@ The 31 Oct definition of done is in [buildathon-10-day-plan.md](buildathon-10-da
 
 ## Phase 2: Feb to Jun 2027
 
-**Goal.** Make dubhash something a platform or hospital will pay for, and get the first paid contract.
+**Goal.** Make Convox something a platform or hospital will pay for, and get the first paid contract.
 
 ### Scope
 

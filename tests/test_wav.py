@@ -5,7 +5,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from dubhash.audio.wav import pcm_to_wav_bytes, read_wav, write_wav
+from convox.audio.wav import pcm_to_wav_bytes, read_wav, write_wav
 
 
 def _sine(rate: int, ms: int, hz: float = 440.0, amp: int = 8000) -> np.ndarray:

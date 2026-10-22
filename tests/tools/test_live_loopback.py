@@ -6,8 +6,8 @@ import json
 
 import pytest
 
-from dubhash.audio.earcon import EARCON
-from dubhash.audio.frames import FRAME_BYTES
+from convox.audio.earcon import EARCON
+from convox.audio.frames import FRAME_BYTES
 from tools import live_loopback as ll
 
 
@@ -38,7 +38,7 @@ def test_join_server_by_speech_end_window():
 
 @pytest.fixture
 def server():
-    with ll.serve({"dubhash_env": "test"}, None) as srv:
+    with ll.serve({"convox_env": "test"}, None) as srv:
         yield srv
 
 
@@ -51,7 +51,7 @@ async def test_auto_side_hears_the_menu_and_presses_a_digit():
         ll.Utt("a", ll.fake_speech(1400, 175.0), "y"),
         ll.Utt("b", ll.fake_speech(1200, 220.0), "z"),
     ]
-    with ll.serve({"dubhash_env": "test", "lang_min_speech_ms": 600}, None) as srv:
+    with ll.serve({"convox_env": "test", "lang_min_speech_ms": 600}, None) as srv:
         opts = ll.Opts(
             a_lang="hi-IN",
             b_lang="kn-IN",

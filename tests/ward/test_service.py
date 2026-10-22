@@ -1,11 +1,11 @@
 import pytest
 
-from dubhash.clock import FakeClock
-from dubhash.config.pairs import PairConfig
-from dubhash.config.settings import Settings
-from dubhash.interp.mt_cache import CachedMT
-from dubhash.providers.fakes import FakeMT, FakeSTT, FakeTTS
-from dubhash.ward.service import (
+from convox.clock import FakeClock
+from convox.config.pairs import PairConfig
+from convox.config.settings import Settings
+from convox.interp.mt_cache import CachedMT
+from convox.providers.fakes import FakeMT, FakeSTT, FakeTTS
+from convox.ward.service import (
     WardProviders,
     WardSession,
     build_ward_providers,
@@ -60,7 +60,7 @@ def test_ward_pair_rejects_same_or_unknown_language():
 
 
 def test_build_ward_providers_gives_fakes_in_test_env():
-    s = Settings(_env_file=None, dubhash_env="test")
+    s = Settings(_env_file=None, convox_env="test")
     p = build_ward_providers(ward_pair("mr-IN", "hi-IN"), s)
     assert isinstance(p.stt["a"], FakeSTT) and isinstance(p.stt["b"], FakeSTT)
     assert isinstance(p.mt, FakeMT)
@@ -234,7 +234,7 @@ async def test_ward_english_on_side_a_uses_the_swapped_mr_en_pair():
 
 
 def test_ward_offers_the_marathi_choices():
-    from dubhash.ward.service import DEFAULT_LANGS, PRESETS
+    from convox.ward.service import DEFAULT_LANGS, PRESETS
 
     assert DEFAULT_LANGS == PRESETS[0]
     assert ("mr-IN", "hi-IN") in PRESETS and ("mr-IN", "en-IN") in PRESETS
@@ -243,7 +243,7 @@ def test_ward_offers_the_marathi_choices():
 
 
 def test_ward_offers_the_gujarati_choices():
-    from dubhash.ward.service import LANGS, PRESETS
+    from convox.ward.service import LANGS, PRESETS
 
     assert ("gu-IN", "hi-IN") in PRESETS and ("gu-IN", "en-IN") in PRESETS
     assert LANGS["gu-IN"] == ("Gujarati", "ગુજરાતી")

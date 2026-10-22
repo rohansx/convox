@@ -5,9 +5,9 @@ from urllib.parse import parse_qs, urlparse
 import numpy as np
 import pytest
 
-from dubhash.interp.contracts import TTS
-from dubhash.providers.registry import ProviderError
-from dubhash.providers.sarvam_tts import BulbulTTS, decode_audio, vendor_voice
+from convox.interp.contracts import TTS
+from convox.providers.registry import ProviderError
+from convox.providers.sarvam_tts import BulbulTTS, decode_audio, vendor_voice
 from tests.providers.wsmock import Conn, ws_server
 
 

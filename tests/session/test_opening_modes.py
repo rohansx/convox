@@ -7,8 +7,8 @@ import asyncio
 
 import pytest
 
-from dubhash.providers.fakes import FakeTTS
-from dubhash.session.prompts import opening_text, short_opening_text
+from convox.providers.fakes import FakeTTS
+from convox.session.prompts import opening_text, short_opening_text
 from tests.session.test_call_session import PAIR, attach_both, make, providers
 
 

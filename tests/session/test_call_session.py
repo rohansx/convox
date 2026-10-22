@@ -8,19 +8,19 @@ from pathlib import Path
 
 import pytest
 
-from dubhash.audio.earcon import EARCON
-from dubhash.clock import FakeClock
-from dubhash.config.pairs import load_pairs
-from dubhash.legs.fake import FakeLeg
-from dubhash.providers.fakes import EnergyVAD, FakeMT, FakeSTT, FakeTTS
-from dubhash.session.call_session import CallSession
-from dubhash.session.prompts import line_check_text, opening_text
-from dubhash.session.providers import Providers
+from convox.audio.earcon import EARCON
+from convox.clock import FakeClock
+from convox.config.pairs import load_pairs
+from convox.legs.fake import FakeLeg
+from convox.providers.fakes import EnergyVAD, FakeMT, FakeSTT, FakeTTS
+from convox.session.call_session import CallSession
+from convox.session.prompts import line_check_text, opening_text
+from convox.session.providers import Providers
 from tests.audio_fixtures import conversation, speech
 from tests.floor_helpers import RecordingBus
 from tools.bench import drive_lockstep
 
-PAIR = load_pairs(Path(__file__).resolve().parents[2] / "dubhash" / "config" / "pairs.yaml")[
+PAIR = load_pairs(Path(__file__).resolve().parents[2] / "convox" / "config" / "pairs.yaml")[
     "fake-fake"
 ]
 
@@ -338,7 +338,7 @@ class _NoOpeningMarkLeg(FakeLeg):
 
 
 async def test_opening_mark_that_never_returns_does_not_hold_the_translation():
-    from dubhash.session.floor import PROMPT_GRACE_MS
+    from convox.session.floor import PROMPT_GRACE_MS
 
     session, legs, clock, bus = make(opening_line=True)
     legs["b"] = _NoOpeningMarkLeg("b", clock=clock)

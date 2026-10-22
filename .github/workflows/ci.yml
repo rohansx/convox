@@ -14,7 +14,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
-      DUBHASH_ENV: test  # forces fakes; live vendor tests are deselected by pytest addopts
+      CONVOX_ENV: test  # forces fakes; live vendor tests are deselected by pytest addopts
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v6

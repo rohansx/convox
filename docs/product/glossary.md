@@ -1,25 +1,25 @@
 # Glossary
 
-This page defines the shared vocabulary used across the dubhash docs, code and standups, so that "leg", "floor", "mark" or "clear" mean the same thing to all five of us. Terms are grouped by area and alphabetical within each group. Where a term maps to a code identifier, the identifier is shown in `code`.
+This page defines the shared vocabulary used across the Convox docs, code and standups, so that "leg", "floor", "mark" or "clear" mean the same thing to all five of us. Terms are grouped by area and alphabetical within each group. Where a term maps to a code identifier, the identifier is shown in `code`.
 
 ## Telephony
 
 | Term | Definition |
 |---|---|
 | **Applet** | One step in an Exotel call flow. A flow is a chain of applets (Gather, Passthru, Voicebot, ...). |
-| **Bridge / plain bridge** | Connecting two call legs so audio passes straight through. This is what a normal masked call does. dubhash replaces the CPaaS bridge with its own, and becomes a plain bridge again in **bypass mode**. |
+| **Bridge / plain bridge** | Connecting two call legs so audio passes straight through. This is what a normal masked call does. Convox replaces the CPaaS bridge with its own, and becomes a plain bridge again in **bypass mode**. |
 | **`call_sid` / `stream_sid`** | Provider identifiers that arrive in Exotel's `start` message. Stored per leg in the `legs` table as `provider_call_sid` and `stream_sid`. |
 | **CPaaS** | Communications Platform as a Service: Exotel, Plivo, Ozonetel. These companies own virtual numbers, carrier interconnects and a media server. A call that touches one of their numbers terminates in their cloud, and their API decides what happens next (bridge, play, record, stream). This is the only legal, scalable way to be "inside" an Indian phone call. |
-| **Dial-in** | The consumer product. Call one public dubhash number, enter the target number (Gather, 10 digits), and dubhash dials leg B. Leg A is placed on the voicebot applet. Leg A's language is auto-detected from the first utterance via Sarvam language ID, with a DTMF menu as fallback. See [api](../tech-spec/api.md). |
-| **DTMF** | Dual-tone multi-frequency: keypad digits pressed during a call. dubhash uses **1** (replay the last translation to that side) and **0** (escape into bypass mode). |
+| **Dial-in** | The consumer product. Call one public Convox number, enter the target number (Gather, 10 digits), and Convox dials leg B. Leg A is placed on the voicebot applet. Leg A's language is auto-detected from the first utterance via Sarvam language ID, with a DTMF menu as fallback. See [api](../tech-spec/api.md). |
+| **DTMF** | Dual-tone multi-frequency: keypad digits pressed during a call. Convox uses **1** (replay the last translation to that side) and **0** (escape into bypass mode). |
 | **DTMF escape** | Pressing the escape digit (`escape_dtmf`, default `"0"`) on either leg turns interpretation off for the rest of the call and switches to bypass mode. This is the escape hatch that makes platforms comfortable. Tracked as `escape_used` and as the **escape rate** metric (target < 5%, every case reviewed). |
-| **Exophone** | An Exotel virtual phone number. Used as the `CallerId` when dubhash places the two outbound legs, so neither party sees the other's real number. |
+| **Exophone** | An Exotel virtual phone number. Used as the `CallerId` when Convox places the two outbound legs, so neither party sees the other's real number. |
 | **Gather / Passthru** | Exotel applets used in the dial-in flow. Gather collects digits (`digits=10`). Passthru calls our server (`/dialin/target`) so it can create the session and dial leg B. |
-| **Leg** | One side of a call: the connection between one human's phone and dubhash. Every interpreted call has exactly two legs, **A** and **B** (`side=a` / `side=b`). For Exotel, each leg is a separate outbound call running its own voicebot applet. |
-| **Masked call / number masking** | How gig platforms connect a partner and a customer. The platform backend asks the CPaaS to dial both people and bridge them, and shows each person a virtual number (for example 0806...). Every such call already passes through a CPaaS cloud, so dubhash sits in an existing interception point rather than creating one. |
-| **Media server** | The CPaaS component that terminates call audio. In a masked call it bridges A and B. With dubhash it streams each leg to our websocket instead. |
+| **Leg** | One side of a call: the connection between one human's phone and convox. Every interpreted call has exactly two legs, **A** and **B** (`side=a` / `side=b`). For Exotel, each leg is a separate outbound call running its own voicebot applet. |
+| **Masked call / number masking** | How gig platforms connect a partner and a customer. The platform backend asks the CPaaS to dial both people and bridge them, and shows each person a virtual number (for example 0806...). Every such call already passes through a CPaaS cloud, so Convox sits in an existing interception point rather than creating one. |
+| **Media server** | The CPaaS component that terminates call audio. In a masked call it bridges A and B. With Convox it streams each leg to our websocket instead. |
 | **PSTN** | Public Switched Telephone Network: the ordinary phone network (Airtel, Jio switches). PSTN audio reaches the ear at 8 kHz through codecs, so all latency and accuracy numbers must be measured on real PSTN calls, not loopback. |
-| **Stream applet** | Exotel's one-way streaming applet. It forks audio to you, but you cannot speak back. Not usable for dubhash. |
+| **Stream applet** | Exotel's one-way streaming applet. It forks audio to you, but you cannot speak back. Not usable for convox. |
 | **Voicebot applet** | Exotel's two-way streaming applet. Exotel opens a websocket to our server and sends `media` messages (raw 16-bit PCM, mono, base64; the overview says 8 kHz by default or 16 kHz on request, the spec calls this unconfirmed until tested (Q1); chunks of 100 ms, a multiple of 320 bytes). We send `media` back and Exotel plays it to the caller. Supports `clear` and `mark`. Bolna and Pipecat use this same applet to connect to Exotel. Plivo's equivalent is its audio stream element with `bidirectional=true`. See [leg transports](../tech-spec/leg-transports.md). |
 | **Udyam** | Indian MSME registration. Needed to verify a self-serve Plivo account (the fallback telephony path). |
 
@@ -29,7 +29,7 @@ This page defines the shared vocabulary used across the dubhash docs, code and s
 |---|---|
 | **`clear`** | Control message that drops queued, not-yet-played audio on a leg. Used for barge-in. Exotel `clear`, Plivo `clearAudio`. Exposed as `LegTransport.clear()`. |
 | **`connected` / `start` / `media` / `dtmf` / `stop`** | The inbound event sequence on an Exotel voicebot websocket. `start` carries `stream_sid`, `call_sid`, `from`, `to` and `media_format`. The session starts interpreting once both legs have sent `start`. |
-| **`mark`** | Control message asking the provider to call back when all audio sent before it has played. This is how dubhash knows a translation finished playing. Exotel `mark`, Plivo `checkpoint`. Exposed as `LegTransport.mark(tag)` / `on_mark(cb)`. |
+| **`mark`** | Control message asking the provider to call back when all audio sent before it has played. This is how Convox knows a translation finished playing. Exotel `mark`, Plivo `checkpoint`. Exposed as `LegTransport.mark(tag)` / `on_mark(cb)`. |
 | **`LegTransport`** | The Python protocol every telephony provider implements: `frames()`, `send()`, `clear()`, `mark()`, `on_mark()`, `on_dtmf()`, `close()`. Implementations are `ExotelLeg`, `PlivoLeg`, `WebRtcLeg` (dev) and `FakeLeg` (test). |
 | **`FakeLeg`** | Test transport. It plays a wav file as inbound frames, in real time or faster, and captures outbound frames to a wav. |
 | **`WebRtcLeg`** | Dev transport. A browser page with a mic, where two tabs act as two legs. Used for development without telephony minutes and as the last-resort demo fallback. |
@@ -69,14 +69,14 @@ This page defines the shared vocabulary used across the dubhash docs, code and s
 |---|---|
 | **Bench harness** | `tools/bench.py`. Runs two FakeLegs with scripted wav utterances through the real providers and reports p50/p95 for each stage, plus WER. |
 | **Clause-level partial start / partial preview (v2)** | Start translating and synthesising a clause when the STT partial ends at a clause boundary and the text has been stable for 400 ms, while the speaker keeps talking. This is where the next ~500 ms of latency savings lives. |
-| **Consecutive interpretation** | The interpreter speaks after the speaker finishes an utterance. This is dubhash v1. **Simultaneous** (overlapping) interpretation is a non-goal for v1. |
-| **EOU (end of utterance)** | The moment dubhash decides the speaker has finished. It fires when silence ≥ `eou_ms` (per pair, starting at 550 ms) **and** the utterance ≥ 300 ms, or earlier if Sarvam's stream emits an end-of-utterance or final event. EOU detection is the biggest single latency and quality lever: too short splits sentences, too long feels dead. |
+| **Consecutive interpretation** | The interpreter speaks after the speaker finishes an utterance. This is Convox v1. **Simultaneous** (overlapping) interpretation is a non-goal for v1. |
+| **EOU (end of utterance)** | The moment Convox decides the speaker has finished. It fires when silence ≥ `eou_ms` (per pair, starting at 550 ms) **and** the utterance ≥ 300 ms, or earlier if Sarvam's stream emits an end-of-utterance or final event. EOU detection is the biggest single latency and quality lever: too short splits sentences, too long feels dead. |
 | **False EOU** | EOU fired mid-sentence, splitting one utterance into two. Measured per language against latency when tuning `eou_ms`. |
 | **First-audio latency** | Time from the speaker stopping to the listener hearing the first translated word, on real PSTN legs. EOU wait (~550 ms) + ~1.2 s (STT final + MT + TTS TTFB + playout) ≈ 1.4 to 1.8 s. Targets: **p50 < 1.5 s, p95 < 2.0 s**. |
 | **Hinglish** | Mixed Hindi-English speech. Handled by Deepgram Nova as the fallback STT. |
 | **Interpreter** | One direction of the pipeline (A→B or B→A): VAD + EOU → STT stream → translate → TTS stream. A call has two interpreters. Each hands finished `Translation` objects to the floor controller. |
 | **Language pair** | Two languages joined by ⇄, e.g. `hi ⇄ kn`. Configured in `config/pairs.yaml` with BCP-47-style codes (`hi-IN`, `kn-IN`). v1 rehearsed pairs: hi ⇄ kn, hi ⇄ ta, mr ⇄ hi. |
-| **Opening line** | A prompt of about five seconds at call start, in each language: "aap hindi mein boliye, saamne wala kannada mein sunega. chhote vaakya boliye." It sets the rhythm, asks for short sentences and discloses dubhash (DPDP). |
+| **Opening line** | A prompt of about five seconds at call start, in each language: "aap hindi mein boliye, saamne wala kannada mein sunega. chhote vaakya boliye." It sets the rhythm, asks for short sentences and discloses Convox (DPDP). |
 | **`pairs.yaml`** | Per-pair config: STT, TTS and voices for each side (`voice_m`, `voice_f`), plus `eou_ms`, `backchannel_max_ms`, `barge_in_min_ms`, `duck_db`. See [configuration](../tech-spec/configuration.md). |
 | **Translation (object)** | What an interpreter hands to the floor controller: text plus an async audio iterator. |
 | **Translation cache** | Exact-match cache for each pair. Repeated greetings, confirmations and numbers skip MT entirely (~200 ms). |
@@ -104,7 +104,7 @@ This page defines the shared vocabulary used across the dubhash docs, code and s
 | **Console** | Server-rendered HTML + SSE (htmx) live view: active calls, two columns for each call, turns with stage latencies inline, state badge, queue depth, DTMF and barge-in markers. It is both the stage demo surface and the trust-review surface. |
 | **Interpreted minute** | The billing unit for platforms: a minute of a call in `interpret` mode. Stored as `interpreted_s`. |
 | **Mode** | `interpret` (default) or `bridge` (pass-through), set on `POST /v1/calls`. |
-| **Platform integration** | A platform's backend calls `POST /v1/calls` instead of Exotel's `Calls/connect`, and dubhash places the two legs. |
+| **Platform integration** | A platform's backend calls `POST /v1/calls` instead of Exotel's `Calls/connect`, and Convox places the two legs. |
 | **Ward mode** | One phone, no telephony. A web app where a nurse and a patient each press their side to talk (push-to-talk). It uses the same pipeline without a telephony transport. Both texts show on screen, and "save to chart" attaches the bilingual transcript. |
 
 ## Process and compliance
@@ -118,7 +118,7 @@ This page defines the shared vocabulary used across the dubhash docs, code and s
 | **DPDP** | India's Digital Personal Data Protection Act. Drives the opening-line disclosure, no voice cloning without consent, India-region hosting and opt-in transcript retention. See [security and privacy](../tech-spec/security-privacy.md). |
 | **Entity accuracy** | Share of numbers, addresses, names and times that survive the round trip. Target > 95%. |
 | **Meaning preservation** | A bilingual rater labels each turn as kept / partly / lost (`tools/label.py`), on 300 turns per pair. Target > 90% "kept" on hi ⇄ kn, hi ⇄ ta, mr ⇄ hi. |
-| **Task completion** | Scripted scenarios (find the building, confirm a dose, agree a time) completed through dubhash, compared with a plain bridge between speakers who share no language. Target > 85% vs a < 40% baseline. |
+| **Task completion** | Scripted scenarios (find the building, confirm a dose, agree a time) completed through Convox, compared with a plain bridge between speakers who share no language. Target > 85% vs a < 40% baseline. |
 | **WER** | Word error rate of STT against reference transcripts. |
 
 ## Related

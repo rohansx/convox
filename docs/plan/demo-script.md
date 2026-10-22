@@ -43,7 +43,7 @@ Notes for the presenter:
 sequenceDiagram
     autonumber
     participant C as Console (Rohan)
-    participant D as dubhash server
+    participant D as Convox server
     participant X as Exotel
     participant J as Judge phone (kn)
     participant T as Teammate phone (hi)
@@ -114,7 +114,7 @@ Decide on the fallback before going on stage, using the live-check result from 3
 
 *What are you building, and where does voice AI come in?*
 
-> dubhash is a live interpreter inside the phone call. A delivery rider from Bihar calls a customer in Bengaluru. The rider speaks Hindi, and the customer hears Kannada about a second and a half later, in a gender-matched natural voice, with the rider's own voice audible underneath. The reply comes back the same way. It works by sitting where gig platforms' masked calls already pass, in the CPaaS cloud, using Exotel's two-way voice streaming on each leg, Sarvam for Indic speech recognition and translation, and Sarvam Bulbul and ElevenLabs for the voice. The product is the bridge, the turn-taking controller that keeps two humans and an interpreter from talking over each other, and the integrations: a one-line API for platforms, a ward mode on a single phone for hospitals, and a dial-in number for anyone. For the buildathon we are running it live on stage between a judge's phone and ours, through an Exotel number, in the Indian language pairs we have measured (Hindi with Kannada, Tamil or Marathi).
+> Convox is a live interpreter inside the phone call. A delivery rider from Bihar calls a customer in Bengaluru. The rider speaks Hindi, and the customer hears Kannada about a second and a half later, in a gender-matched natural voice, with the rider's own voice audible underneath. The reply comes back the same way. It works by sitting where gig platforms' masked calls already pass, in the CPaaS cloud, using Exotel's two-way voice streaming on each leg, Sarvam for Indic speech recognition and translation, and Sarvam Bulbul and ElevenLabs for the voice. The product is the bridge, the turn-taking controller that keeps two humans and an interpreter from talking over each other, and the integrations: a one-line API for platforms, a ward mode on a single phone for hospitals, and a dial-in number for anyone. For the buildathon we are running it live on stage between a judge's phone and ours, through an Exotel number, in the Indian language pairs we have measured (Hindi with Kannada, Tamil or Marathi).
 
 Changes from the overview's draft, and why:
 

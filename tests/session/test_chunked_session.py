@@ -8,20 +8,20 @@ from __future__ import annotations
 import dataclasses
 from pathlib import Path
 
-from dubhash.audio.earcon import EARCON
-from dubhash.clock import FakeClock
-from dubhash.config.pairs import load_pairs
-from dubhash.legs.fake import FakeLeg
-from dubhash.providers.fakes import EnergyVAD, FakeMT, FakeSTT, FakeTTS
-from dubhash.session.call_session import CallSession
-from dubhash.session.providers import Providers
-from dubhash.types import Translation
+from convox.audio.earcon import EARCON
+from convox.clock import FakeClock
+from convox.config.pairs import load_pairs
+from convox.legs.fake import FakeLeg
+from convox.providers.fakes import EnergyVAD, FakeMT, FakeSTT, FakeTTS
+from convox.session.call_session import CallSession
+from convox.session.providers import Providers
+from convox.types import Translation
 from tests.audio_fixtures import silence, speech, tone
 from tests.floor_helpers import RecordingBus
 from tests.session.test_crosstalk_session import at_dbfs, gain_db
 from tools.bench import drive_lockstep
 
-PAIRS = load_pairs(Path(__file__).resolve().parents[2] / "dubhash" / "config" / "pairs.yaml")
+PAIRS = load_pairs(Path(__file__).resolve().parents[2] / "convox" / "config" / "pairs.yaml")
 CHUNKED = dataclasses.replace(
     PAIRS["fake-fake"], early_final_ms=200, chunking=True, chunk_pause_ms=300, chunk_min_ms=1200
 )

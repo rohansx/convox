@@ -1,6 +1,6 @@
 # Floor controller
 
-The floor controller decides who hears what, and when. Two humans and an interpreter make a three-party timing problem. The controller is the part of dubhash that is not a vendor call, and it is what makes the call feel like a conversation rather than a walkie-talkie. There is one controller per call, running as one asyncio task inside the `CallSession`. It owns the state, the queue, and **the only code allowed to call `send()`, `clear()` and `mark()` on either leg**. Interpreters never talk to transports directly. They hand finished `Translation` objects (text plus an async audio iterator) to the controller. Owner: **Rohan** (`dubhash/session/`). Tests: `tests/test_floor.py`.
+The floor controller decides who hears what, and when. Two humans and an interpreter make a three-party timing problem. The controller is the part of Convox that is not a vendor call, and it is what makes the call feel like a conversation rather than a walkie-talkie. There is one controller per call, running as one asyncio task inside the `CallSession`. It owns the state, the queue, and **the only code allowed to call `send()`, `clear()` and `mark()` on either leg**. Interpreters never talk to transports directly. They hand finished `Translation` objects (text plus an async audio iterator) to the controller. Owner: **Rohan** (`convox/session/`). Tests: `tests/test_floor.py`.
 
 The two things it must never do: **translate both directions at once into each other**, or **drop something someone said**.
 
@@ -277,7 +277,7 @@ Rider (A, Hindi) and customer (B, Kannada). Platform log at the end: 4 turns, p5
 
 ## 7. Cross-talk and echo
 
-The controller trusts the speech events it gets. Two kinds of mic speech are not a person talking to dubhash, and the session (`session/crosstalk.py`, wired in `session/call_session.py`) filters them before they become speech events or turns.
+The controller trusts the speech events it gets. Two kinds of mic speech are not a person talking to Convox, and the session (`session/crosstalk.py`, wired in `session/call_session.py`) filters them before they become speech events or turns.
 
 **Cross-talk (co-located phones only).** On the stage demo (/join) and loopback calls both phones are in one room, so B's mic also hears A speaking, a few metres away. Without a gate B's interpreter took A's Marathi for B's Hindi: junk turns that queued behind the real ones, played to A (the "double sound" of the 21 Oct stage test), and could barge in on A's own translation. `CallSession(co_located=True)` (set by `create_loopback_call`, so /join and loopback; off for PSTN, where each leg is its own phone line) turns the gate on. It keeps a short level history (RMS dBFS per 20 ms frame and the VAD's voiced flag) for both mics:
 

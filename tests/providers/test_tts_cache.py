@@ -6,10 +6,10 @@ from __future__ import annotations
 import asyncio
 from pathlib import Path
 
-from dubhash.clock import FakeClock
-from dubhash.interp.contracts import TTS
-from dubhash.providers.fakes import FakeTTS
-from dubhash.providers.tts_cache import CachedTTS, TTSAudioCache, tts_key
+from convox.clock import FakeClock
+from convox.interp.contracts import TTS
+from convox.providers.fakes import FakeTTS
+from convox.providers.tts_cache import CachedTTS, TTSAudioCache, tts_key
 
 
 def pcm_files(d: Path) -> list[Path]:

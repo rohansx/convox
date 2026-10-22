@@ -5,12 +5,12 @@ from __future__ import annotations
 
 import asyncio
 
-from dubhash.clock import FakeClock
-from dubhash.interp.mt_cache import CachedMT
-from dubhash.interp.phrases import load_pack
-from dubhash.providers.fakes import FakeMT, FakeSTT, FakeTTS
-from dubhash.providers.tts_cache import CachedTTS, TTSAudioCache
-from dubhash.session.prefill import prefill_phrases
+from convox.clock import FakeClock
+from convox.interp.mt_cache import CachedMT
+from convox.interp.phrases import load_pack
+from convox.providers.fakes import FakeMT, FakeSTT, FakeTTS
+from convox.providers.tts_cache import CachedTTS, TTSAudioCache
+from convox.session.prefill import prefill_phrases
 from tests.audio_fixtures import conversation
 from tests.session.test_call_session import PAIR, attach_both, make, providers
 from tests.session.test_prewarm import WarmSTT, WarmTTS

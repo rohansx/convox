@@ -3,8 +3,8 @@ translation; a wrong or missing one is replaced by the source digits, spoken."""
 
 from __future__ import annotations
 
-from dubhash.interp.numbers import check_numbers, extract_numbers, readback, spoken
-from dubhash.ward import service
+from convox.interp.numbers import check_numbers, extract_numbers, readback, spoken
+from convox.ward import service
 
 
 def test_ward_reuses_the_same_number_check():

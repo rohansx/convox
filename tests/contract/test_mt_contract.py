@@ -2,9 +2,9 @@ from collections.abc import Callable
 
 import pytest
 
-from dubhash.interp.contracts import MT
-from dubhash.interp.mt_cache import CachedMT
-from dubhash.providers.fakes import FakeMT
+from convox.interp.contracts import MT
+from convox.interp.mt_cache import CachedMT
+from convox.providers.fakes import FakeMT
 
 IMPLS: list = [
     pytest.param(lambda: FakeMT(), id="fake"),

@@ -1,29 +1,29 @@
 import pytest
 
-from dubhash.config.settings import Settings
-from dubhash.telephony import ProviderUnavailable, build_dialer
-from dubhash.telephony.base import Dialer, FakeDialer, leg_ws_url, status_callback_url
-from dubhash.telephony.exotel_api import ExotelDialer
-from dubhash.telephony.plivo_api import PlivoDialer
+from convox.config.settings import Settings
+from convox.telephony import ProviderUnavailable, build_dialer
+from convox.telephony.base import Dialer, FakeDialer, leg_ws_url, status_callback_url
+from convox.telephony.exotel_api import ExotelDialer
+from convox.telephony.plivo_api import PlivoDialer
 
 
 def settings(**kw) -> Settings:
-    return Settings(_env_file=None, **{"dubhash_env": "test", **kw})
+    return Settings(_env_file=None, **{"convox_env": "test", **kw})
 
 
 def test_leg_ws_url_has_call_side_and_rate():
-    s = settings(edge_wss_base="wss://edge.dubhash.in/")
+    s = settings(edge_wss_base="wss://edge.convox.in/")
     assert (
         leg_ws_url(s, "c_abc", "b")
-        == "wss://edge.dubhash.in/ws/leg?call=c_abc&side=b&sample-rate=16000"
+        == "wss://edge.convox.in/ws/leg?call=c_abc&side=b&sample-rate=16000"
     )
 
 
 def test_status_callback_url():
-    s = settings(public_base_url="https://api.dubhash.in")
+    s = settings(public_base_url="https://api.convox.in")
     assert (
         status_callback_url(s, "exotel", "c_1", "a")
-        == "https://api.dubhash.in/webhooks/exotel?call=c_1&side=a"
+        == "https://api.convox.in/webhooks/exotel?call=c_1&side=a"
     )
 
 

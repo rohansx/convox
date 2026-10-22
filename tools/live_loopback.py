@@ -104,9 +104,9 @@ import httpx  # noqa: E402
 import numpy as np  # noqa: E402
 import websockets  # noqa: E402
 
-from dubhash.audio.earcon import EARCON  # noqa: E402
-from dubhash.audio.frames import FRAME_BYTES, FRAME_MS  # noqa: E402
-from dubhash.audio.wav import read_wav, write_wav  # noqa: E402
+from convox.audio.earcon import EARCON  # noqa: E402
+from convox.audio.frames import FRAME_BYTES, FRAME_MS  # noqa: E402
+from convox.audio.wav import read_wav, write_wav  # noqa: E402
 from tests.audio_fixtures import mix, pink_noise  # noqa: E402
 
 OUT = ROOT / "out" / "live"
@@ -666,7 +666,7 @@ def line_felt(row: TurnRow) -> None:
     """Ear-voice span of one scripted line (L9): the server's per-chunk lags (play start
     minus the chunk's speech start, weighted by its speech), shifted by what the listener
     measured against the server for the first chunk (VAD onset lag, transport, earcon)."""
-    from dubhash.store.timeline import utterances
+    from convox.store.timeline import utterances
 
     row.chunks = len(row.server)
     if not row.server or row.from_start_ms is None:
@@ -723,7 +723,7 @@ def stages(turn: dict[str, Any]) -> dict[str, int | None]:
 
 def numbers_check(row: TurnRow) -> str | None:
     """Numbers in the scripted line that the listener's translation lost (ward's check)."""
-    from dubhash.ward.service import check_numbers
+    from convox.ward.service import check_numbers
 
     if not row.server:
         return None
@@ -1134,9 +1134,9 @@ def serve(settings_kw: dict[str, Any], env_file: Path | None) -> Iterator[Server
     """Run the app with uvicorn in a thread (its own event loop) on a free port."""
     import uvicorn
 
-    from dubhash.api.app import create_app
-    from dubhash.api.auth import parse_api_keys
-    from dubhash.config.settings import Settings
+    from convox.api.app import create_app
+    from convox.api.auth import parse_api_keys
+    from convox.config.settings import Settings
 
     port = free_port()
     base = f"http://127.0.0.1:{port}"
@@ -1165,7 +1165,7 @@ def serve(settings_kw: dict[str, Any], env_file: Path | None) -> Iterator[Server
         time.sleep(0.05)
     console: dict[str, str] = {}
     api: dict[str, str] = {}
-    if settings.dubhash_env != "test":
+    if settings.convox_env != "test":
         cred = base64.b64encode(f"dev:{settings.console_password}".encode()).decode()
         console = {"authorization": f"Basic {cred}"}
         keys = list(parse_api_keys(settings.platform_api_keys).values())
@@ -1184,8 +1184,8 @@ async def synth_script(
     voices: dict[str, str] | None = None,
 ) -> list[Utt]:
     """Bulbul-voiced utterances, cached by (voice, lang, text) in out/."""
-    from dubhash.config.settings import Settings
-    from dubhash.providers.sarvam_tts import BulbulTTS
+    from convox.config.settings import Settings
+    from convox.providers.sarvam_tts import BulbulTTS
 
     utts: list[Utt] = []
     tts: BulbulTTS | None = None
@@ -1246,7 +1246,7 @@ def pairs_override(out: Path, **fields: Any) -> Path:
     chunk_pause_ms=250), for the in-process app's pairs_file."""
     import yaml
 
-    from dubhash.config.settings import Settings
+    from convox.config.settings import Settings
 
     raw = yaml.safe_load(Settings(_env_file=None).pairs_file.read_text())  # type: ignore[call-arg]
     for cfg in raw.values():
@@ -1279,7 +1279,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p.add_argument("--fake", action="store_true", help="fake providers, fake utterances")
     p.add_argument("--out", type=Path, default=OUT)
     p.add_argument("--pause-ms", type=int, default=800)
-    p.add_argument("--log", default="WARNING", help="dubhash log level to stderr")
+    p.add_argument("--log", default="WARNING", help="convox log level to stderr")
     p.add_argument(
         "--room-db",
         type=float,
@@ -1321,9 +1321,9 @@ def main(argv: list[str] | None = None) -> int:
     a = parse_args(argv)
     handler = logging.StreamHandler()
     handler.setFormatter(logging.Formatter("%(relativeCreated)8.0f %(levelname)s %(message)s"))
-    handler.setLevel(a.log.upper())  # the app's file log (logs/dubhash.log) keeps INFO
-    logging.getLogger("dubhash").addHandler(handler)
-    logging.getLogger("dubhash").setLevel(min(logging.INFO, handler.level))
+    handler.setLevel(a.log.upper())  # the app's file log (logs/convox.log) keeps INFO
+    logging.getLogger("convox").addHandler(handler)
+    logging.getLogger("convox").setLevel(min(logging.INFO, handler.level))
     name = a.script or script_for(a.a_lang, a.b_lang) or DEFAULT_SCRIPT
     sc = SCRIPTS[name]
     a_lang, b_lang = a.a_lang or sc.a_lang, a.b_lang or sc.b_lang
@@ -1347,7 +1347,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     if a.fake:
         utts = fake_utts(lines)
-        kw: dict[str, Any] = {"dubhash_env": "test"}
+        kw: dict[str, Any] = {"convox_env": "test"}
         env_file = None
     else:
         a.out.mkdir(parents=True, exist_ok=True)

@@ -1,6 +1,6 @@
 # API
 
-This document defines every HTTP and WebSocket surface the dubhash app exposes: the platform API (`/v1/calls`), the provider media WebSocket (`/ws/leg`), provider status webhooks, the consumer dial-in flow, the console, and the webhook events dubhash sends back to platforms. It is the contract between dubhash and a platform backend, and between dubhash and Exotel/Plivo. Everything listed in the tech spec §6 is normative. Anything marked **proposed** is our own design and was not in the source PDFs. Change it in this doc first, then in code.
+This document defines every HTTP and WebSocket surface the Convox app exposes: the platform API (`/v1/calls`), the provider media WebSocket (`/ws/leg`), provider status webhooks, the consumer dial-in flow, the console, and the webhook events Convox sends back to platforms. It is the contract between Convox and a platform backend, and between Convox and Exotel/Plivo. Everything listed in the tech spec §6 is normative. Anything marked **proposed** is our own design and was not in the source PDFs. Change it in this doc first, then in code.
 
 All endpoints are served by the single FastAPI process described in [system overview](../architecture/system-overview.md), behind Caddy (TLS) on one ap-south-1 VM.
 
@@ -18,9 +18,9 @@ All endpoints are served by the single FastAPI process described in [system over
 | `POST` | `/webhooks/exotel` | Exotel | call status callbacks (answered, completed, failed) |
 | `POST` | `/webhooks/plivo` | Plivo | call status callbacks (answered, completed, failed) |
 | `POST` | `/dialin/target` | Exotel Passthru applet | consumer dial-in: create session, dial leg b |
-| — | platform `webhook` URL | dubhash → platform | `call.started`, `turn`, `call.ended` events |
+| — | platform `webhook` URL | Convox → platform | `call.started`, `turn`, `call.ended` events |
 
-Hostnames: the source PDFs use `api.dubhash.in` for the platform API and `edge.dubhash.in` for provider WebSockets. In v1 both resolve to the same VM. TBD, see [open questions](../plan/open-questions.md).
+Hostnames: the source PDFs use `api.convox.in` for the platform API and `edge.convox.in` for provider WebSockets. In v1 both resolve to the same VM. TBD, see [open questions](../plan/open-questions.md).
 
 ## Authentication
 
@@ -31,7 +31,7 @@ Hostnames: the source PDFs use `api.dubhash.in` for the platform API and `edge.d
 | `/v1/*` platform API | `Authorization: Bearer <api key>`, one key per platform, stored hashed | **proposed** |
 | `/console`, `/console/events` | single shared operator password via Caddy basic auth for the buildathon | **proposed** |
 | `/webhooks/*` | provider signature check if the provider offers one, otherwise IP allowlist | **proposed**, TBD |
-| outbound platform webhooks | `X-Dubhash-Signature: sha256=<HMAC of body with platform secret>` | **proposed** |
+| outbound platform webhooks | `X-Convox-Signature: sha256=<HMAC of body with platform secret>` | **proposed** |
 
 See [security and privacy](security-privacy.md) for the full threat and consent model.
 
@@ -39,13 +39,13 @@ See [security and privacy](security-privacy.md) for the full threat and consent 
 
 ## `POST /v1/calls`
 
-Creates a `CallSession` and dials both legs at once. This is the "one line that changes" in a platform's backend: instead of calling Exotel's `Calls/connect` to bridge partner and customer, the platform calls dubhash, and dubhash calls Exotel twice with a voicebot applet on each leg.
+Creates a `CallSession` and dials both legs at once. This is the "one line that changes" in a platform's backend: instead of calling Exotel's `Calls/connect` to bridge partner and customer, the platform calls Convox, and Convox calls Exotel twice with a voicebot applet on each leg.
 
 ### Request
 
 ```http
 POST /v1/calls HTTP/1.1
-Host: api.dubhash.in
+Host: api.convox.in
 Authorization: Bearer dk_live_…            # proposed
 Content-Type: application/json
 
@@ -75,7 +75,7 @@ Content-Type: application/json
 | `caller_id` | string, E.164 | yes | — | ExoPhone / Plivo number shown to both parties (masking preserved) |
 | `mode` | `"interpret"` \| `"bridge"` | no | `interpret` | `bridge` passes audio through with interpreters off (same as DTMF bypass from t=0) |
 | `escape_dtmf` | string, one digit | no | `"0"` | digit that switches to bypass (plain bridge) for the rest of the call |
-| `webhook` | URL | no | none | where dubhash POSTs `call.started`, `turn`, `call.ended` |
+| `webhook` | URL | no | none | where Convox POSTs `call.started`, `turn`, `call.ended` |
 | `record` | boolean | no | `false` | if `true`, `src_text`/`tgt_text` are retained. Otherwise they are nulled after metrics are computed. See [data model](data-model.md#text-retention) |
 | `vertical` | `"delivery"` \| `"clinic"` (a file in `config/phrases/`) | no | `delivery` | the phrase pack the call prefills into its MT and TTS caches and matches acks against ([configuration](configuration.md#configphrasesverticalyaml-phrase-packs-l10), [L10](../plan/open-questions.md#answer-log)). Also accepted by `POST /loopback/calls` and the `/join` form. Unknown → `400 invalid_body` |
 
@@ -105,7 +105,7 @@ Content-Type: application/json
 sequenceDiagram
     autonumber
     participant P as Platform backend
-    participant D as dubhash api
+    participant D as Convox api
     participant S as CallSession
     participant X as Exotel
     participant A as Phone A
@@ -132,7 +132,7 @@ Provider calls, verbatim from the spec:
 
 ```text
 exotel: POST /v1/Accounts/{sid}/Calls/connect  From=<number>  CallerId=<exophone>  Url=<applet-flow-url>
-        the flow has one Voicebot applet pointing at wss://edge.dubhash.in/ws/leg?call=c_91&side=a
+        the flow has one Voicebot applet pointing at wss://edge.convox.in/ws/leg?call=c_91&side=a
 plivo:  POST /v1/Account/{id}/Call/  to=<number>  from=<plivo number>  answer_url=<xml with Stream element>
 ```
 
@@ -264,7 +264,7 @@ Errors: `404 call_not_found`, `409 call_ended`. The call's `call.ended` webhook 
 Where the provider's media WebSocket lands. One connection per leg, two per call.
 
 ```text
-wss://edge.dubhash.in/ws/leg?call=c_91&side=a&sample-rate=16000
+wss://edge.convox.in/ws/leg?call=c_91&side=a&sample-rate=16000
 ```
 
 | Query param | Values | Notes |
@@ -299,7 +299,7 @@ Handler rules (proposed):
 
 ---
 
-## Outbound webhook events (dubhash → platform)
+## Outbound webhook events (Convox → platform)
 
 Sent to the `webhook` URL from `POST /v1/calls`. The event names and contents come from the product overview §6. The JSON field names are **proposed**.
 
@@ -349,7 +349,7 @@ Side, source text, translated text, latency to first audio, and whether barge-in
 }
 ```
 
-Whether `src_text`/`tgt_text` are included when `record: false` is TBD, see [open questions](../plan/open-questions.md). The proposed default is to send them, because the platform is the data fiduciary for its own call and dubhash then discards its copy. Backchannels do not generate `turn` events (proposed).
+Whether `src_text`/`tgt_text` are included when `record: false` is TBD, see [open questions](../plan/open-questions.md). The proposed default is to send them, because the platform is the data fiduciary for its own call and Convox then discards its copy. Backchannels do not generate `turn` events (proposed).
 
 ### `call.ended`
 
@@ -383,7 +383,7 @@ Duration, interpreted minutes, turns, p50/p95 latency, whether escape was used, 
 
 ## Dial-in flow (consumer)
 
-The public dubhash number runs an Exotel applet chain. Nobody needs an app.
+The public Convox number runs an Exotel applet chain. Nobody needs an app.
 
 ```text
 Gather(digits=10) → Passthru(https://…/dialin/target) → our server creates the session, dials leg b,
@@ -396,10 +396,10 @@ sequenceDiagram
     autonumber
     participant C as Caller (leg a)
     participant X as Exotel (public number)
-    participant D as dubhash /dialin/target
+    participant D as Convox /dialin/target
     participant S as CallSession
     participant T as Target (leg b)
-    C->>X: dials dubhash number
+    C->>X: dials Convox number
     X->>C: Gather(digits=10): "enter the number to reach"
     C->>X: 10 digits
     X->>D: Passthru with digits

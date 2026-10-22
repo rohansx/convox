@@ -5,20 +5,20 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from dubhash.clock import FakeClock
-from dubhash.config.pairs import auto_pair, language_sides, load_pairs
-from dubhash.interp.langid import SUPPORTED_LANGS, LangGuess
-from dubhash.legs.fake import FakeLeg
-from dubhash.providers.fakes import EnergyVAD, FakeLID, FakeMT, FakeSTT, FakeTTS
-from dubhash.session.call_session import CallSession
-from dubhash.session.language import AutoLang
-from dubhash.session.prompts import auto_opening_text, language_menu_text
-from dubhash.session.providers import Providers
+from convox.clock import FakeClock
+from convox.config.pairs import auto_pair, language_sides, load_pairs
+from convox.interp.langid import SUPPORTED_LANGS, LangGuess
+from convox.legs.fake import FakeLeg
+from convox.providers.fakes import EnergyVAD, FakeLID, FakeMT, FakeSTT, FakeTTS
+from convox.session.call_session import CallSession
+from convox.session.language import AutoLang
+from convox.session.prompts import auto_opening_text, language_menu_text
+from convox.session.providers import Providers
 from tests.audio_fixtures import silence, speech
 from tests.floor_helpers import RecordingBus
 from tools.bench import drive_lockstep
 
-PAIRS = load_pairs(Path(__file__).resolve().parents[2] / "dubhash" / "config" / "pairs.yaml")
+PAIRS = load_pairs(Path(__file__).resolve().parents[2] / "convox" / "config" / "pairs.yaml")
 SIDES = language_sides(PAIRS)
 
 
@@ -110,7 +110,7 @@ async def test_the_default_opens_stt_in_the_best_guess():
     """L8: the realtime socket's own detection is not good enough, so by default an auto
     side's STT opens in its best language so far (hint, else Hindi) and reopens once the
     side is decided."""
-    from dubhash.session.language import AutoLang as _Auto
+    from convox.session.language import AutoLang as _Auto
 
     assert _Auto(hints={}, sides={}).stt_open == "guess"
 

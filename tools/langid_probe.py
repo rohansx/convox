@@ -46,11 +46,11 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from dubhash.audio.codec import ulaw_decode, ulaw_encode  # noqa: E402
-from dubhash.audio.frames import FRAME_BYTES, ms_to_bytes  # noqa: E402
-from dubhash.audio.resample import Resampler  # noqa: E402
-from dubhash.audio.wav import read_wav, write_wav  # noqa: E402
-from dubhash.interp.langid import SUPPORTED_LANGS, pick  # noqa: E402
+from convox.audio.codec import ulaw_decode, ulaw_encode  # noqa: E402
+from convox.audio.frames import FRAME_BYTES, ms_to_bytes  # noqa: E402
+from convox.audio.resample import Resampler  # noqa: E402
+from convox.audio.wav import read_wav, write_wav  # noqa: E402
+from convox.interp.langid import SUPPORTED_LANGS, pick  # noqa: E402
 
 OUT = ROOT / "out" / "langid"
 VOICES = {"male": "bulbul:shubh", "female": "bulbul:ishita"}  # v3, all languages
@@ -231,7 +231,7 @@ def vote_rows(rows: list[dict[str, Any]], primary: str, second: str) -> list[dic
     """SarvamLID(model=primary, second_model=second) on the same clips, replayed offline
     with its own decide(): engine "vote", raw = the decided language (None = rejected),
     ms = the slower of the two parallel calls."""
-    from dubhash.providers.sarvam_lid import Detection, decide
+    from convox.providers.sarvam_lid import Detection, decide
 
     def key(r: dict[str, Any]) -> tuple:
         return (r["lang"], r["idx"], r["voice"], r["cond"], r["window_ms"])
@@ -279,7 +279,7 @@ def _clip_path(lang: str, i: int, voice: str) -> Path:
 
 
 async def synth_corpus(key: str, langs: Sequence[str], n: int) -> dict[tuple, bytes]:
-    from dubhash.providers.sarvam_tts import BulbulTTS
+    from convox.providers.sarvam_tts import BulbulTTS
 
     (OUT / "clips").mkdir(parents=True, exist_ok=True)
     tts = BulbulTTS(key)
@@ -316,7 +316,7 @@ async def _retry(fn: Any, *args: Any, tries: int = 5) -> Any:
 
 
 async def _detect(lid: Any, pcm: bytes) -> Any:
-    from dubhash.providers import sarvam_lid
+    from convox.providers import sarvam_lid
 
     try:
         return await lid.detect(pcm)
@@ -327,7 +327,7 @@ async def _detect(lid: Any, pcm: bytes) -> Any:
 async def run_rest(
     key: str, clips: dict[tuple, bytes], conds: Sequence[str], models: Sequence[str]
 ) -> list[dict[str, Any]]:
-    from dubhash.providers.sarvam_lid import SarvamLID
+    from convox.providers.sarvam_lid import SarvamLID
 
     rows = []
     for model in models:
@@ -361,8 +361,8 @@ async def run_rest(
 async def run_realtime(
     key: str, clips: dict[tuple, bytes], conds: Sequence[str]
 ) -> list[dict[str, Any]]:
-    from dubhash.providers.sarvam_stt import SarvamSTT
-    from dubhash.providers.sarvam_stt_translate import SarvamSTTTranslate
+    from convox.providers.sarvam_stt import SarvamSTT
+    from convox.providers.sarvam_stt_translate import SarvamSTTTranslate
 
     rows = []
     for name, stt in (
@@ -404,7 +404,7 @@ async def run_realtime(
 
 async def fixed_lang_check(key: str, pcm: bytes) -> dict[str, Any]:
     """Does a fixed-language socket report a language on its final? (crosstalk gate)"""
-    from dubhash.providers.sarvam_stt import SarvamSTT
+    from convox.providers.sarvam_stt import SarvamSTT
 
     stt = SarvamSTT(key)
     try:
@@ -420,7 +420,7 @@ async def fixed_lang_check(key: str, pcm: bytes) -> dict[str, Any]:
 
 
 async def run_text(key: str, rest_rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    from dubhash.providers.sarvam_lid import SarvamLID
+    from convox.providers.sarvam_lid import SarvamLID
 
     lid = SarvamLID(key)
     rows = []
@@ -514,7 +514,7 @@ def _md(analysis: dict[str, Any], extra: dict[str, Any]) -> str:
 
 
 async def main_async(opts: argparse.Namespace) -> int:
-    from dubhash.config.settings import Settings
+    from convox.config.settings import Settings
 
     key = Settings(_env_file=ROOT / ".env").sarvam_api_key  # type: ignore[call-arg]
     if not key:

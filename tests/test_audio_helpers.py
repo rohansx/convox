@@ -1,8 +1,8 @@
 import numpy as np
 
-from dubhash.audio.codec import ulaw_decode, ulaw_encode
-from dubhash.audio.frames import FRAME_BYTES, Reframer
-from dubhash.audio.resample import Resampler
+from convox.audio.codec import ulaw_decode, ulaw_encode
+from convox.audio.frames import FRAME_BYTES, Reframer
+from convox.audio.resample import Resampler
 
 
 def test_reframer_exact_frames_and_padding():

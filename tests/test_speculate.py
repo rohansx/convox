@@ -3,9 +3,9 @@ Interpreter-level behaviour (a)-(d) is in tests/test_pipeline.py."""
 
 import asyncio
 
-from dubhash.clock import FakeClock
-from dubhash.interp.speculate import Speculator, normalize
-from dubhash.providers.fakes import FakeMT
+from convox.clock import FakeClock
+from convox.interp.speculate import Speculator, normalize
+from convox.providers.fakes import FakeMT
 
 
 def test_normalize_casefolds_strips_punctuation_and_collapses_spaces():

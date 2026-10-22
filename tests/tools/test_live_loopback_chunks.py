@@ -4,9 +4,9 @@ utterances."""
 
 from __future__ import annotations
 
-from dubhash.audio.earcon import EARCON
-from dubhash.audio.frames import FRAME_BYTES
-from dubhash.config.pairs import load_pairs
+from convox.audio.earcon import EARCON
+from convox.audio.frames import FRAME_BYTES
+from convox.config.pairs import load_pairs
 from tools import live_loopback as ll
 
 LONG = {
@@ -82,7 +82,7 @@ async def test_long_fake_lines_wait_for_the_whole_utterance(tmp_path):
         a_lang="mr-IN", b_lang="hi-IN", opening="skip", pause_ms=300, quiet_ms=400,
         turn_timeout_s=8,
     )  # fmt: skip
-    with ll.serve({"dubhash_env": "test"}, None) as srv:
+    with ll.serve({"convox_env": "test"}, None) as srv:
         result = await ll.run_call(srv, utts, opts)
     rows = result["rows"]
     assert [r.side for r in rows] == ["a", "b"]

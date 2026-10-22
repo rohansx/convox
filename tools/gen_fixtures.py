@@ -27,7 +27,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from dubhash.audio.resample import Resampler  # noqa: E402
+from convox.audio.resample import Resampler  # noqa: E402
 
 DEFAULT_OUT = ROOT / "tests" / "fixtures"
 MANIFEST = "synth_manifest.json"

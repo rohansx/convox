@@ -1,6 +1,6 @@
 # Testing strategy
 
-This document defines how we know dubhash works at each layer. The layers are: unit tests, an offline pipeline bench on FakeLegs with real providers, human meaning rating, live loopback in the browser, scripted live calls over real PSTN, and chaos tests. It also states the rule the schedule depends on: the pipeline runs end to end on fakes by Day 2 (Thu 22 Oct). That way STT, translate, TTS and the controller can be built and measured before any telephony credit exists.
+This document defines how we know Convox works at each layer. The layers are: unit tests, an offline pipeline bench on FakeLegs with real providers, human meaning rating, live loopback in the browser, scripted live calls over real PSTN, and chaos tests. It also states the rule the schedule depends on: the pipeline runs end to end on fakes by Day 2 (Thu 22 Oct). That way STT, translate, TTS and the controller can be built and measured before any telephony credit exists.
 
 ## The Day 2 rule
 

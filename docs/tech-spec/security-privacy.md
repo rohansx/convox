@@ -1,6 +1,6 @@
 # Security and privacy
 
-dubhash puts a third party (us, and through us Sarvam, ElevenLabs and Deepgram) in the middle of a private phone call between two humans, so both parties' speech is processed by a system neither of them dialled directly. This document defines how v1 handles that: DPDP consent and disclosure, what we store and for how long, where data lives, how provider and platform traffic is authenticated, the audit log, the trust-review package platforms need before signing, and the safeguards against mistranslation in medical and money contexts. Items from the source PDFs are stated as decisions. Items marked **proposed** are ours. Nothing here is legal advice. A DPDP review by counsel is TBD, see [open questions](../plan/open-questions.md).
+Convox puts a third party (us, and through us Sarvam, ElevenLabs and Deepgram) in the middle of a private phone call between two humans, so both parties' speech is processed by a system neither of them dialled directly. This document defines how v1 handles that: DPDP consent and disclosure, what we store and for how long, where data lives, how provider and platform traffic is authenticated, the audit log, the trust-review package platforms need before signing, and the safeguards against mistranslation in medical and money contexts. Items from the source PDFs are stated as decisions. Items marked **proposed** are ours. Nothing here is legal advice. A DPDP review by counsel is TBD, see [open questions](../plan/open-questions.md).
 
 ## Summary of v1 commitments
 
@@ -33,7 +33,7 @@ As built (`session/prompts.py`, [L4](../plan/open-questions.md#answer-log)): one
 
 Gaps to close (**proposed**, TBD with counsel, see [open questions](../plan/open-questions.md)):
 
-- The source lines describe the mechanics but do not explicitly say the call is processed by an automated service, or how to turn it off. Proposed addition (both languages, about 2 s): "yeh call ek automatic dubhash dwara anuvaad ki ja rahi hai. band karne ke liye 0 dabaiye." (*This call is being translated automatically by dubhash. Press 0 to turn it off.*)
+- The source lines describe the mechanics but do not explicitly say the call is processed by an automated service, or how to turn it off. Proposed addition (both languages, about 2 s): "yeh call ek automatic Convox dwara anuvaad ki ja rahi hai. band karne ke liye 0 dabaiye." (*This call is being translated automatically by convox. Press 0 to turn it off.*)
 - If `record: true`, the opening line must also say the conversation text is being saved.
 - Opening lines per language are stored as pre-rendered audio per pair (proposed), so they do not depend on TTS latency at call start.
 - For platform calls the platform's T&C covers the masked call, but the platform remains responsible for its own users' consent to interpretation. Put this in the platform contract (trust-review package).
@@ -65,7 +65,7 @@ Proposed: the trust-review package lists every sub-processor, what data it recei
 |---|---|---|
 | Turn timestamps, flags, provider ids | kept (needed for latency metrics and audit) | kept |
 | `src_text`, `tgt_text` | nulled after latency metrics are computed | kept. Retention window TBD (proposed: 30 days, then purge job) |
-| Caller audio | never stored. Exists only in process memory during the call. Exception: dev and test calls with `CALL_RECORDING` on (default in `DUBHASH_ENV=dev` only) write local wavs for diagnosis (`store/recorder.py`); only with the callers' consent, never in prod by default | S3 only with an explicit audio opt-in (see [data model](data-model.md#s3-recordings-opt-in)) |
+| Caller audio | never stored. Exists only in process memory during the call. Exception: dev and test calls with `CALL_RECORDING` on (default in `CONVOX_ENV=dev` only) write local wavs for diagnosis (`store/recorder.py`); only with the callers' consent, never in prod by default | S3 only with an explicit audio opt-in (see [data model](data-model.md#s3-recordings-opt-in)) |
 | Phone numbers (`calls.a_number`, `b_number`) | **proposed:** store a salted hash for dedupe after the call ends. Keep the raw number only while the call is live | same |
 | Vendor-side retention | per vendor terms. TBD: confirm Sarvam/ElevenLabs/Deepgram data-retention and no-training settings | |
 
@@ -80,7 +80,7 @@ Details and the exact nulling flow are in [data model → text retention](data-m
 | Plivo → `/ws/leg` | TBD, see [open questions](../plan/open-questions.md) |
 | Provider webhooks `/webhooks/*` | provider signature validation if offered, otherwise IP allowlist (**proposed**) |
 | Platform → `/v1/*` | per-platform bearer API key, stored hashed (**proposed**) |
-| dubhash → platform webhook | HMAC-SHA256 signature header over the body (**proposed**) |
+| Convox → platform webhook | HMAC-SHA256 signature header over the body (**proposed**) |
 | `/console` | auth required (proposed: Caddy basic auth for the buildathon; per-user login later). The console shows live transcripts, so it is never public |
 | Vendor credentials | env vars only ([configuration](configuration.md)). Never in git, never logged |
 | TLS | Caddy terminates TLS for all HTTP and WSS |
@@ -104,7 +104,7 @@ The floor controller invariant gives the audit log its value: every Translation 
 
 ## Trust-review package
 
-What a gig platform or hospital asks for before letting dubhash into its call path. The overview puts the hardened version in Feb to Jun ("webhooks, trust-review package (audit log, DPDP consent flow, data residency), SLA"). For the buildathon we show its pieces: the console, the per-turn log, the DTMF escape, and the Exotel applet config.
+What a gig platform or hospital asks for before letting Convox into its call path. The overview puts the hardened version in Feb to Jun ("webhooks, trust-review package (audit log, DPDP consent flow, data residency), SLA"). For the buildathon we show its pieces: the console, the per-turn log, the DTMF escape, and the Exotel applet config.
 
 | Item | v1 (buildathon) | Hardened (Feb to Jun) |
 |---|---|---|
@@ -133,7 +133,7 @@ The risk: one bad discharge instruction is a disaster. The same applies to an am
 | LLM repair of low-confidence sentences | v2 only. Not on the v1 hot path | v2 |
 | Honest limits | low-resource languages (Santali, Bhojpuri, Tulu, the Northeast) not supported in v1. Results published on real PSTN, not browser audio | v1 |
 
-Medical use is ward mode first: no telephony, both texts visible, and the nurse is the confirmation step. dubhash should not be positioned as a substitute for a qualified medical interpreter for consent-critical conversations until per-pair numbers support it (**proposed** positioning; see [risks](../plan/risks.md)).
+Medical use is ward mode first: no telephony, both texts visible, and the nurse is the confirmation step. Convox should not be positioned as a substitute for a qualified medical interpreter for consent-critical conversations until per-pair numbers support it (**proposed** positioning; see [risks](../plan/risks.md)).
 
 ## Related
 

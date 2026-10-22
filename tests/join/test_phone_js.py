@@ -17,7 +17,7 @@ from pathlib import Path
 
 import pytest
 
-STATIC = Path(__file__).resolve().parents[2] / "dubhash" / "console" / "static"
+STATIC = Path(__file__).resolve().parents[2] / "convox" / "console" / "static"
 JS = Path(__file__).resolve().parent / "js"
 NODE = shutil.which("node")
 pytestmark = pytest.mark.skipif(NODE is None, reason="node not installed")

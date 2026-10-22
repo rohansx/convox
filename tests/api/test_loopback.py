@@ -6,11 +6,11 @@ import pytest
 from fastapi.testclient import TestClient
 from starlette.websockets import WebSocketDisconnect
 
-from dubhash.api import calls
-from dubhash.api.app import create_app
-from dubhash.api.calls import CallBook
-from dubhash.config.settings import Settings
-from dubhash.legs.webrtc import WebRtcLeg
+from convox.api import calls
+from convox.api.app import create_app
+from convox.api.calls import CallBook
+from convox.config.settings import Settings
+from convox.legs.webrtc import WebRtcLeg
 from tests.api.session_double import install
 
 
@@ -38,9 +38,9 @@ class Env:
         s = Settings(
             _env_file=None,
             **{
-                "dubhash_env": "test",
-                "public_base_url": "https://dev.dubhash.in",
-                "edge_wss_base": "wss://dev.dubhash.in",
+                "convox_env": "test",
+                "public_base_url": "https://dev.convox.in",
+                "edge_wss_base": "wss://dev.convox.in",
                 **kw,
             },
         )
@@ -76,10 +76,10 @@ def test_create_loopback_call_returns_page_urls():
     assert session is env.sessions[0] and session.mode == "bridge"
     for side, lang in (("a", "hi-IN"), ("b", "kn-IN")):
         url = urlparse(body[f"{side}_url"])
-        assert f"{url.scheme}://{url.netloc}{url.path}" == "https://dev.dubhash.in/loopback"
+        assert f"{url.scheme}://{url.netloc}{url.path}" == "https://dev.convox.in/loopback"
         q = parse_qs(url.query)
         assert q["side"] == [side] and q["lang"] == [lang]
-        assert q["ws"] == [f"wss://dev.dubhash.in/ws/loopback?call={call_id}&side={side}"]
+        assert q["ws"] == [f"wss://dev.convox.in/ws/loopback?call={call_id}&side={side}"]
     time.sleep(0.05)  # longer than no_answer_s: loopback calls never time out
     assert session.status == "ringing" and session.hangups == []
 
@@ -160,7 +160,7 @@ def test_new_form_and_submit():
     assert r.status_code == 200
     call_id = env.sessions[0].call_id
     assert call_id in r.text
-    assert "https://dev.dubhash.in/loopback?ws=" in r.text
+    assert "https://dev.convox.in/loopback?ws=" in r.text
     r = env.client.post(
         "/loopback/new",
         content="a_lang=hi-IN&b_lang=od-IN",

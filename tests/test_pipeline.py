@@ -5,15 +5,15 @@ from pathlib import Path
 
 import pytest
 
-from dubhash.clock import FakeClock
-from dubhash.config.pairs import load_pairs
-from dubhash.interp.pipeline import Interpreter, InterpreterSink
-from dubhash.interp.vad import DEFAULT_MODEL_PATH, SileroVAD
-from dubhash.providers.fakes import EnergyVAD, FakeMT, FakeSTT, FakeTTS
-from dubhash.types import Translation
+from convox.clock import FakeClock
+from convox.config.pairs import load_pairs
+from convox.interp.pipeline import Interpreter, InterpreterSink
+from convox.interp.vad import DEFAULT_MODEL_PATH, SileroVAD
+from convox.providers.fakes import EnergyVAD, FakeMT, FakeSTT, FakeTTS
+from convox.types import Translation
 from tests.audio_fixtures import conversation, frames, harmonic, silence
 
-PAIRS = load_pairs(Path(__file__).resolve().parent.parent / "dubhash" / "config" / "pairs.yaml")
+PAIRS = load_pairs(Path(__file__).resolve().parent.parent / "convox" / "config" / "pairs.yaml")
 PAIR = PAIRS["hi-kn-direct"]  # plain route: MT source = side lang
 SPEC_ON = dataclasses.replace(PAIR, spec_mt=True, spec_after_ms=200)
 SPEC_OFF = dataclasses.replace(PAIR, spec_mt=False)
@@ -459,7 +459,7 @@ def test_speculation_off_by_default_with_after_ms_200():
     """Off: Sarvam realtime partials lag the final, so live hit rate was 1/8 (L1)."""
     assert all(not p.spec_mt for p in PAIRS.values())
     assert all(p.spec_after_ms == 200 for p in PAIRS.values())
-    from dubhash.config.pairs import PairConfig
+    from convox.config.pairs import PairConfig
 
     assert PairConfig(key="x", a=PAIR.a, b=PAIR.b).spec_mt is False
 
@@ -569,7 +569,7 @@ async def test_spec_cancelled_when_utterance_discarded():
 
 
 async def test_spec_goes_through_cached_mt():
-    from dubhash.interp.mt_cache import CachedMT
+    from convox.interp.mt_cache import CachedMT
 
     clock = FakeClock()
     inner = FakeMT(delay_ms=1200, clock=clock)

@@ -9,11 +9,11 @@ released but the 4 s rescue: B's reply sat ready in the queue for ~4 s."""
 
 from __future__ import annotations
 
-from dubhash.clock import FakeClock
-from dubhash.legs.fake import FakeLeg
-from dubhash.providers.fakes import EnergyVAD, FakeMT, FakeSTT, FakeTTS
-from dubhash.session.call_session import CallSession
-from dubhash.session.providers import Providers
+from convox.clock import FakeClock
+from convox.legs.fake import FakeLeg
+from convox.providers.fakes import EnergyVAD, FakeMT, FakeSTT, FakeTTS
+from convox.session.call_session import CallSession
+from convox.session.providers import Providers
 from tests.audio_fixtures import silence, speech
 from tests.floor_helpers import RecordingBus
 from tests.session.test_chunked_session import CHUNKED

@@ -5,7 +5,7 @@ import html
 import json
 import re
 
-from dubhash.join.tokens import make_join_token
+from convox.join.tokens import make_join_token
 from tests.api.test_loopback import Env, _close_clients  # noqa: F401
 from tests.join.test_routes import start
 

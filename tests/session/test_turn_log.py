@@ -1,7 +1,7 @@
-from dubhash.clock import FakeClock
-from dubhash.session.providers import Providers
-from dubhash.session.turn_log import TurnLog
-from dubhash.types import Translation, Turn
+from convox.clock import FakeClock
+from convox.session.providers import Providers
+from convox.session.turn_log import TurnLog
+from convox.types import Translation, Turn
 from tests.floor_helpers import RecordingBus
 
 
@@ -160,7 +160,7 @@ def test_interpreter_flags_are_kept_beside_the_turn():
 
 
 def test_turns_endpoint_shows_the_flags():
-    from dubhash.api.calls import turn_json
+    from convox.api.calls import turn_json
 
     log, _, _ = make()
     t = log.on_played(tr("a", 0, **TIMES, phrase_hit=1))

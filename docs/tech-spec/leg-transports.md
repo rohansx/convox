@@ -1,6 +1,6 @@
 # Leg transports
 
-A leg transport is the one class per provider that turns that provider's websocket protocol into the stream every other part of dubhash uses. It provides 20 ms PCM16 frames in, a sink for frames out, and three control signals (clear, mark, DTMF). Exotel and Plivo differ only inside this class, and the interface is about 120 lines per provider. Four implementations exist: `ExotelLeg` (primary), `PlivoLeg` (fallback), `WebRtcLeg` (dev and last-resort demo) and `FakeLeg` (tests and bench). Code: `dubhash/legs/` (`base.py`, `exotel.py`, `plivo.py`, `webrtc.py`, `fake.py`). Owner: **P3**. The session wiring, and the rule that only the floor controller calls `send/clear/mark`, belong to Rohan.
+A leg transport is the one class per provider that turns that provider's websocket protocol into the stream every other part of Convox uses. It provides 20 ms PCM16 frames in, a sink for frames out, and three control signals (clear, mark, DTMF). Exotel and Plivo differ only inside this class, and the interface is about 120 lines per provider. Four implementations exist: `ExotelLeg` (primary), `PlivoLeg` (fallback), `WebRtcLeg` (dev and last-resort demo) and `FakeLeg` (tests and bench). Code: `convox/legs/` (`base.py`, `exotel.py`, `plivo.py`, `webrtc.py`, `fake.py`). Owner: **P3**. The session wiring, and the rule that only the floor controller calls `send/clear/mark`, belong to Rohan.
 
 ---
 
@@ -43,7 +43,7 @@ The provider REST calls (`Calls/connect` for Exotel, `Call/` for Plivo), the "bo
 sequenceDiagram
     autonumber
     participant P as Platform
-    participant API as dubhash api
+    participant API as Convox api
     participant S as CallSession
     participant X as Exotel
     participant WA as /ws/leg side=a
@@ -68,7 +68,7 @@ sequenceDiagram
     X-->>API: POST /webhooks/exotel (answered / completed / failed)
 ```
 
-**Exotel never connects A to B.** As far as it knows, it is running two separate voice bots. dubhash is the only thing joining them, so it hears and speaks on both sides. The phones, numbers and masking are unchanged.
+**Exotel never connects A to B.** As far as it knows, it is running two separate voice bots. Convox is the only thing joining them, so it hears and speaks on both sides. The phones, numbers and masking are unchanged.
 
 The dial-in consumer flow (Exotel `Gather(digits=10) → Passthru → our server dials leg b`) also ends on the Voicebot applet for leg a. See [api.md](api.md) and [../architecture/telephony-integration.md](../architecture/telephony-integration.md).
 
@@ -81,7 +81,7 @@ Exotel's **voicebot applet** is two-way: Exotel opens a websocket to our server,
 ### URL
 
 ```
-wss://edge.dubhash.in/ws/leg?call=c_91&side=a&sample-rate=16000
+wss://edge.convox.in/ws/leg?call=c_91&side=a&sample-rate=16000
 ```
 
 Exotel allows **3 custom params**. `call` and `side` are two of them. The overview's integration example writes the path as `/leg`. The spec's API defines `/ws/leg`. Use **`/ws/leg`**.

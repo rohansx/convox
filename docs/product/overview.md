@@ -1,16 +1,16 @@
 # Product overview
 
-This is the one-page answer to "what are we building and why" for the five people building dubhash. It covers what the product is and is not, why it is possible in 2026, the three ways it ships, and what has to be on stage at the Bolna Symphony Buildathon. The technical detail lives in the [architecture](../architecture/system-overview.md) and [tech spec](../tech-spec/interpreter-pipeline.md) sections. The buildathon schedule lives in [the 10-day plan](../plan/buildathon-10-day-plan.md).
+This is the one-page answer to "what are we building and why" for the five people building convox. It covers what the product is and is not, why it is possible in 2026, the three ways it ships, and what has to be on stage at the Bolna Symphony Buildathon. The technical detail lives in the [architecture](../architecture/system-overview.md) and [tech spec](../tech-spec/interpreter-pipeline.md) sections. The buildathon schedule lives in [the 10-day plan](../plan/buildathon-10-day-plan.md).
 
-> **Working name.** *dubhashi* is the old Indian word for a court interpreter ("two-tongued"). Prepared for the Bolna Symphony Buildathon (submission **31 Oct 2026**, finale **20 Nov 2026**, Bengaluru) and as the v1 plan for a standalone company. Team: Rohan Sharma + 4.
+> **Name.** *Convox*: **con**versation + **vox** (voice), and a nod to **con**vert. Earlier working name: *dubhash*, from *dubhashi*, the old Indian word for a court interpreter. Prepared for the Bolna Symphony Buildathon (submission **31 Oct 2026**, finale **20 Nov 2026**, Bengaluru) and as the v1 plan for a standalone company. Team: Rohan Sharma + 4.
 
 ## One-line pitch
 
-> Every Indian phone call where the two people do not share a language fails today. dubhash is the interpreter on the line.
+> Every Indian phone call where the two people do not share a language fails today. Convox is the interpreter on the line.
 
-## What dubhash is
+## What Convox is
 
-dubhash is a server that sits in the middle of a phone call and interprets both directions live.
+Convox is a server that sits in the middle of a phone call and interprets both directions live.
 
 - Leg A speaks Hindi. Leg B hears Kannada about 1.4 to 1.8 s after A stops speaking, in a **gender-matched natural voice**.
 - Leg B replies in Kannada. Leg A hears Hindi.
@@ -20,7 +20,7 @@ dubhash is a server that sits in the middle of a phone call and interprets both 
 
 ```mermaid
 flowchart LR
-    A["Leg A<br/>speaks Hindi"] -- "hi audio" --> D["dubhash<br/>hi ⇄ kn<br/>~1.4–1.8 s"]
+    A["Leg A<br/>speaks Hindi"] -- "hi audio" --> D["Convox<br/>hi ⇄ kn<br/>~1.4–1.8 s"]
     D -- "kn TTS + ducked hi" --> B["Leg B<br/>hears Kannada"]
     B -- "kn audio" --> D
     D -- "hi TTS + ducked kn" --> A
@@ -44,10 +44,10 @@ v1 uses a **fixed natural voice per target language and detected speaker gender*
 
 | It is not | Why that matters |
 |---|---|
-| A translation app you talk into (Google Translate, Jio Translate) | dubhash lives inside a live call between two humans on two phones. |
-| A voice agent | There is no AI persona. Both parties are human. dubhash only carries meaning across. |
-| A model | Sarvam, Deepgram and ElevenLabs are the engines, and we train no models. dubhash is the bridge, the turn-taking ([floor controller](../tech-spec/floor-controller.md)) and the integrations. |
-| A BPO tool | BPOs hire native speakers for each language queue. dubhash is for calls where nobody can hire around the language gap. |
+| A translation app you talk into (Google Translate, Jio Translate) | Convox lives inside a live call between two humans on two phones. |
+| A voice agent | There is no AI persona. Both parties are human. Convox only carries meaning across. |
+| A model | Sarvam, Deepgram and ElevenLabs are the engines, and we train no models. Convox is the bridge, the turn-taking ([floor controller](../tech-spec/floor-controller.md)) and the integrations. |
+| A BPO tool | BPOs hire native speakers for each language queue. Convox is for calls where nobody can hire around the language gap. |
 
 ## Why now
 
@@ -63,15 +63,15 @@ The latency target is speaker stops → first translated word heard: EOU wait (s
 | | Inside a platform's masked calls | Ward mode (one phone, no telephony) | Dial-in number |
 |---|---|---|---|
 | **Buyer** | Gig platforms, telemedicine | Hospitals | Consumers (migrant workers); platforms may bundle it for their workforce |
-| **How it works** | The platform backend already calls Exotel to bridge partner and customer. It calls dubhash instead, and dubhash calls Exotel with two voicebot legs. Invoked only when the two profiles' languages differ. | A nurse holds a phone between herself and a patient. Push-to-talk per side, same pipeline with no telephony transport, so latency is lower. | Dial one dubhash number, enter the number to reach, say one sentence so it detects your language. dubhash dials the other side and bridges. No app. |
+| **How it works** | The platform backend already calls Exotel to bridge partner and customer. It calls Convox instead, and Convox calls Exotel with two voicebot legs. Invoked only when the two profiles' languages differ. | A nurse holds a phone between herself and a patient. Push-to-talk per side, same pipeline with no telephony transport, so latency is lower. | Dial one Convox number, enter the number to reach, say one sentence so it detects your language. Convox dials the other side and bridges. No app. |
 | **Pricing** | Per interpreted minute | Per ward device per month (+ per minute for phone consults) | Free for the first 10 minutes a month, then pay per minute via UPI |
 | **What gets it adopted** | The DTMF 0 escape and the per-turn audit log are what get it through trust review | No integration or procurement beyond a phone. The nurse champions it, and compliance wants the chart attachment. | No app needed, so anyone with a phone can use it |
 
-The platform integration changes one API call. Today the backend calls Exotel's `Calls/connect`. With dubhash it calls `POST /v1/calls`, and dubhash places two Exotel calls, each with a voicebot applet. The full request and response contract is in [api](../tech-spec/api.md). Details: [business model](business-model.md), [problem and users](problem-and-users.md).
+The platform integration changes one API call. Today the backend calls Exotel's `Calls/connect`. With Convox it calls `POST /v1/calls`, and Convox places two Exotel calls, each with a voicebot applet. The full request and response contract is in [api](../tech-spec/api.md). Details: [business model](business-model.md), [problem and users](problem-and-users.md).
 
 ## Buildathon deliverable
 
-**What's on stage:** an Exotel number, a judge's phone and ours. The judge speaks Kannada, we speak Hindi, and the hall hears both phones on speakers as the two sides understand each other, with the first translated word in under 1.5 s. Then ward mode on a single phone. Then the Exotel applet config and the one-line platform API on screen, to show dubhash is one integration away from any platform's masked calls. The minute-by-minute run is in the [demo script](../plan/demo-script.md).
+**What's on stage:** an Exotel number, a judge's phone and ours. The judge speaks Kannada, we speak Hindi, and the hall hears both phones on speakers as the two sides understand each other, with the first translated word in under 1.5 s. Then ward mode on a single phone. Then the Exotel applet config and the one-line platform API on screen, to show Convox is one integration away from any platform's masked calls. The minute-by-minute run is in the [demo script](../plan/demo-script.md).
 
 **Definition of done.** A stranger gives us their number and their language. We call them and a teammate. They have a two-minute conversation with someone who does not speak their language, and at the end both can say what was agreed. The overview sets this "in the hall", which only exists at the 20 Nov finale; the 31 Oct version (run once with someone outside the team, plus exit criteria and submission) is in the [10-day plan](../plan/buildathon-10-day-plan.md#definition-of-done-for-31-oct).
 
