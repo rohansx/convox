@@ -1,6 +1,54 @@
 {
  "generated_with": "Sarvam Mayura MT + Bulbul v3 TTS",
  "scenes": {
+  "rent": {
+   "caption": "A Kannada-speaking landlord and a Hindi-speaking tenant.",
+   "a": {
+    "name": "Manjunath",
+    "lang": "kn-IN",
+    "native": "ಕನ್ನಡ"
+   },
+   "b": {
+    "name": "Pooja",
+    "lang": "hi-IN",
+    "native": "हिन्दी"
+   },
+   "lines": [
+    {
+     "from": "b",
+     "src": "दो दिन से पानी नहीं आ रहा है।",
+     "tgt": "ಕಳೆದ 2 days-ನಿಂದ ನೀರು ಬರ್ತಿಲ್ಲ.",
+     "src_audio": "audio/rent-0-src.m4a",
+     "tgt_audio": "audio/rent-0-tgt.m4a",
+     "src_ms": 2131,
+     "tgt_ms": 2595,
+     "mt_ms": 1276,
+     "tts_ttfb_ms": 272
+    },
+    {
+     "from": "a",
+     "src": "ಇವತ್ತು ಸಂಜೆ 6 ಗಂಟೆಗೆ ಪ್ಲಂಬರ್ ಕಳುಹಿಸುತ್ತೇನೆ.",
+     "tgt": "मैं आज 6 pm पर plumber को भेज दूँगा।",
+     "src_audio": "audio/rent-1-src.m4a",
+     "tgt_audio": "audio/rent-1-tgt.m4a",
+     "src_ms": 4262,
+     "tgt_ms": 2045,
+     "mt_ms": 1338,
+     "tts_ttfb_ms": 224
+    },
+    {
+     "from": "b",
+     "src": "ठीक है, मैं शाम को घर पर रहूँगी।",
+     "tgt": "Okay, evening ನಾನು ಮನೆಯಲ್ಲಿ ಇರ್ತೀನಿ.",
+     "src_audio": "audio/rent-2-src.m4a",
+     "tgt_audio": "audio/rent-2-tgt.m4a",
+     "src_ms": 2475,
+     "tgt_ms": 2458,
+     "mt_ms": 1331,
+     "tts_ttfb_ms": 281
+    }
+   ]
+  },
   "delivery": {
    "caption": "A Marathi-speaking customer and a Hindi-speaking delivery rider.",
    "a": {
@@ -20,21 +68,21 @@
      "tgt": "मैं घर पर नहीं हूँ, parcel watchman को दे दीजिए।",
      "src_audio": "audio/delivery-0-src.m4a",
      "tgt_audio": "audio/delivery-0-tgt.m4a",
-     "src_ms": 2819,
-     "tgt_ms": 3351,
-     "mt_ms": 1297,
-     "tts_ttfb_ms": 209
+     "src_ms": 2888,
+     "tgt_ms": 3489,
+     "mt_ms": 1253,
+     "tts_ttfb_ms": 232
     },
     {
      "from": "b",
      "src": "ठीक है, ओटीपी बता दीजिए।",
-     "tgt": "Okay, तुमचा OTP share करा.",
+     "tgt": "ठीक आहे, तुमचा OTP share करा.",
      "src_audio": "audio/delivery-1-src.m4a",
      "tgt_audio": "audio/delivery-1-tgt.m4a",
-     "src_ms": 3094,
-     "tgt_ms": 2595,
-     "mt_ms": 1230,
-     "tts_ttfb_ms": 219
+     "src_ms": 2269,
+     "tgt_ms": 2732,
+     "mt_ms": 1342,
+     "tts_ttfb_ms": 194
     },
     {
      "from": "a",
@@ -42,10 +90,10 @@
      "tgt": "OTP 47296 है।",
      "src_audio": "audio/delivery-2-src.m4a",
      "tgt_audio": "audio/delivery-2-tgt.m4a",
-     "src_ms": 2819,
-     "tgt_ms": 2732,
-     "mt_ms": 1322,
-     "tts_ttfb_ms": 214
+     "src_ms": 2612,
+     "tgt_ms": 2939,
+     "mt_ms": 1162,
+     "tts_ttfb_ms": 317
     }
    ]
   },
@@ -69,9 +117,9 @@
      "src_audio": "audio/clinic-0-src.m4a",
      "tgt_audio": "audio/clinic-0-tgt.m4a",
      "src_ms": 2269,
-     "tgt_ms": 3489,
-     "mt_ms": 659,
-     "tts_ttfb_ms": 211
+     "tgt_ms": 3214,
+     "mt_ms": 662,
+     "tts_ttfb_ms": 240
     },
     {
      "from": "b",
@@ -79,10 +127,10 @@
      "tgt": "Food પછી, દિવસમાં બે વાર એક tablet લો.",
      "src_audio": "audio/clinic-1-src.m4a",
      "tgt_audio": "audio/clinic-1-tgt.m4a",
-     "src_ms": 2544,
-     "tgt_ms": 3282,
-     "mt_ms": 738,
-     "tts_ttfb_ms": 215
+     "src_ms": 2750,
+     "tgt_ms": 2732,
+     "mt_ms": 623,
+     "tts_ttfb_ms": 224
     },
     {
      "from": "a",
@@ -90,58 +138,10 @@
      "tgt": "Okay, thank you doctor.",
      "src_audio": "audio/clinic-2-src.m4a",
      "tgt_audio": "audio/clinic-2-tgt.m4a",
-     "src_ms": 2131,
+     "src_ms": 1925,
      "tgt_ms": 1839,
-     "mt_ms": 813,
-     "tts_ttfb_ms": 211
-    }
-   ]
-  },
-  "rent": {
-   "caption": "A Kannada-speaking tenant and a Hindi-speaking landlord.",
-   "a": {
-    "name": "Kiran",
-    "lang": "kn-IN",
-    "native": "ಕನ್ನಡ"
-   },
-   "b": {
-    "name": "Sharma ji",
-    "lang": "hi-IN",
-    "native": "हिन्दी"
-   },
-   "lines": [
-    {
-     "from": "a",
-     "src": "ಎರಡು ದಿನದಿಂದ ನೀರು ಬರುತ್ತಿಲ್ಲ.",
-     "tgt": "दो दिन से पानी नहीं है।",
-     "src_audio": "audio/rent-0-src.m4a",
-     "tgt_audio": "audio/rent-0-tgt.m4a",
-     "src_ms": 2681,
-     "tgt_ms": 1495,
-     "mt_ms": 1207,
-     "tts_ttfb_ms": 219
-    },
-    {
-     "from": "b",
-     "src": "आज शाम 6 बजे प्लंबर भेजता हूँ।",
-     "tgt": "ನಾನು ಇವತ್ತು 6 pm-ಗೆ plumber-ನ send ಮಾಡ್ತೀನಿ.",
-     "src_audio": "audio/rent-1-src.m4a",
-     "tgt_audio": "audio/rent-1-tgt.m4a",
-     "src_ms": 2406,
-     "tgt_ms": 3970,
-     "mt_ms": 1475,
-     "tts_ttfb_ms": 210
-    },
-    {
-     "from": "a",
-     "src": "ಸರಿ, ಧನ್ಯವಾದಗಳು.",
-     "tgt": "Okay, thank you.",
-     "src_audio": "audio/rent-2-src.m4a",
-     "tgt_audio": "audio/rent-2-tgt.m4a",
-     "src_ms": 1856,
-     "tgt_ms": 1426,
-     "mt_ms": 1130,
-     "tts_ttfb_ms": 221
+     "mt_ms": 625,
+     "tts_ttfb_ms": 255
     }
    ]
   }

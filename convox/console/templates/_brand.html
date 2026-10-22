@@ -1,0 +1,11 @@
+{# Convox AI brand. The mark: the two callers as arcs, dark and orange, facing each other,
+   with Convox between them as a voice. Use: {% from "_brand.html" import mark, logo %} #}
+{% macro mark(cls="") -%}
+<svg class="mark {{ cls }}" viewBox="0 0 32 32" aria-hidden="true"><path d="M10.5 6.47A11 11 0 0 0 10.5 25.53" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/><path d="M21.5 6.47A11 11 0 0 1 21.5 25.53" fill="none" stroke="#ff5b14" stroke-width="3.2" stroke-linecap="round"/><rect x="10.6" y="13.2" width="2.6" height="5.6" rx="1.3" fill="currentColor"/><rect x="14.7" y="9.6" width="2.6" height="12.8" rx="1.3" fill="currentColor"/><rect x="18.8" y="12.2" width="2.6" height="7.6" rx="1.3" fill="currentColor"/></svg>
+{%- endmacro %}
+{% macro logo(href="/") -%}
+<a class="logo" href="{{ href }}" aria-label="Convox AI">{{ mark() }}<span class="word">convox<em>AI</em></span></a>
+{%- endmacro %}
+{% macro favicon() -%}
+<link rel="icon" href="/static/console/favicon.svg" type="image/svg+xml">
+{%- endmacro %}

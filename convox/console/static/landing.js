@@ -6,7 +6,7 @@
   "use strict";
 
   const BASE = "/static/console/landing/";
-  const ORDER = ["delivery", "clinic", "rent"];
+  const ORDER = ["rent", "delivery", "clinic"];
   const MAX_BUBBLES = 4;
   const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
@@ -49,7 +49,7 @@
   }
 
   let SCENES = null;
-  let scene = "delivery";
+  let scene = "rent";
   let auto = true;
   let soundOn = false;
   let visible = true;

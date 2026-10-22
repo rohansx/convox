@@ -1,27 +1,26 @@
+{% from "_brand.html" import mark, logo, favicon %}
 <!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Convox AI · live interpreter for phone calls</title>
-  <meta name="description" content="Convox joins an ordinary phone call and interprets both ways in real time across Indian languages: मराठी, हिन्दी, ગુજરાતી, English, ಕನ್ನಡ, தமிழ். No app, any phone.">
+  <meta name="description" content="Convox joins an ordinary phone call and interprets both ways in real time across Indian languages: ಕನ್ನಡ, हिन्दी, मराठी, ગુજરાતી, தமிழ், English. No app, any phone.">
   <meta name="theme-color" content="#fbfaf7">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@300..600&family=Geist+Mono:wght@400;500&display=swap">
-  <link rel="stylesheet" href="/static/console/landing.css?v=5">
+  {{ favicon() }}
+  <link rel="stylesheet" href="/static/console/landing.css?v=8">
 </head>
 <body>
 
-{% macro mark(cls="") -%}
-<svg class="mark {{ cls }}" viewBox="0 0 24 24" aria-hidden="true"><rect width="24" height="24" rx="7" fill="currentColor"/><rect x="5" y="9" width="2.4" height="6" rx="1.2" fill="#fff"/><rect x="9" y="6" width="2.4" height="12" rx="1.2" fill="#fff"/><rect x="13" y="8" width="2.4" height="8" rx="1.2" fill="#ff5b14"/><rect x="17" y="10" width="2.4" height="4" rx="1.2" fill="#ff5b14"/></svg>
-{%- endmacro %}
 
 <div class="page">
 
 <header class="nav">
   <div class="nav-in">
-    <a class="logo" href="/">{{ mark() }}<span>convox</span></a>
+    {{ logo() }}
     <nav>
       <a href="#how">How it works</a>
       <a href="#dashboard">Dashboard</a>
@@ -36,7 +35,7 @@
 
 <main>
 <section class="hero">
-  <p class="langs" aria-label="Languages">मराठी <i>·</i> हिन्दी <i>·</i> ગુજરાતી <i>·</i> English <i>·</i> ಕನ್ನಡ <i>·</i> தமிழ்</p>
+  <p class="langs" aria-label="Languages">ಕನ್ನಡ <i>·</i> हिन्दी <i>·</i> मराठी <i>·</i> ગુજરાતી <i>·</i> தமிழ் <i>·</i> English</p>
   <div class="hero-grid">
     <h1>Phone calls,<br>interpreted live.</h1>
     <div class="hero-side">
@@ -59,9 +58,9 @@
 
     <div class="stage-bar">
       <div class="tabs" role="tablist" aria-label="Example call">
-        <button role="tab" class="tab" data-scene="delivery" aria-selected="true">Delivery</button>
+        <button role="tab" class="tab" data-scene="rent" aria-selected="true">Rent</button>
+        <button role="tab" class="tab" data-scene="delivery" aria-selected="false">Delivery</button>
         <button role="tab" class="tab" data-scene="clinic" aria-selected="false">Clinic</button>
-        <button role="tab" class="tab" data-scene="rent" aria-selected="false">Rent</button>
       </div>
       <button class="sound" type="button" data-sound-toggle aria-pressed="false">
         <svg class="ico-off" viewBox="0 0 24 24" aria-hidden="true"><path d="M11 5 6 9H3v6h3l5 4V5Z"/><path d="m22 9-6 6m0-6 6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
@@ -75,18 +74,31 @@
       <div class="iphone" data-side="{{ side }}">
         <span class="hw hw-1"></span><span class="hw hw-2"></span><span class="hw hw-3"></span><span class="hw hw-4"></span>
         <div class="screen">
-          <div class="island"></div>
-          <div class="statusbar"><span>9:41</span><span class="sb"><i class="sig"></i><i class="bat"></i></span></div>
+          <div class="island"><span class="isl-mark">{{ mark("mk-isl") }}</span><span class="isl-wave">{% for i in range(5) %}<i style="--i:{{ i }}"></i>{% endfor %}</span></div>
+          <div class="statusbar">
+            <span class="clock">9:41</span>
+            <span class="sb">
+              <svg viewBox="0 0 18 12" aria-hidden="true"><rect x="0" y="8" width="3" height="4" rx=".8"/><rect x="5" y="5.5" width="3" height="6.5" rx=".8"/><rect x="10" y="3" width="3" height="9" rx=".8"/><rect x="15" y="0" width="3" height="12" rx=".8"/></svg>
+              <svg viewBox="0 0 16 12" aria-hidden="true"><path d="M8 2.6c2.2 0 4.2.8 5.7 2.2l1.2-1.3A10 10 0 0 0 8 .8 10 10 0 0 0 1.1 3.5l1.2 1.3A8.2 8.2 0 0 1 8 2.6Zm0 3.5c1.3 0 2.5.5 3.4 1.3l1.2-1.3A6.6 6.6 0 0 0 8 4.3a6.6 6.6 0 0 0-4.6 1.8l1.2 1.3A4.9 4.9 0 0 1 8 6.1Zm0 3.4c.4 0 .8.1 1.1.4L8 11.2 6.9 9.9c.3-.3.7-.4 1.1-.4Z"/></svg>
+              <span class="bat"><i></i></span>
+            </span>
+          </div>
           <div class="callhead">
             <div class="avatar" data-role="avatar"></div>
             <b data-role="name"></b>
             <span class="via"><span data-role="lang"></span> · <span data-role="timer">00:00</span></span>
+            <span class="tag">{{ mark("mk-tag") }}Convox interpreting</span>
           </div>
           <div class="convo" data-role="convo" aria-live="polite"></div>
           <div class="callfoot">
             <div class="wave">{% for i in range(28) %}<i style="--i:{{ i }}"></i>{% endfor %}</div>
             <p class="status" data-role="status">Connecting</p>
-            <div class="keys" aria-hidden="true"><i></i><i></i><i></i><i class="end"></i></div>
+            <div class="keys" aria-hidden="true">
+              <i><svg viewBox="0 0 24 24"><path d="M11 5 6 9H3v6h3l5 4V5Z"/><path d="M15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></i>
+              <i><svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M6 11a6 6 0 0 0 12 0M12 17v3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></i>
+              <i><svg viewBox="0 0 24 24">{% for y in (5, 11, 17) %}{% for x in (6, 12, 18) %}<circle cx="{{ x }}" cy="{{ y }}" r="1.9"/>{% endfor %}{% endfor %}</svg></i>
+              <i class="end"><svg viewBox="0 0 24 24"><path d="M3.3 14.6c-.6-.6-.6-1.5 0-2.1C5.8 10 8.8 8.8 12 8.8s6.2 1.2 8.7 3.7c.6.6.6 1.5 0 2.1l-1.5 1.5c-.5.5-1.2.5-1.8.2l-2-1.2c-.5-.3-.7-.8-.7-1.3v-1.6a8.6 8.6 0 0 0-5.4 0v1.6c0 .5-.2 1-.7 1.3l-2 1.2c-.6.3-1.3.3-1.8-.2Z"/></svg></i>
+            </div>
           </div>
           <div class="homebar"></div>
         </div>
@@ -199,9 +211,9 @@
     <h2>Every call where language is the blocker.</h2>
   </div>
   <ul class="uses">
+    <li><b>Rentals and home services</b><span>Landlords, tenants and technicians agree on what, when and how much.</span><em>ಕನ್ನಡ ⇄ हिन्दी</em></li>
     <li><b>Delivery and logistics</b><span>Directions, gates and OTPs between riders and customers.</span><em>मराठी ⇄ हिन्दी</em></li>
     <li><b>Clinics and teleconsults</b><span>Symptoms in the patient's words, dosage that arrives intact.</span><em>ગુજરાતી ⇄ English</em></li>
-    <li><b>Rentals and home services</b><span>Tenants, landlords and technicians agree on what, when and how much.</span><em>ಕನ್ನಡ ⇄ हिन्दी</em></li>
     <li><b>Customer support</b><span>One desk serves every state, without routing calls by language.</span><em>தமிழ் ⇄ हिन्दी</em></li>
     <li><b>Hiring and gig work</b><span>Employers and workers from different states settle shifts and pay.</span><em>हिन्दी ⇄ ಕನ್ನಡ</em></li>
   </ul>
@@ -221,12 +233,12 @@
 </main>
 
 <footer class="foot">
-  <a class="logo" href="/">{{ mark() }}<span>convox</span></a>
+  {{ logo() }}
   <span>© 2026 Convox AI · Speech by Sarvam AI · Telephony by Exotel</span>
 </footer>
 
 </div>
 
-<script src="/static/console/landing.js?v=5" defer></script>
+<script src="/static/console/landing.js?v=8" defer></script>
 </body>
 </html>

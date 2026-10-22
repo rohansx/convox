@@ -181,3 +181,20 @@ def test_preview_embed_mode_fits_the_landing_frame():
     assert "is-embed" in env.client.get("/demo/preview?embed=1").text
     assert "is-embed" not in env.client.get("/demo/preview").text
     assert 'data-src="/demo/preview?embed=1"' in env.client.get("/").text
+
+
+def test_brand_is_convox_ai_with_favicon():
+    env = Env()
+    for url in ("/", "/demo/preview"):
+        page = env.client.get(url).text
+        assert "convox<em>AI</em>" in page and "/static/console/favicon.svg" in page, url
+    assert env.client.get("/static/console/favicon.svg").status_code == 200
+
+
+def test_landing_puts_kannada_first():
+    page = Env().client.get("/").text
+    langs = re.search(r'<p class="langs"[^>]*>(.*?)</p>', page).group(1)
+    assert langs.startswith("ಕನ್ನಡ")
+    assert page.index('data-scene="rent"') < page.index('data-scene="delivery"')
+    rent = json.loads((STATIC / "static" / "landing" / "scenes.json").read_text())["scenes"]["rent"]
+    assert rent["a"]["lang"] == "kn-IN" and "landlord" in rent["caption"]
