@@ -2,9 +2,9 @@ import dataclasses
 
 from sqlalchemy import inspect, select
 
-from dubhash.store.db import init_db, make_engine, make_sessionmaker
-from dubhash.store.models import CallRow, EventRow, LegRow, TurnRow
-from dubhash.types import Turn
+from convox.store.db import init_db, make_engine, make_sessionmaker
+from convox.store.models import CallRow, EventRow, LegRow, TurnRow
+from convox.types import Turn
 
 
 def test_turn_columns_match_turn_dataclass():

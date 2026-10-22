@@ -6,14 +6,14 @@ import pytest
 from fastapi.testclient import TestClient
 from starlette.websockets import WebSocketDisconnect
 
-from dubhash.api import calls
-from dubhash.api.app import create_app
-from dubhash.api.calls import CallBook, CallHandle, LegState
-from dubhash.api.legs_ws import sniff_provider
-from dubhash.config.pairs import load_pairs
-from dubhash.config.settings import Settings
-from dubhash.legs.exotel import ExotelLeg
-from dubhash.legs.plivo import PlivoLeg
+from convox.api import calls
+from convox.api.app import create_app
+from convox.api.calls import CallBook, CallHandle, LegState
+from convox.api.legs_ws import sniff_provider
+from convox.config.pairs import load_pairs
+from convox.config.settings import Settings
+from convox.legs.exotel import ExotelLeg
+from convox.legs.plivo import PlivoLeg
 from tests.api.session_double import FakeSession, install
 
 PCM = base64.b64encode(b"\x01\x00" * 1600).decode()  # 100 ms at 16 kHz
@@ -55,7 +55,7 @@ def wait_for(pred, within_s: float = 2.0) -> None:
 
 class Env:
     def __init__(self, provider: str | None = "exotel", **kw):
-        s = Settings(_env_file=None, **{"dubhash_env": "test", **kw})
+        s = Settings(_env_file=None, **{"convox_env": "test", **kw})
         self.app = create_app(s)
         self.registry = install(self.app)
         self.book = CallBook(no_answer_s=None, linger_s=0)

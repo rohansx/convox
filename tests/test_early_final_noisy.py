@@ -8,7 +8,7 @@ import asyncio
 
 import pytest
 
-from dubhash.interp.vad import DEFAULT_MODEL_PATH, NoiseFloorGate, SileroVAD
+from convox.interp.vad import DEFAULT_MODEL_PATH, NoiseFloorGate, SileroVAD
 from tests.audio_fixtures import silence, speech, with_noise
 from tests.test_early_final import EARLY, feed, make
 

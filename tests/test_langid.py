@@ -2,13 +2,13 @@ import dataclasses
 
 import pytest
 
-from dubhash.interp.langid import (
+from convox.interp.langid import (
     SUPPORTED_LANGS,
     LangGuess,
     LanguageID,
     pick,
 )
-from dubhash.providers.fakes import FakeLID
+from convox.providers.fakes import FakeLID
 
 PCM = b"\x01\x00" * 16000
 

@@ -1,9 +1,9 @@
 import asyncio
 import json
 
-from dubhash.console.sse import format_event, sse_stream
-from dubhash.events import EventBus
-from dubhash.types import CallEvent, Turn
+from convox.console.sse import format_event, sse_stream
+from convox.events import EventBus
+from convox.types import CallEvent, Turn
 
 
 def parse(chunk: str) -> tuple[str, dict]:

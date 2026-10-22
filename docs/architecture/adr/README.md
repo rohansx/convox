@@ -1,6 +1,6 @@
 # Architecture decision records
 
-This folder holds one record per significant architecture decision for dubhash: what was decided, why, and what lost. They come from the tech spec's "decisions and why" table plus decisions made where the product overview and tech spec disagreed. Read them before proposing a change to the stack; to change a decision, add a new ADR that supersedes the old one rather than editing history.
+This folder holds one record per significant architecture decision for convox: what was decided, why, and what lost. They come from the tech spec's "decisions and why" table plus decisions made where the product overview and tech spec disagreed. Read them before proposing a change to the stack; to change a decision, add a new ADR that supersedes the old one rather than editing history.
 
 ## Index
 

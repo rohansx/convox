@@ -1,6 +1,6 @@
 """FakeSTT reports a scripted language per final, like SarvamSTTStream.detected_lang."""
 
-from dubhash.providers.fakes import FakeSTT
+from convox.providers.fakes import FakeSTT
 
 AUDIO = b"\x10\x00" * 16000  # 1 s
 

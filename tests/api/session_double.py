@@ -6,9 +6,9 @@ from __future__ import annotations
 import asyncio
 from typing import Any
 
-from dubhash.config.pairs import PairConfig
-from dubhash.events import EventBus
-from dubhash.types import CallEvent, Side, Turn
+from convox.config.pairs import PairConfig
+from convox.events import EventBus
+from convox.types import CallEvent, Side, Turn
 
 
 class FakeSession:
@@ -97,7 +97,7 @@ class FakeSessionRegistry:
 
 def install(app: Any, *, registry: FakeSessionRegistry | None = None) -> FakeSessionRegistry:
     """Override the session dependencies on `app` with the doubles."""
-    from dubhash.api import deps
+    from convox.api import deps
 
     reg = registry or FakeSessionRegistry()
     created: list[FakeSession] = []

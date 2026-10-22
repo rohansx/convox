@@ -6,11 +6,11 @@ from __future__ import annotations
 import json
 from types import SimpleNamespace
 
-from dubhash.api.deps import InMemoryCallRegistry
-from dubhash.clock import FakeClock
-from dubhash.config.pairs import SideConfig
-from dubhash.store.recorder import CallRecorder, session_meta
-from dubhash.types import CallEvent
+from convox.api.deps import InMemoryCallRegistry
+from convox.clock import FakeClock
+from convox.config.pairs import SideConfig
+from convox.store.recorder import CallRecorder, session_meta
+from convox.types import CallEvent
 
 LANG = {"side": "a", "lang": "ta-IN", "state": "CONFIRMED", "confidence": 0.95, "source": "lid"}
 

@@ -7,8 +7,8 @@ from __future__ import annotations
 
 import pytest
 
-from dubhash.interp.endpoint import Endpointer, SpeechStart, Utterance
-from dubhash.interp.vad import DEFAULT_MODEL_PATH, NoiseFloorGate, SileroVAD
+from convox.interp.endpoint import Endpointer, SpeechStart, Utterance
+from convox.interp.vad import DEFAULT_MODEL_PATH, NoiseFloorGate, SileroVAD
 from tests.audio_fixtures import dbfs, frames, mix, pink_noise, silence, speech, with_noise
 
 needs_model = pytest.mark.skipif(not DEFAULT_MODEL_PATH.exists(), reason="silero model missing")
@@ -122,11 +122,11 @@ def test_silero_with_the_gate_on_noisy_speech(snr):
 
 
 def test_every_call_gets_a_gated_vad():
-    from dubhash.config.pairs import load_pairs
-    from dubhash.config.settings import PACKAGE_DIR, Settings
-    from dubhash.session.providers import build_providers
+    from convox.config.pairs import load_pairs
+    from convox.config.settings import PACKAGE_DIR, Settings
+    from convox.session.providers import build_providers
 
     pair = load_pairs(PACKAGE_DIR / "config" / "pairs.yaml")["mr-hi"]
-    p = build_providers(pair, Settings(_env_file=None, dubhash_env="test"))  # type: ignore[call-arg]
+    p = build_providers(pair, Settings(_env_file=None, convox_env="test"))  # type: ignore[call-arg]
     a, b = p.vad_factory(), p.vad_factory()
     assert isinstance(a, NoiseFloorGate) and a is not b and a.inner is not b.inner

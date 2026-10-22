@@ -1,14 +1,14 @@
 import httpx
 
-from dubhash.api.app import create_app
-from dubhash.api.console import mask_number, turn_view
-from dubhash.api.deps import InMemoryCallRegistry
-from dubhash.config.settings import Settings
-from dubhash.types import CallEvent, Turn
+from convox.api.app import create_app
+from convox.api.console import mask_number, turn_view
+from convox.api.deps import InMemoryCallRegistry
+from convox.config.settings import Settings
+from convox.types import CallEvent, Turn
 
 
 def client(reg) -> httpx.AsyncClient:
-    app = create_app(Settings(_env_file=None, dubhash_env="test"), registry=reg)
+    app = create_app(Settings(_env_file=None, convox_env="test"), registry=reg)
     return httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://t")
 
 

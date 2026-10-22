@@ -4,14 +4,14 @@ import base64
 
 import httpx
 
-from dubhash.api.app import create_app
-from dubhash.config.settings import Settings
+from convox.api.app import create_app
+from convox.config.settings import Settings
 
 PW = "test-console-pw"
 
 
 def app(**kw):
-    s = Settings(_env_file=None, **{"dubhash_env": "dev", "console_password": PW, **kw})
+    s = Settings(_env_file=None, **{"convox_env": "dev", "console_password": PW, **kw})
     return create_app(s)
 
 

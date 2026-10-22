@@ -2,8 +2,8 @@ from collections.abc import Callable
 
 import pytest
 
-from dubhash.interp.contracts import TTS
-from dubhash.providers.fakes import FakeTTS
+from convox.interp.contracts import TTS
+from convox.providers.fakes import FakeTTS
 
 IMPLS: list = [
     pytest.param(lambda: (FakeTTS(), "fake:m"), id="fake"),

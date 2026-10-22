@@ -3,7 +3,7 @@ when the frame loop asks for a commit."""
 
 import pytest
 
-from dubhash.interp.chunker import chunk_text_ok, pause_commits
+from convox.interp.chunker import chunk_text_ok, pause_commits
 
 
 @pytest.mark.parametrize(

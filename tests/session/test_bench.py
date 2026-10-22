@@ -3,7 +3,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from dubhash.audio.wav import read_wav, write_wav
+from convox.audio.wav import read_wav, write_wav
 from tests.audio_fixtures import conversation
 from tools import bench
 
@@ -11,7 +11,7 @@ STAGES = {"eou", "stt_final", "mt", "tts_ttfb", "first_audio"}
 
 
 def test_main_with_fakes_writes_wavs_and_report(tmp_path, monkeypatch, capsys):
-    monkeypatch.setenv("DUBHASH_ENV", "dev")
+    monkeypatch.setenv("CONVOX_ENV", "dev")
     rc = bench.main(["--out", str(tmp_path), "--call-id", "c_bench", "--vad", "energy"])
     assert rc == 0
     a, b = read_wav(tmp_path / "c_bench_a.wav"), read_wav(tmp_path / "c_bench_b.wav")
@@ -28,7 +28,7 @@ def test_main_with_fakes_writes_wavs_and_report(tmp_path, monkeypatch, capsys):
 
 
 def test_main_reads_wav_inputs(tmp_path, monkeypatch):
-    monkeypatch.setenv("DUBHASH_ENV", "dev")
+    monkeypatch.setenv("CONVOX_ENV", "dev")
     wav_a, wav_b = tmp_path / "a.wav", tmp_path / "b.wav"
     write_wav(wav_a, conversation([("silence", 300), ("speech", 1200), ("silence", 3000)]))
     write_wav(wav_b, conversation([("silence", 4500)]))
@@ -76,7 +76,7 @@ def _bench(tmp_path, call_id: str, *extra: str) -> dict:
 
 
 def test_spec_flag_with_live_like_fake_delays(tmp_path, monkeypatch, capsys):
-    monkeypatch.setenv("DUBHASH_ENV", "dev")
+    monkeypatch.setenv("CONVOX_ENV", "dev")
     off = _bench(tmp_path, "c_off", "--no-spec", *NO_EARLY)
     on = _bench(tmp_path, "c_on", "--spec", *NO_EARLY)
     assert off["spec"]["enabled"] is False and off["spec"]["started"] == 0
@@ -111,7 +111,7 @@ def test_spec_flag_shown_in_help():
 
 
 def test_spec_after_ms_overrides_pair(tmp_path, monkeypatch):
-    monkeypatch.setenv("DUBHASH_ENV", "dev")
+    monkeypatch.setenv("CONVOX_ENV", "dev")
     late = _bench(tmp_path, "c_late", "--spec", "--spec-after-ms", "200", *NO_EARLY)
     early = _bench(tmp_path, "c_early", "--spec", "--spec-after-ms", "40", *NO_EARLY)
     assert late["spec"]["after_ms"] == 200 and early["spec"]["after_ms"] == 40
@@ -120,7 +120,7 @@ def test_spec_after_ms_overrides_pair(tmp_path, monkeypatch):
 
 
 def test_early_final_ms_flag_cuts_first_audio(tmp_path, monkeypatch, capsys):
-    monkeypatch.setenv("DUBHASH_ENV", "dev")
+    monkeypatch.setenv("CONVOX_ENV", "dev")
     off = _bench(tmp_path, "c_ef0", "--no-spec", "--early-final-ms", "0")
     on = _bench(tmp_path, "c_ef200", "--no-spec", "--early-final-ms", "200")
     assert off["early_final"] == {
@@ -142,7 +142,7 @@ def test_early_final_ms_flag_cuts_first_audio(tmp_path, monkeypatch, capsys):
 
 def test_report_has_what_the_listener_felt(tmp_path, monkeypatch, capsys):
     """L9: per-utterance speech start -> first heard, ear-voice span, first audio."""
-    monkeypatch.setenv("DUBHASH_ENV", "dev")
+    monkeypatch.setenv("CONVOX_ENV", "dev")
     assert bench.main(["--out", str(tmp_path), "--call-id", "c_felt", "--vad", "energy"]) == 0
     report = json.loads((tmp_path / "c_felt.json").read_text())
     felt = report["felt"]
@@ -154,7 +154,7 @@ def test_report_has_what_the_listener_felt(tmp_path, monkeypatch, capsys):
 
 
 def test_chunking_cuts_speech_start_to_first_heard_on_long_utterances(tmp_path, monkeypatch):
-    monkeypatch.setenv("DUBHASH_ENV", "dev")
+    monkeypatch.setenv("CONVOX_ENV", "dev")
     base = ["--vad", "energy", "--long", "--no-opening", "--fake-mt-ms", "600"]
     base += ["--fake-stt-final-ms", "260", "--fake-tts-ttfb-ms", "180", "--early-final-ms", "200"]
     reports = {}
@@ -172,7 +172,7 @@ def test_chunking_cuts_speech_start_to_first_heard_on_long_utterances(tmp_path, 
 
 
 def test_long_synthetic_utterances_have_comma_pauses(tmp_path, monkeypatch):
-    monkeypatch.setenv("DUBHASH_ENV", "dev")
+    monkeypatch.setenv("CONVOX_ENV", "dev")
     inbound = bench.synthetic_inbound(long=True)
     assert len(inbound["a"]) > len(bench.synthetic_inbound()["a"])
     argv = ["--out", str(tmp_path), "--call-id", "c_long", "--vad", "energy", "--long"]

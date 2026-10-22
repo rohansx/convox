@@ -9,11 +9,11 @@ from pathlib import Path
 
 import numpy as np
 
-from dubhash.audio.frames import FRAME_BYTES
-from dubhash.clock import FakeClock
-from dubhash.events import EventBus
-from dubhash.store.recorder import CallRecorder
-from dubhash.types import CallEvent
+from convox.audio.frames import FRAME_BYTES
+from convox.clock import FakeClock
+from convox.events import EventBus
+from convox.store.recorder import CallRecorder
+from convox.types import CallEvent
 
 META = {
     "pair": "mr-hi",

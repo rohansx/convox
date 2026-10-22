@@ -7,19 +7,19 @@ from pathlib import Path
 
 import numpy as np
 
-from dubhash.audio.earcon import EARCON
-from dubhash.audio.mixer import TRIM_LEAD_PEAK, db_to_gain
-from dubhash.clock import FakeClock
-from dubhash.config.pairs import load_pairs
-from dubhash.legs.fake import FakeLeg
-from dubhash.providers.fakes import EnergyVAD, FakeMT, FakeSTT, FakeTTS
-from dubhash.session.call_session import CallSession
-from dubhash.session.providers import Providers
+from convox.audio.earcon import EARCON
+from convox.audio.mixer import TRIM_LEAD_PEAK, db_to_gain
+from convox.clock import FakeClock
+from convox.config.pairs import load_pairs
+from convox.legs.fake import FakeLeg
+from convox.providers.fakes import EnergyVAD, FakeMT, FakeSTT, FakeTTS
+from convox.session.call_session import CallSession
+from convox.session.providers import Providers
 from tests.audio_fixtures import conversation
 from tests.floor_helpers import RecordingBus
 from tools.bench import drive_lockstep
 
-PAIRS = load_pairs(Path(__file__).resolve().parents[2] / "dubhash" / "config" / "pairs.yaml")
+PAIRS = load_pairs(Path(__file__).resolve().parents[2] / "convox" / "config" / "pairs.yaml")
 PAIR = PAIRS["fake-fake"]
 MS_PER_CHAR = 60
 SPEECH_AMP = 8000  # tests.audio_fixtures.speech peak

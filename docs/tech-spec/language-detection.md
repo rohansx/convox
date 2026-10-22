@@ -1,6 +1,6 @@
 # Language detection (`lang: "auto"`)
 
-On a real phone call we often don't know what language a caller speaks. A side whose `lang` is `"auto"` is detected from its own speech during the call. This document covers the API surface, the per-side resolver, how the pipeline keeps translating before the language is known, the keypad-menu fallback and the same-language bridge. Code: `dubhash/session/language.py` (resolver), `dubhash/session/call_session.py` (wiring), `dubhash/interp/langid.py` (the shared `LanguageID` contract), `dubhash/providers/sarvam_lid.py` (the Sarvam engine, owned by the language-ID engine work, L8).
+On a real phone call we often don't know what language a caller speaks. A side whose `lang` is `"auto"` is detected from its own speech during the call. This document covers the API surface, the per-side resolver, how the pipeline keeps translating before the language is known, the keypad-menu fallback and the same-language bridge. Code: `convox/session/language.py` (resolver), `convox/session/call_session.py` (wiring), `convox/interp/langid.py` (the shared `LanguageID` contract), `convox/providers/sarvam_lid.py` (the Sarvam engine, owned by the language-ID engine work, L8).
 
 ## What is allowed to go live
 

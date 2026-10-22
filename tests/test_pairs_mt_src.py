@@ -1,8 +1,8 @@
 from pathlib import Path
 
-from dubhash.config.pairs import find_pair, load_pairs
+from convox.config.pairs import find_pair, load_pairs
 
-PAIRS_FILE = Path(__file__).resolve().parent.parent / "dubhash" / "config" / "pairs.yaml"
+PAIRS_FILE = Path(__file__).resolve().parent.parent / "convox" / "config" / "pairs.yaml"
 
 
 def test_mt_src_defaults_to_none_and_mt_lang_falls_back_to_lang():

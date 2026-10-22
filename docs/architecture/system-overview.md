@@ -1,10 +1,10 @@
 # System overview
 
-This document is the map of the dubhash server: what runs, where state lives, how a call goes from `POST /v1/calls` to the first translated word, and the rules that keep the hot path fast. It is written for the five engineers building v1 and is the place to start before reading any of the detailed specs under [`../tech-spec/`](../tech-spec/). The detailed behaviour of each component lives in its own spec; this page explains how they fit together. The reasons behind each choice are recorded in the [ADRs](adr/README.md).
+This document is the map of the Convox server: what runs, where state lives, how a call goes from `POST /v1/calls` to the first translated word, and the rules that keep the hot path fast. It is written for the five engineers building v1 and is the place to start before reading any of the detailed specs under [`../tech-spec/`](../tech-spec/). The detailed behaviour of each component lives in its own spec; this page explains how they fit together. The reasons behind each choice are recorded in the [ADRs](adr/README.md).
 
 ## What the system is, in one paragraph
 
-dubhash is a server that sits in the middle of a phone call between two humans who speak different Indian languages and interprets both directions live. The CPaaS (Exotel primary, Plivo fallback) places **two separate calls**, one to each person, and each call is attached to a two-way audio websocket that terminates on our server. The CPaaS never connects A to B. dubhash joins the two legs itself: it hears A, translates, and speaks to B, and the other way round. The whole product is the bridge, the turn-taking (floor controller) and the integrations; every speech engine is a vendor behind an interface. See [telephony-integration.md](telephony-integration.md) for why the call has to be built this way.
+Convox is a server that sits in the middle of a phone call between two humans who speak different Indian languages and interprets both directions live. The CPaaS (Exotel primary, Plivo fallback) places **two separate calls**, one to each person, and each call is attached to a two-way audio websocket that terminates on our server. The CPaaS never connects A to B. Convox joins the two legs itself: it hears A, translates, and speaks to B, and the other way round. The whole product is the bridge, the turn-taking (floor controller) and the integrations; every speech engine is a vendor behind an interface. See [telephony-integration.md](telephony-integration.md) for why the call has to be built this way.
 
 ## Components
 
@@ -17,7 +17,7 @@ flowchart LR
     WAV["WAV fixtures<br/>(test)"]
   end
 
-  subgraph APP["dubhash app (one process, Python 3.12 asyncio)"]
+  subgraph APP["Convox app (one process, Python 3.12 asyncio)"]
     API["api<br/>POST /v1/calls · /ws/leg<br/>webhooks · console SSE"]
     LEGS["leg transports<br/>ExotelLeg · PlivoLeg<br/>WebRtcLeg · FakeLeg"]
     AUD["audio<br/>frames · resample (soxr)<br/>mixer · ducking · earcon"]
@@ -60,16 +60,16 @@ Everything on the left of the app box is swappable per environment. Everything o
 
 | Component | Module | Responsibility | Spec |
 |---|---|---|---|
-| API | `dubhash/api/` | FastAPI app: `/v1/calls`, `/v1/calls/{id}`, `/ws/leg`, `/webhooks`, `/console` (SSE). Creates `CallSession`s, routes provider websockets to them. | [api.md](../tech-spec/api.md) |
-| Leg transports | `dubhash/legs/` | `base.py` (`LegTransport`), `exotel.py`, `plivo.py`, `webrtc.py`, `fake.py`. Hide every provider difference behind one protocol. | [leg-transports.md](../tech-spec/leg-transports.md) |
-| Audio | `dubhash/audio/` | `frames.py` (20 ms PCM16 @ 16 kHz), `resample.py` (soxr), `mixer.py` (duck + earcon), `wav.py`. | [audio.md](../tech-spec/audio.md) |
-| CallSession | `dubhash/session/` | Owns 2 legs, 2 interpreter pipelines, 1 `FloorController`, the turn log. | below |
-| FloorController | `dubhash/session/` | The only code allowed to call `send()`, `clear()`, `mark()` on a leg. Queue, backchannel rule, barge-in, DTMF. | [floor-controller.md](../tech-spec/floor-controller.md) |
-| Interpreter | `dubhash/interp/` | `vad.py`, `endpoint.py`, `stt.py`, `mt.py`, `tts.py`, `pipeline.py`. One per direction. | [interpreter-pipeline.md](../tech-spec/interpreter-pipeline.md) |
-| Providers | `dubhash/providers/` | `sarvam_stt.py`, `sarvam_mt.py`, `sarvam_tts.py`, `eleven_tts.py`, `deepgram_stt.py`, `fakes.py`. | [interpreter-pipeline.md](../tech-spec/interpreter-pipeline.md) |
-| Store | `dubhash/store/` | `models.py` (SQLAlchemy), `writer.py` (async batch insert). | [data-model.md](../tech-spec/data-model.md) |
-| Config | `dubhash/config/` | `pairs.yaml` (per language pair: stt, mt, tts voice, `eou_ms`), `settings.py`. | [configuration.md](../tech-spec/configuration.md) |
-| Console | `dubhash/console/` | Templates + SSE. Server-rendered HTML, htmx, no SPA. | [console.md](../tech-spec/console.md) |
+| API | `convox/api/` | FastAPI app: `/v1/calls`, `/v1/calls/{id}`, `/ws/leg`, `/webhooks`, `/console` (SSE). Creates `CallSession`s, routes provider websockets to them. | [api.md](../tech-spec/api.md) |
+| Leg transports | `convox/legs/` | `base.py` (`LegTransport`), `exotel.py`, `plivo.py`, `webrtc.py`, `fake.py`. Hide every provider difference behind one protocol. | [leg-transports.md](../tech-spec/leg-transports.md) |
+| Audio | `convox/audio/` | `frames.py` (20 ms PCM16 @ 16 kHz), `resample.py` (soxr), `mixer.py` (duck + earcon), `wav.py`. | [audio.md](../tech-spec/audio.md) |
+| CallSession | `convox/session/` | Owns 2 legs, 2 interpreter pipelines, 1 `FloorController`, the turn log. | below |
+| FloorController | `convox/session/` | The only code allowed to call `send()`, `clear()`, `mark()` on a leg. Queue, backchannel rule, barge-in, DTMF. | [floor-controller.md](../tech-spec/floor-controller.md) |
+| Interpreter | `convox/interp/` | `vad.py`, `endpoint.py`, `stt.py`, `mt.py`, `tts.py`, `pipeline.py`. One per direction. | [interpreter-pipeline.md](../tech-spec/interpreter-pipeline.md) |
+| Providers | `convox/providers/` | `sarvam_stt.py`, `sarvam_mt.py`, `sarvam_tts.py`, `eleven_tts.py`, `deepgram_stt.py`, `fakes.py`. | [interpreter-pipeline.md](../tech-spec/interpreter-pipeline.md) |
+| Store | `convox/store/` | `models.py` (SQLAlchemy), `writer.py` (async batch insert). | [data-model.md](../tech-spec/data-model.md) |
+| Config | `convox/config/` | `pairs.yaml` (per language pair: stt, mt, tts voice, `eou_ms`), `settings.py`. | [configuration.md](../tech-spec/configuration.md) |
+| Console | `convox/console/` | Templates + SSE. Server-rendered HTML, htmx, no SPA. | [console.md](../tech-spec/console.md) |
 | Tools | `tools/` | `loopback.py` (two browser legs), `bench.py` (latency harness), `label.py` (rater UI). | [testing-strategy.md](../engineering/testing-strategy.md) |
 
 Full tree: [repo-structure.md](../engineering/repo-structure.md).
@@ -79,7 +79,7 @@ Full tree: [repo-structure.md](../engineering/repo-structure.md).
 A call's two legs must land on **the same process**, because they share one `FloorController` and one `CallSession`. There is no distributed state in the hot path.
 
 - The API creates the `CallSession` and records it in the in-process session table (and in the Redis call registry for cross-node lookup).
-- Each leg's provider websocket carries the call id and side in its URL: `wss://edge.dubhash.in/ws/leg?call=c_91&side=a&sample-rate=16000`. The `/ws/leg` handler looks up `call` and attaches the transport to side `a` or `b` of that session.
+- Each leg's provider websocket carries the call id and side in its URL: `wss://edge.convox.in/ws/leg?call=c_91&side=a&sample-rate=16000`. The `/ws/leg` handler looks up `call` and attaches the transport to side `a` or `b` of that session.
 - One asyncio task owns a call. The session dies when both legs close.
 - v1 runs on a single VM ([ADR 0010](adr/0010-single-vm-mumbai.md)), so "same process" is automatic. Redis exists so that a second node can find which process owns a call id later; it is not read per frame. See [ADR 0009](adr/0009-in-process-call-state.md).
 
@@ -211,7 +211,7 @@ Platform integration, Exotel provider, hi→kn. Timings are the targets above.
 sequenceDiagram
   autonumber
   participant P as Platform backend
-  participant API as dubhash api
+  participant API as Convox api
   participant S as CallSession c_91
   participant R as Redis
   participant EX as Exotel
@@ -269,7 +269,7 @@ flowchart LR
   EL["ElevenLabs<br/>(not in India, 150–250 ms RTT)"]
   DG["Deepgram"]
   subgraph VM["One VM · AWS ap-south-1 (Mumbai) · Docker Compose"]
-    CADDY["Caddy<br/>TLS for edge.dubhash.in / api.dubhash.in"]
+    CADDY["Caddy<br/>TLS for edge.convox.in / api.convox.in"]
     APPC["app<br/>FastAPI + websockets + console"]
     PGC[("postgres")]
     RDC[("redis")]
@@ -290,7 +290,7 @@ flowchart LR
 - Exotel may need the VM's IP allowlisted (auth is Basic auth header or IP allowlist).
 - No Kubernetes in v1: nothing to orchestrate yet. See [ADR 0010](adr/0010-single-vm-mumbai.md) and [deployment.md](../engineering/deployment.md).
 
-The sources use `edge.dubhash.in` for leg websockets and `api.dubhash.in` for the platform API. On one VM both terminate at Caddy. Final DNS layout: TBD — see [open questions](../plan/open-questions.md).
+The sources use `edge.convox.in` for leg websockets and `api.convox.in` for the platform API. On one VM both terminate at Caddy. Final DNS layout: TBD — see [open questions](../plan/open-questions.md).
 
 ## Environments
 

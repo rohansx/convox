@@ -1,6 +1,6 @@
 # Audio
 
-This doc fixes the audio format inside dubhash and the code that touches samples on the hot path: frames and `FrameClock`, Silero VAD windowing, resampling between the 8 kHz wire and the 16 kHz pipeline, the mixer (earcon, TTS, ducked original), outbound chunking and gap handling. All of it lives in `dubhash/audio/` (`frames.py`, `resample.py`, `mixer.py`, `wav.py`) and is written in numpy (plus onnx for VAD). Owner: **Rohan** (frames, mixer). P2 owns VAD use in the endpoint, and is the proposed owner of `resample.py` and the pitch-based gender detector (open under PQ9 and PQ20 in [open questions](../plan/open-questions.md)). A Rust port of the hot path happens only if CPU profiling asks for it. The bottleneck is vendor latency, not interpreter CPU.
+This doc fixes the audio format inside Convox and the code that touches samples on the hot path: frames and `FrameClock`, Silero VAD windowing, resampling between the 8 kHz wire and the 16 kHz pipeline, the mixer (earcon, TTS, ducked original), outbound chunking and gap handling. All of it lives in `convox/audio/` (`frames.py`, `resample.py`, `mixer.py`, `wav.py`) and is written in numpy (plus onnx for VAD). Owner: **Rohan** (frames, mixer). P2 owns VAD use in the endpoint, and is the proposed owner of `resample.py` and the pitch-based gender detector (open under PQ9 and PQ20 in [open questions](../plan/open-questions.md)). A Rust port of the hot path happens only if CPU profiling asks for it. The bottleneck is vendor latency, not interpreter CPU.
 
 ---
 

@@ -4,10 +4,10 @@ import logging
 import pytest
 from sqlalchemy import func, select
 
-from dubhash.store.db import init_db, make_engine, make_sessionmaker
-from dubhash.store.models import CallRow, EventRow, TurnRow
-from dubhash.store.writer import TurnWriter, first_audio_ms, percentile
-from dubhash.types import CallEvent, Turn
+from convox.store.db import init_db, make_engine, make_sessionmaker
+from convox.store.models import CallRow, EventRow, TurnRow
+from convox.store.writer import TurnWriter, first_audio_ms, percentile
+from convox.types import CallEvent, Turn
 
 
 @pytest.fixture
@@ -191,7 +191,7 @@ async def test_db_error_twice_drops_batch_and_keeps_running(sm, caplog):
     flaky = FlakySessionmaker(sm, fail=2)
     w = TurnWriter(flaky, flush_ms=10, retry_delay_s=0)
     w.start()
-    with caplog.at_level(logging.WARNING, logger="dubhash.store.writer"):
+    with caplog.at_level(logging.WARNING, logger="convox.store.writer"):
         w.enqueue_turn(turn(1), record=False)
         await w.drain()
     assert w.dropped == 1 and w.written == 0

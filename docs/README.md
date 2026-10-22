@@ -1,10 +1,10 @@
-# dubhash docs
+# Convox docs
 
-This folder is the documentation for dubhash: product, architecture, technical spec, plan and engineering practice. It is written for the five engineers building v1 for the Bolna Symphony Buildathon (build days Wed 21 to Fri 30 Oct 2026, submission Sat 31 Oct 2026, finale 20 Nov 2026 in Bengaluru). Where the product overview and the tech spec disagreed, the docs follow a fixed set of resolved decisions. What is still unknown is collected in [open questions](plan/open-questions.md).
+This folder is the documentation for convox: product, architecture, technical spec, plan and engineering practice. It is written for the five engineers building v1 for the Bolna Symphony Buildathon (build days Wed 21 to Fri 30 Oct 2026, submission Sat 31 Oct 2026, finale 20 Nov 2026 in Bengaluru). Where the product overview and the tech spec disagreed, the docs follow a fixed set of resolved decisions. What is still unknown is collected in [open questions](plan/open-questions.md).
 
-## What dubhash is
+## What Convox is
 
-dubhash is a live interpreter that sits inside a phone call between two people who speak different Indian languages. A CPaaS (Exotel primary, Plivo fallback) places two calls, one to each person, each streaming two-way audio to our server. dubhash joins them itself, so A hears B translated and B hears A translated, about 1.4 to 1.8 s after each one stops speaking. The listener hears a gender-matched natural voice with the original speaker ducked underneath. The product is the bridge, the floor controller that manages turn-taking, and the integrations: a one-line platform API, ward mode on a single phone, and a dial-in number.
+Convox is a live interpreter that sits inside a phone call between two people who speak different Indian languages. A CPaaS (Exotel primary, Plivo fallback) places two calls, one to each person, each streaming two-way audio to our server. Convox joins them itself, so A hears B translated and B hears A translated, about 1.4 to 1.8 s after each one stops speaking. The listener hears a gender-matched natural voice with the original speaker ducked underneath. The product is the bridge, the floor controller that manages turn-taking, and the integrations: a one-line platform API, ward mode on a single phone, and a dial-in number.
 
 ## Start here
 
@@ -41,7 +41,7 @@ Decision 3's original weekday labels (Tue/Thu) were wrong: 21 Oct 2026 is a Wedn
 
 | Doc | What it covers |
 |---|---|
-| [overview.md](product/overview.md) | What dubhash is and is not, why now, the three ways it ships, the buildathon deliverable |
+| [overview.md](product/overview.md) | What Convox is and is not, why now, the three ways it ships, the buildathon deliverable |
 | [problem-and-users.md](product/problem-and-users.md) | The four user groups and their failing calls, two worked example calls |
 | [business-model.md](product/business-model.md) | Who pays, unit economics per minute (with the TTS cost caveat), moat, competitors, go-to-market |
 | [glossary.md](product/glossary.md) | Shared vocabulary: legs, floor, mark, clear, EOU, backchannel and more |

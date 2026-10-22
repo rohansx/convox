@@ -5,8 +5,8 @@ import wave
 
 import httpx
 
-from dubhash.interp.langid import SUPPORTED_LANGS, LangGuess, LanguageID
-from dubhash.providers.sarvam_lid import Detection, SarvamLID, decide
+from convox.interp.langid import SUPPORTED_LANGS, LangGuess, LanguageID
+from convox.providers.sarvam_lid import Detection, SarvamLID, decide
 
 SEC = b"\x01\x00" * 16000  # 1 s of PCM16 @16k
 HI_MR = ["hi-IN", "mr-IN"]

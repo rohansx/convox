@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% from "_macros.html" import turn, marker %}
+{% block title %}{{ call.call_id }} · convox{% endblock %}
+{% block body_class %}call-page{% endblock %}
+{% block content %}
+<section class="call-head card"
+         id="call"
+         data-call-id="{{ call.call_id }}"
+         data-events="/console/events?call={{ call.call_id }}"
+         data-p50="{{ targets.p50 }}" data-p95="{{ targets.p95 }}"
+         data-totals="{{ totals | tojson | forceescape }}">
+  <div class="call-title">
+    <h1 class="mono">{{ call.call_id }}</h1>
+    <span class="pair">{{ call.a_lang or '—' }} <span class="muted">⇄</span> {{ call.b_lang or '—' }}</span>
+    <span class="muted">{{ call.provider or '' }}</span>
+    <span class="status status-{{ call.status }}" id="call-status">{{ call.status | replace('_', ' ') }}</span>
+  </div>
+  <div class="call-floor">
+    <span class="badge state-{{ call.state }}" id="state">{{ call.state }}</span>
+    <span class="queued" id="queued" {% if not (call.queue_depth and call.state.startswith('PLAYING')) %}hidden{% endif %}>queued</span>
+    <span class="muted">queue</span> <b id="queue-depth">{{ call.queue_depth or 0 }}</b>
+  </div>
+  <div class="call-stats">
+    <span>turns <b id="n-turns">{{ n_turns }}</b></span>
+    <span>p50 <b id="p50">—</b></span>
+    <span>p95 <b id="p95">—</b></span>
+    <span>escape <b id="escape" class="{{ 'flag' if call.escape_used }}">{{ 'used' if call.escape_used else 'no' }}</b></span>
+  </div>
+</section>
+
+<section class="columns card">
+  <div class="col-head">
+    <div><span class="side">A</span> {{ call.a_lang | lang }} <span class="muted mono">{{ call.a_number | mask }}</span>
+      <span class="leg" id="leg-a">{{ call.legs.a if call.legs and call.legs.a else '' }}</span></div>
+    <div><span class="side">B</span> {{ call.b_lang | lang }} <span class="muted mono">{{ call.b_number | mask }}</span>
+      <span class="leg" id="leg-b">{{ call.legs.b if call.legs and call.legs.b else '' }}</span></div>
+  </div>
+  <div class="timeline" id="timeline">
+    {% for it in items %}
+      {% if it.type == 'turn' %}{{ turn(it) }}{% else %}{{ marker(it) }}{% endif %}
+    {% endfor %}
+    <div class="row empty-row" id="empty" {% if items %}hidden{% endif %}>
+      <div class="item hint">Waiting for the first turn…</div>
+    </div>
+  </div>
+  <div class="row partials">
+    <div class="item partial col-a" id="partial-a" hidden></div>
+    <div class="item partial col-b" id="partial-b" hidden></div>
+  </div>
+</section>
+
+<section class="summary card" id="summary" {% if call.duration_s is not defined or call.duration_s is none %}hidden{% endif %}>
+  <h2>Call summary</h2>
+  <dl>
+    <div><dt>Duration</dt><dd id="sum-duration">{{ call.duration_s ~ ' s' if call.duration_s is defined and call.duration_s is not none else '—' }}</dd></div>
+    <div><dt>Interpreted</dt><dd id="sum-interpreted">{{ call.interpreted_s ~ ' s' if call.interpreted_s is defined and call.interpreted_s is not none else '—' }}</dd></div>
+    <div><dt>Turns</dt><dd id="sum-turns">{{ call.turns_total if call.turns_total is defined and call.turns_total is not none else n_turns }}</dd></div>
+    <div><dt>p50 / p95 first audio</dt><dd id="sum-lat">{{ call.p50_first_audio_ms | secs if call.p50_first_audio_ms is defined else '—' }} / {{ call.p95_first_audio_ms | secs if call.p95_first_audio_ms is defined else '—' }}</dd></div>
+    <div><dt>Escape used</dt><dd id="sum-escape">{{ 'yes' if call.escape_used else 'no' }}</dd></div>
+  </dl>
+</section>
+{% endblock %}
+{% block scripts %}
+<script src="/static/console/console.js" defer></script>
+{% endblock %}

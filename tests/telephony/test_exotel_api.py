@@ -5,8 +5,8 @@ from urllib.parse import parse_qs
 import httpx
 import pytest
 
-from dubhash.telephony.base import DialError
-from dubhash.telephony.exotel_api import ExotelDialer, parse_custom_field
+from convox.telephony.base import DialError
+from convox.telephony.exotel_api import ExotelDialer, parse_custom_field
 
 
 def make(handler) -> ExotelDialer:
@@ -89,8 +89,8 @@ async def test_dial_sends_transactional_call_type_and_time_limit():
 
 
 def test_build_dialer_defaults_host_to_singapore_region():
-    from dubhash.config.settings import Settings
-    from dubhash.telephony import build_dialer
+    from convox.config.settings import Settings
+    from convox.telephony import build_dialer
 
     s = Settings(
         _env_file=None,

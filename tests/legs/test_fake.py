@@ -3,10 +3,10 @@ import time
 
 import pytest
 
-from dubhash.audio.frames import FRAME_BYTES
-from dubhash.clock import FakeClock
-from dubhash.legs.base import LegTransport
-from dubhash.legs.fake import FakeLeg
+from convox.audio.frames import FRAME_BYTES
+from convox.clock import FakeClock
+from convox.legs.base import LegTransport
+from convox.legs.fake import FakeLeg
 
 
 def test_fake_leg_satisfies_protocol():

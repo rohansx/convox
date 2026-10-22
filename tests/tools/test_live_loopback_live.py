@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from dubhash.config.settings import Settings
+from convox.config.settings import Settings
 from tools import live_loopback as ll
 
 pytestmark = pytest.mark.live
@@ -19,7 +19,7 @@ def test_live_loopback_two_lines(tmp_path: Path):
     if any(os.environ.get(k) != "real" for k in ("STT_IMPL", "MT_IMPL", "TTS_IMPL")):
         pytest.skip("set STT_IMPL=real MT_IMPL=real TTS_IMPL=real")
     utts = asyncio.run(ll.synth_script(ll.SCRIPT[:2], {"a": "hi-IN", "b": "kn-IN"}, ll.OUT))
-    with ll.serve({"dubhash_env": "dev"}, Path(".env")) as srv:
+    with ll.serve({"convox_env": "dev"}, Path(".env")) as srv:
         result = asyncio.run(ll.run_call(srv, utts, ll.Opts()))
     summary = ll.summarize(result)
     print(ll.table(result, summary))

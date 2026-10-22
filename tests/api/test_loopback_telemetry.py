@@ -6,13 +6,13 @@ from __future__ import annotations
 import json
 import logging
 
-from dubhash.api import loopback
+from convox.api import loopback
 from tests.api.test_loopback import Env, _close_clients, wait_for  # noqa: F401
 
 
 def test_the_socket_pings_with_the_session_clock_and_logs_telemetry(monkeypatch, caplog):
     monkeypatch.setattr(loopback, "PING_INTERVAL_S", 0.02)
-    caplog.set_level(logging.INFO, logger="dubhash.api.loopback")
+    caplog.set_level(logging.INFO, logger="convox.api.loopback")
     env = Env()
     call_id = env.client.post(
         "/loopback/calls", json={"a_lang": "mr-IN", "b_lang": "hi-IN"}

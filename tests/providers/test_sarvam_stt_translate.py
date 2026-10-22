@@ -1,7 +1,7 @@
 from urllib.parse import parse_qs, urlparse
 
-from dubhash.interp.contracts import STT, STTStream
-from dubhash.providers.sarvam_stt_translate import SarvamSTTTranslate
+from convox.interp.contracts import STT, STTStream
+from convox.providers.sarvam_stt_translate import SarvamSTTTranslate
 from tests.providers.wsmock import Conn, ws_server
 
 F1 = b"\x01\x00" * 320

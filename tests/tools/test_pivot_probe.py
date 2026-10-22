@@ -1,4 +1,4 @@
-from dubhash.providers.fakes import FakeMT, FakeSTT
+from convox.providers.fakes import FakeMT, FakeSTT
 from tests.audio_fixtures import harmonic
 from tools import pivot_probe as pp
 

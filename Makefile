@@ -1,4 +1,4 @@
-# dubhash developer commands. `make help` lists them.
+# convox developer commands. `make help` lists them.
 # Extra arguments: make bench BENCH_ARGS="--pair hi-kn", make smoke SMOKE_ARGS="--only mt",
 # make label TURNS=out/turns.json RATER=asha.
 
@@ -33,7 +33,7 @@ fmt: ## autofix lint and format
 	uv run ruff format .
 
 dev: ## API on :8000 with reload (one worker: both legs of a call share a process)
-	uv run uvicorn dubhash.api.app:app --host $(HOST) --port $(PORT) --reload --ws-per-message-deflate false
+	uv run uvicorn convox.api.app:app --host $(HOST) --port $(PORT) --reload --ws-per-message-deflate false
 
 up: ## start postgres + redis (docker compose)
 	docker compose up -d postgres redis

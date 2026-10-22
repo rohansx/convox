@@ -2,8 +2,8 @@
 
 import dataclasses
 
-from dubhash.config.pairs import PairConfig, SideConfig, find_pair, load_pairs, orient
-from dubhash.config.settings import Settings
+from convox.config.pairs import PairConfig, SideConfig, find_pair, load_pairs, orient
+from convox.config.settings import Settings
 
 PAIRS = load_pairs(Settings(_env_file=None).pairs_file)
 

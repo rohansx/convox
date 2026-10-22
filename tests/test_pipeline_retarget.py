@@ -6,13 +6,13 @@ from __future__ import annotations
 from dataclasses import replace
 from pathlib import Path
 
-from dubhash.clock import FakeClock
-from dubhash.config.pairs import auto_pair, effective_pair, language_sides, load_pairs
-from dubhash.providers.fakes import FakeMT, FakeSTT, FakeTTS
+from convox.clock import FakeClock
+from convox.config.pairs import auto_pair, effective_pair, language_sides, load_pairs
+from convox.providers.fakes import FakeMT, FakeSTT, FakeTTS
 from tests.audio_fixtures import conversation
 from tests.test_pipeline import feed, make
 
-PAIRS = load_pairs(Path(__file__).resolve().parent.parent / "dubhash" / "config" / "pairs.yaml")
+PAIRS = load_pairs(Path(__file__).resolve().parent.parent / "convox" / "config" / "pairs.yaml")
 SIDES = language_sides(PAIRS)
 UTT = conversation([("silence", 300), ("speech", 1200), ("silence", 1000)])
 BASE = replace(auto_pair(PAIRS, {"a": "auto", "b": "auto"}, {}), early_final_ms=0)

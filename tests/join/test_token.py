@@ -1,11 +1,11 @@
 """Join tokens: a phone joins one side of one call without the console password."""
 
-from dubhash.config.settings import Settings
-from dubhash.join import tokens
+from convox.config.settings import Settings
+from convox.join import tokens
 
 
 def settings(**kw) -> Settings:
-    base = {"dubhash_env": "test", "console_password": "test-console-pw"}
+    base = {"convox_env": "test", "console_password": "test-console-pw"}
     return Settings(_env_file=None, **{**base, **kw})
 
 
@@ -43,7 +43,7 @@ def test_garbage_and_tampered_tokens_fail():
 
 def test_ward_tokens_do_not_open_a_call():
     """Same key, different purpose: a ward token is not a join token."""
-    from dubhash.ward import routes
+    from convox.ward import routes
 
     s = settings()
     ward = routes.make_ws_token(s, now=1000)
@@ -51,6 +51,6 @@ def test_ward_tokens_do_not_open_a_call():
 
 
 def test_prod_with_default_password_never_verifies():
-    s = settings(dubhash_env="prod", console_password="change-me")
+    s = settings(convox_env="prod", console_password="change-me")
     tok = tokens.make_join_token(s, "c_abc", "a", now=1000)
     assert not tokens.verify_join_token(s, tok, "c_abc", "a", now=1001)

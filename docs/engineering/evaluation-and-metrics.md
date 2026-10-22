@@ -1,6 +1,6 @@
 # Evaluation and metrics
 
-This document defines how we prove dubhash works: the v1 metrics with exact definitions and targets, the eval corpus and rating process, what we publish, and the limits we state openly. It is the contract between the build (P2's bench, Rohan's controller) and the claims we make in the deck and to platforms. P5 owns the corpus, the raters and the published numbers.
+This document defines how we prove Convox works: the v1 metrics with exact definitions and targets, the eval corpus and rating process, what we publish, and the limits we state openly. It is the contract between the build (P2's bench, Rohan's controller) and the claims we make in the deck and to platforms. P5 owns the corpus, the raters and the published numbers.
 
 ## v1 metrics
 

@@ -4,17 +4,17 @@ import base64
 import httpx
 import pytest
 
-from dubhash.api import app as app_module
-from dubhash.api.app import create_app
-from dubhash.api.deps import InMemoryCallRegistry
-from dubhash.config.settings import Settings
-from dubhash.events import EventBus
-from dubhash.store.writer import TurnWriter
-from dubhash.types import CallEvent, Turn
+from convox.api import app as app_module
+from convox.api.app import create_app
+from convox.api.deps import InMemoryCallRegistry
+from convox.config.settings import Settings
+from convox.events import EventBus
+from convox.store.writer import TurnWriter
+from convox.types import CallEvent, Turn
 
 
 def settings(**kw) -> Settings:
-    return Settings(_env_file=None, **{"dubhash_env": "test", **kw})
+    return Settings(_env_file=None, **{"convox_env": "test", **kw})
 
 
 @pytest.fixture
@@ -121,7 +121,7 @@ def basic(user: str, pw: str) -> dict[str, str]:
 
 
 async def test_console_requires_basic_auth_outside_test():
-    app = create_app(settings(dubhash_env="dev", console_password="test-console-pw"))
+    app = create_app(settings(convox_env="dev", console_password="test-console-pw"))
     async with client(app) as c:
         assert (await c.get("/healthz")).status_code == 200
         r = await c.get("/console")
@@ -133,7 +133,7 @@ async def test_console_requires_basic_auth_outside_test():
 
 
 async def test_prod_refuses_default_console_password():
-    app = create_app(settings(dubhash_env="prod", console_password="change-me"))
+    app = create_app(settings(convox_env="prod", console_password="change-me"))
     async with client(app) as c:
         r = await c.get("/console", headers=basic("op", "change-me"))
     assert r.status_code == 503
@@ -198,7 +198,7 @@ async def test_sse_endpoint_streams_bus_events():
 
 
 async def test_lifespan_starts_and_closes_injected_writer(tmp_path):
-    from dubhash.store.db import init_db, make_engine, make_sessionmaker
+    from convox.store.db import init_db, make_engine, make_sessionmaker
 
     engine = make_engine(f"sqlite+aiosqlite:///{tmp_path}/l.db")
     await init_db(engine)
@@ -213,7 +213,7 @@ async def test_lifespan_starts_and_closes_injected_writer(tmp_path):
 
 async def test_lifespan_dev_creates_db_and_writer(tmp_path):
     app = create_app(
-        settings(dubhash_env="dev", database_url=f"sqlite+aiosqlite:///{tmp_path}/d.db")
+        settings(convox_env="dev", database_url=f"sqlite+aiosqlite:///{tmp_path}/d.db")
     )
     async with app.router.lifespan_context(app):
         assert isinstance(app.state.writer, TurnWriter)
@@ -222,7 +222,7 @@ async def test_lifespan_dev_creates_db_and_writer(tmp_path):
 
 async def test_lifespan_dev_unreachable_db_still_starts():
     url = "postgresql+asyncpg://u:p@127.0.0.1:1/x"
-    app = create_app(settings(dubhash_env="dev", database_url=url))
+    app = create_app(settings(convox_env="dev", database_url=url))
     async with app.router.lifespan_context(app):
         assert app.state.writer is None
         async with client(app) as c:

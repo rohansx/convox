@@ -1,7 +1,7 @@
 import pytest
 
-from dubhash.interp.mt_cache import CachedMT
-from dubhash.providers.fakes import FakeMT
+from convox.interp.mt_cache import CachedMT
+from convox.providers.fakes import FakeMT
 
 
 async def test_hit_skips_inner_and_counts():

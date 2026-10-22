@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from dubhash.interp.phrases import PhrasePack, load_pack, normalize_phrase, verticals
+from convox.interp.phrases import PhrasePack, load_pack, normalize_phrase, verticals
 
 
 def test_normalize_lowercases_and_strips_punctuation():

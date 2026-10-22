@@ -3,7 +3,9 @@ sample-data preview need no password; the live dashboard starts calls, so it sit
 the console auth like /join."""
 
 import base64
+import json
 import re
+from pathlib import Path
 
 from tests.api.test_loopback import Env, _close_clients  # noqa: F401
 from tests.join.test_routes import figures
@@ -25,7 +27,7 @@ def start_demo(env: Env, a: str = "mr-IN", b: str = "hi-IN", headers=None):
 
 
 def test_landing_is_public():
-    env = Env(dubhash_env="dev", console_password="pw")
+    env = Env(convox_env="dev", console_password="pw")
     r = env.client.get("/", headers={"accept": "text/html"})
     assert r.status_code == 200 and "text/html" in r.headers["content-type"]
 
@@ -33,7 +35,7 @@ def test_landing_is_public():
 def test_landing_tells_problem_solution_and_links_the_demo():
     r = Env().client.get("/")
     page = r.text
-    assert "<title>" in page and "dubhash" in page
+    assert "<title>" in page and "convox" in page
     for section in ('id="problem"', 'id="how"', 'id="features"', 'id="usecases"'):
         assert section in page, section
     assert 'href="/demo"' in page and 'href="/demo/preview"' in page
@@ -52,7 +54,7 @@ def test_landing_names_the_supported_languages():
 
 
 def test_demo_needs_console_auth():
-    env = Env(dubhash_env="dev", console_password="pw")
+    env = Env(convox_env="dev", console_password="pw")
     assert env.client.get("/demo").status_code == 401
     r = env.client.get("/demo", headers={"accept": "text/html"}, follow_redirects=False)
     assert r.status_code == 303 and r.headers["location"] == "/login?next=/demo"
@@ -93,7 +95,7 @@ def test_dashboard_shows_qr_codes_and_wires_the_event_stream():
     figs = figures(page)
     assert set(figs) == {"a", "b"}
     for side, (url, svg) in figs.items():
-        assert url.startswith(f"https://dev.dubhash.in/join/{call_id}/{side}?t=")
+        assert url.startswith(f"https://dev.convox.in/join/{call_id}/{side}?t=")
         assert svg.startswith("<svg")
     assert f'data-events="/console/events?call={call_id}"' in page
     assert 'id="demo"' in page and "/static/console/demo.js" in page
@@ -107,16 +109,58 @@ def test_dashboard_for_unknown_call_is_404():
 
 
 def test_dashboard_needs_console_auth():
-    env = Env(dubhash_env="dev", console_password="pw")
+    env = Env(convox_env="dev", console_password="pw")
     call_id = start_demo(env, headers=basic("pw")).headers["location"].rsplit("/", 1)[1]
     assert env.client.get(f"/demo/{call_id}").status_code == 401
     assert env.client.get(f"/demo/{call_id}", headers=basic("pw")).status_code == 200
 
 
 def test_preview_is_public_and_says_it_is_sample_data():
-    env = Env(dubhash_env="dev", console_password="pw")
+    env = Env(convox_env="dev", console_password="pw")
     r = env.client.get("/demo/preview")
     assert r.status_code == 200
     assert 'data-preview="1"' in r.text
     assert "Sample data" in r.text
     assert "data-events" not in r.text  # no live stream, no call created
+
+
+# --- Convox brand and the landing call's real audio --------------------------------------
+
+STATIC = Path(__file__).resolve().parents[2] / "convox" / "console"
+
+
+def test_landing_is_branded_convox():
+    page = Env().client.get("/").text
+    assert "<title>Convox AI" in page and ">convox<" in page
+
+
+def test_no_page_or_asset_still_says_dubhash():
+    for f in [*STATIC.glob("templates/*.html"), *STATIC.glob("static/*.*")]:
+        assert "dubhash" not in f.read_text(encoding="utf-8").lower(), f.name
+
+
+def test_landing_has_a_sound_toggle_off_by_default():
+    page = Env().client.get("/").text
+    assert 'data-sound-toggle aria-pressed="false"' in page
+    assert "Turn sound on" in page
+
+
+def test_every_landing_line_has_real_audio_and_timings():
+    data = json.loads((STATIC / "static" / "landing" / "scenes.json").read_text())
+    assert set(data["scenes"]) == {"delivery", "clinic", "rent"}
+    for scene in data["scenes"].values():
+        assert scene["lines"]
+        for line in scene["lines"]:
+            for key in ("src_audio", "tgt_audio"):
+                f = STATIC / "static" / "landing" / line[key]
+                assert f.is_file() and f.stat().st_size > 1000, line[key]
+            assert line["tgt"] and line["src"] != line["tgt"]
+            assert line["mt_ms"] > 0 and line["tts_ttfb_ms"] > 0
+
+
+def test_landing_audio_is_served():
+    env = Env()
+    r = env.client.get("/static/console/landing/scenes.json")
+    assert r.status_code == 200
+    first = r.json()["scenes"]["delivery"]["lines"][0]["tgt_audio"]
+    assert env.client.get(f"/static/console/landing/{first}").status_code == 200

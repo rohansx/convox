@@ -2,8 +2,8 @@ import re
 
 import pytest
 
-from dubhash.session.prompts import line_check_text, opening_text
-from dubhash.session.registry import SessionRegistry, new_call_id
+from convox.session.prompts import line_check_text, opening_text
+from convox.session.registry import SessionRegistry, new_call_id
 
 
 def test_hindi_opening_line_names_the_other_language():

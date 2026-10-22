@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from dubhash.audio.frames import FRAME_BYTES, SAMPLE_RATE
+from convox.audio.frames import FRAME_BYTES, SAMPLE_RATE
 
 
 def _n(ms: int) -> int:

@@ -2,9 +2,9 @@
 
 from pathlib import Path
 
-from dubhash.config.pairs import PairConfig, load_pairs
+from convox.config.pairs import PairConfig, load_pairs
 
-PAIRS_FILE = Path(__file__).resolve().parent.parent / "dubhash" / "config" / "pairs.yaml"
+PAIRS_FILE = Path(__file__).resolve().parent.parent / "convox" / "config" / "pairs.yaml"
 
 
 def test_early_final_defaults_to_off():

@@ -10,16 +10,16 @@ from pathlib import Path
 
 import numpy as np
 
-from dubhash.audio.frames import FRAME_BYTES
-from dubhash.clock import FakeClock
-from dubhash.events import EventBus
-from dubhash.legs.base import LegTransport
-from dubhash.legs.fake import FakeLeg
-from dubhash.legs.recording import RecordingLeg
-from dubhash.legs.webrtc import WebRtcLeg
-from dubhash.legs.ws import ws_pair
-from dubhash.store.recorder import CallRecorder
-from dubhash.types import CallEvent
+from convox.audio.frames import FRAME_BYTES
+from convox.clock import FakeClock
+from convox.events import EventBus
+from convox.legs.base import LegTransport
+from convox.legs.fake import FakeLeg
+from convox.legs.recording import RecordingLeg
+from convox.legs.webrtc import WebRtcLeg
+from convox.legs.ws import ws_pair
+from convox.store.recorder import CallRecorder
+from convox.types import CallEvent
 from tests.audio_fixtures import conversation
 from tests.test_e2e_fake import make as make_e2e
 from tools.bench import drive_lockstep

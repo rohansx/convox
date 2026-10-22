@@ -11,11 +11,11 @@ import asyncio
 from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass, field
 
-from dubhash.audio.frames import FRAME_BYTES
-from dubhash.clock import FakeClock
-from dubhash.events import EventBus
-from dubhash.session.floor import FloorController
-from dubhash.types import CallEvent, Side, Translation, other
+from convox.audio.frames import FRAME_BYTES
+from convox.clock import FakeClock
+from convox.events import EventBus
+from convox.session.floor import FloorController
+from convox.types import CallEvent, Side, Translation, other
 
 LINE_CHECK_MARKER = 0xEE
 

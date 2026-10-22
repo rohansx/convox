@@ -50,11 +50,11 @@ flowchart LR
 
 | Path | Notes |
 |---|---|
-| `dubhash/session/` | `CallSession`, `FloorController`, `TurnLog` |
-| `dubhash/audio/mixer.py`, `frames.py` | Duck + earcon; `FrameClock`, 20 ms PCM16 @ 16 kHz frames |
-| `dubhash/legs/base.py`, `legs/fake.py` | `LegTransport` protocol and `FakeLeg` (Day 1, then handed to P3 for upkeep) |
-| `dubhash/providers/` interfaces + `fakes.py` | Provider protocols and fakes (Day 1) |
-| `dubhash/config/settings.py` | Provider selection by config |
+| `convox/session/` | `CallSession`, `FloorController`, `TurnLog` |
+| `convox/audio/mixer.py`, `frames.py` | Duck + earcon; `FrameClock`, 20 ms PCM16 @ 16 kHz frames |
+| `convox/legs/base.py`, `legs/fake.py` | `LegTransport` protocol and `FakeLeg` (Day 1, then handed to P3 for upkeep) |
+| `convox/providers/` interfaces + `fakes.py` | Provider protocols and fakes (Day 1) |
+| `convox/config/settings.py` | Provider selection by config |
 | `tests/test_floor.py`, `tests/test_mixer.py` | Controller invariants, ducking math |
 | Deploy (Compose, Caddy, ap-south-1 VM) | **(proposed)**, with P3 |
 
@@ -75,10 +75,10 @@ flowchart LR
 
 | Path | Notes |
 |---|---|
-| `dubhash/interp/vad.py`, `endpoint.py`, `stt.py`, `mt.py`, `pipeline.py` | One direction of the interpreter |
-| `dubhash/providers/sarvam_stt.py`, `sarvam_mt.py`, `deepgram_stt.py` | Vendor clients behind interfaces |
-| `dubhash/audio/resample.py` | soxr 8k ⇄ 16k **(proposed)**; needed if open question Q1 or Q6 comes back as 8k |
-| `dubhash/config/pairs.yaml` | `stt`, `eou_ms`, language codes (shared with P3 for `tts` / voice fields) |
+| `convox/interp/vad.py`, `endpoint.py`, `stt.py`, `mt.py`, `pipeline.py` | One direction of the interpreter |
+| `convox/providers/sarvam_stt.py`, `sarvam_mt.py`, `deepgram_stt.py` | Vendor clients behind interfaces |
+| `convox/audio/resample.py` | soxr 8k ⇄ 16k **(proposed)**; needed if open question Q1 or Q6 comes back as 8k |
+| `convox/config/pairs.yaml` | `stt`, `eou_ms`, language codes (shared with P3 for `tts` / voice fields) |
 | `tools/bench.py` | Two `FakeLeg`s, real providers, per-stage p50/p95, WER |
 | Pitch-based gender detector function | **(proposed)**; P3 consumes it for voice selection |
 
@@ -99,9 +99,9 @@ flowchart LR
 
 | Path | Notes |
 |---|---|
-| `dubhash/providers/eleven_tts.py`, `sarvam_tts.py`; `dubhash/interp/tts.py` | Streaming TTS, first chunk forwarded at once |
-| `dubhash/legs/exotel.py`, `plivo.py`, `webrtc.py` | About 120 lines per provider behind `LegTransport` |
-| `dubhash/api/` `/v1/calls`, `/ws/leg`, `/webhooks/*`, dial-in endpoints | **(proposed)**: the call setup, webhooks and leg websocket live in `api/` |
+| `convox/providers/eleven_tts.py`, `sarvam_tts.py`; `convox/interp/tts.py` | Streaming TTS, first chunk forwarded at once |
+| `convox/legs/exotel.py`, `plivo.py`, `webrtc.py` | About 120 lines per provider behind `LegTransport` |
+| `convox/api/` `/v1/calls`, `/ws/leg`, `/webhooks/*`, dial-in endpoints | **(proposed)**: the call setup, webhooks and leg websocket live in `api/` |
 | `tools/loopback.py` | Two browser legs |
 | `config/pairs.yaml` voice fields | `tts`, `voice_m`, `voice_f` per side |
 
@@ -122,9 +122,9 @@ flowchart LR
 
 | Path | Notes |
 |---|---|
-| `dubhash/console/` | Templates + SSE (`GET /console`, `/console/events?call=…`) |
+| `convox/console/` | Templates + SSE (`GET /console`, `/console/events?call=…`) |
 | Ward mode page | Under `console/` or its own route; path TBD in [repo-structure](../engineering/repo-structure.md) |
-| `dubhash/store/models.py`, `writer.py` | **(proposed)**: SQLAlchemy models and the async batch writer; P4 reads them for the turns view |
+| `convox/store/models.py`, `writer.py` | **(proposed)**: SQLAlchemy models and the async batch writer; P4 reads them for the turns view |
 
 **Done means.** The ward demo runs on one phone, and the console shows the stage call. The console has to look finished because it is both the stage demo surface and the platform trust-review surface.
 

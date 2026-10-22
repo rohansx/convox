@@ -1,4 +1,4 @@
-"""Per-turn timeline of a recorded call (CALL_RECORDING, dubhash/store/recorder.py).
+"""Per-turn timeline of a recorded call (CALL_RECORDING, convox/store/recorder.py).
 
     uv run python tools/call_report.py c_ab12cd34ef           # finds out/calls/*/c_ab12cd34ef
     uv run python tools/call_report.py out/calls/2026-10-21/c_ab12cd34ef
@@ -34,7 +34,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from dubhash.store.timeline import STAGES, analyze  # noqa: E402
+from convox.store.timeline import STAGES, analyze  # noqa: E402
 
 DEFAULT_DIR = ROOT / "out" / "calls"
 # a gap over this many ms is highlighted (rough per-stage budget for ~1.5 s first audio)
@@ -226,7 +226,7 @@ def main(argv: list[str] | None = None) -> int:
     base = a.dir
     if base is None:
         try:
-            from dubhash.config.settings import Settings
+            from convox.config.settings import Settings
 
             base = Path(Settings(_env_file=ROOT / ".env").call_recording_dir)  # type: ignore[call-arg]
         except Exception:

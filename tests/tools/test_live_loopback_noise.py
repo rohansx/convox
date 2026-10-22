@@ -7,8 +7,8 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from dubhash.audio.earcon import EARCON
-from dubhash.audio.frames import FRAME_BYTES
+from convox.audio.earcon import EARCON
+from convox.audio.frames import FRAME_BYTES
 from tests.audio_fixtures import dbfs, speech
 from tools import live_loopback as ll
 
@@ -62,7 +62,7 @@ async def test_tab_mixes_noise_into_every_mic_frame():
 
 @pytest.fixture
 def server():
-    with ll.serve({"dubhash_env": "test"}, None) as srv:
+    with ll.serve({"convox_env": "test"}, None) as srv:
         yield srv
 
 

@@ -1,6 +1,6 @@
 # Interpreter pipeline (one direction)
 
-This doc covers one `Interpreter`: the code that turns one leg's incoming speech into translated audio for the other leg. A call runs two of them, A→B and B→A, as mirror images. Each one goes through the same eight stages: **frames, vad, endpoint, stt, translate, tts, mix, log**. The interpreter does not own playout. It hands a finished `Translation` (text plus an async audio iterator) to the [floor controller](floor-controller.md), and only the controller may call `send()`, `clear()` or `mark()` on a leg. This doc is for whoever works on `dubhash/interp/` (P2 owns vad/endpoint/stt/mt, P3 owns tts) and for anyone reading latency numbers.
+This doc covers one `Interpreter`: the code that turns one leg's incoming speech into translated audio for the other leg. A call runs two of them, A→B and B→A, as mirror images. Each one goes through the same eight stages: **frames, vad, endpoint, stt, translate, tts, mix, log**. The interpreter does not own playout. It hands a finished `Translation` (text plus an async audio iterator) to the [floor controller](floor-controller.md), and only the controller may call `send()`, `clear()` or `mark()` on a leg. This doc is for whoever works on `convox/interp/` (P2 owns vad/endpoint/stt/mt, P3 owns tts) and for anyone reading latency numbers.
 
 ---
 
@@ -31,14 +31,14 @@ The input side (vad, endpoint, stt) keeps running whatever the output side is do
 Module layout (from the spec):
 
 ```
-dubhash/interp/
+convox/interp/
   vad.py        Silero v5 onnx wrapper, RMS
   endpoint.py   EOU decision, backchannel tagging
   stt.py        STT stream interface + selection (SarvamStream, DeepgramStream, FakeSTT)
   mt.py         MT interface + translation cache (SarvamMT, FakeMT)
   tts.py        TTS stream interface + voice selection (BulbulStream, ElevenStream, FakeTTS)
   pipeline.py   Interpreter: wires the stages for one direction
-dubhash/providers/
+convox/providers/
   sarvam_stt.py  deepgram_stt.py  sarvam_mt.py  sarvam_tts.py  eleven_tts.py  fakes.py
 ```
 

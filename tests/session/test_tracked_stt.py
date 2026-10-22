@@ -4,9 +4,9 @@ restart after speech resumed); that stream belongs to the same, still-open utter
 
 from collections import deque
 
-from dubhash.clock import FakeClock
-from dubhash.providers.fakes import FakeSTT
-from dubhash.session.call_session import _TrackedSTT, _Utt
+from convox.clock import FakeClock
+from convox.providers.fakes import FakeSTT
+from convox.session.call_session import _TrackedSTT, _Utt
 
 
 async def test_restarted_stream_updates_the_current_utterance():

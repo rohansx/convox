@@ -3,9 +3,9 @@ import json
 import httpx
 import pytest
 
-from dubhash.interp.contracts import TTS
-from dubhash.providers.eleven_tts import ElevenTTS, vendor_voice_id
-from dubhash.providers.registry import ProviderError
+from convox.interp.contracts import TTS
+from convox.providers.eleven_tts import ElevenTTS, vendor_voice_id
+from convox.providers.registry import ProviderError
 
 
 class _Chunked(httpx.AsyncByteStream):

@@ -7,8 +7,8 @@ from __future__ import annotations
 
 import numpy as np
 
-from dubhash.audio.frames import FRAME_BYTES, FRAME_MS
-from dubhash.interp.endpoint import Endpointer, SpeechStart, Utterance
+from convox.audio.frames import FRAME_BYTES, FRAME_MS
+from convox.interp.endpoint import Endpointer, SpeechStart, Utterance
 
 
 def loud(amp: int = 8000) -> bytes:
@@ -39,7 +39,7 @@ def test_default_is_fifteen_seconds():
 
 
 def test_pair_default_is_fifteen_seconds(tmp_path):
-    from dubhash.config.pairs import load_pairs
+    from convox.config.pairs import load_pairs
 
     f = tmp_path / "p.yaml"
     side = "{ lang: hi-IN, stt: fake, tts: fake, voice_m: m, voice_f: f }"
@@ -91,8 +91,8 @@ def test_zero_disables_it():
 
 
 def test_pair_config_carries_max_utterance_ms(tmp_path):
-    from dubhash.config.pairs import load_pairs
-    from dubhash.config.settings import PACKAGE_DIR
+    from convox.config.pairs import load_pairs
+    from convox.config.settings import PACKAGE_DIR
 
     pairs = load_pairs(PACKAGE_DIR / "config" / "pairs.yaml")
     assert all(p.max_utterance_ms == 15000 for p in pairs.values())
@@ -108,11 +108,11 @@ def test_pair_config_carries_max_utterance_ms(tmp_path):
 async def test_the_interpreter_uses_the_pairs_limit():
     import dataclasses
 
-    from dubhash.clock import FakeClock
-    from dubhash.config.pairs import load_pairs
-    from dubhash.config.settings import PACKAGE_DIR
-    from dubhash.interp.pipeline import Interpreter
-    from dubhash.providers.fakes import EnergyVAD, FakeMT, FakeSTT, FakeTTS
+    from convox.clock import FakeClock
+    from convox.config.pairs import load_pairs
+    from convox.config.settings import PACKAGE_DIR
+    from convox.interp.pipeline import Interpreter
+    from convox.providers.fakes import EnergyVAD, FakeMT, FakeSTT, FakeTTS
     from tests.test_pipeline import RecordingSink
 
     pairs = load_pairs(PACKAGE_DIR / "config" / "pairs.yaml")

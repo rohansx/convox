@@ -1,6 +1,6 @@
 # Business model
 
-This document covers who pays for dubhash, how pricing works for each buyer, what an interpreted minute costs us, what is and is not defensible, the competitors, and how we plan to reach the first paying customer. The cost table carries a known caveat (see [TTS cost caveat](#tts-cost-caveat)). Treat every ₹ figure as an estimate from retail API prices until vendor contracts exist.
+This document covers who pays for Convox, how pricing works for each buyer, what an interpreted minute costs us, what is and is not defensible, the competitors, and how we plan to reach the first paying customer. The cost table carries a known caveat (see [TTS cost caveat](#tts-cost-caveat)). Treat every ₹ figure as an estimate from retail API prices until vendor contracts exist.
 
 ## Who pays
 
@@ -64,11 +64,11 @@ The consumer price of ₹2/min is below the ~₹4 to 5 cost. The dial-in number 
 - **Per-turn log across millions of calls.** It is a dataset of what mistranslates in Indian conversation. It improves the product and is valuable to every engine vendor. It is subject to the retention rules in [security and privacy](../tech-spec/security-privacy.md): text is stored only with `record: true` or platform opt-in.
 - **Integrations and trust reviews.** Getting inside one gig platform's masked-call path takes a six-month procurement and security process. Once we are in, replacing us takes the same six months.
 
-**What is not a moat:** the pipeline itself. Sarvam could ship it. Our bet is that Sarvam sells models and will not run a bridge with a hospital sales team, and that Exotel sells plumbing and will not build the controller. Each of those vendors thinks the other half is not its job, and dubhash is the product between them.
+**What is not a moat:** the pipeline itself. Sarvam could ship it. Our bet is that Sarvam sells models and will not run a bridge with a hospital sales team, and that Exotel sells plumbing and will not build the controller. Each of those vendors thinks the other half is not its job, and Convox is the product between them.
 
 ## Competitive map
 
-| Category | Players | Relation to dubhash |
+| Category | Players | Relation to Convox |
 |---|---|---|
 | Translation apps | Google Translate conversation mode, Jio Translate, Sarvam's consumer app | Users talk into one phone. Not inside a call, no telephony, no floor control. |
 | Carrier-level call translation | Optus (Australia) trial, Samsung Galaxy live translate (on-device, English-centric) | Proves the category exists. Neither handles Indic pairs on an Indian phone call. |
@@ -89,11 +89,11 @@ Platform procurement takes about six months to a yes. The hospital ward mode and
 
 Engineering phases behind these windows are in [phases](../plan/phases.md).
 
-**Trust-review package for platforms** (what gets dubhash past a platform's security team):
+**Trust-review package for platforms** (what gets Convox past a platform's security team):
 
 - DTMF 0 escape into bypass mode (plain bridge).
 - A per-turn audit log via `GET /v1/calls/{id}/turns`.
-- The opening line, which discloses dubhash in both languages.
+- The opening line, which discloses Convox in both languages.
 - No voice cloning in v1.
 - Hosting in the India region (ap-south-1).
 - Transcripts retained only if the platform opts in.

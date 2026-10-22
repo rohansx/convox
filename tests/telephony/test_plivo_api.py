@@ -5,15 +5,15 @@ import xml.etree.ElementTree as ET
 import httpx
 import pytest
 
-from dubhash.telephony.base import DialError
-from dubhash.telephony.plivo_api import PlivoDialer, stream_xml
+from convox.telephony.base import DialError
+from convox.telephony.plivo_api import PlivoDialer, stream_xml
 
 
 def make(handler) -> PlivoDialer:
     return PlivoDialer(
         auth_id="MAXXX",
         auth_token="tok",
-        public_base_url="https://api.dubhash.in/",
+        public_base_url="https://api.convox.in/",
         client=httpx.AsyncClient(transport=httpx.MockTransport(handler)),
         ring_timeout_s=25,
     )
@@ -37,9 +37,9 @@ async def test_dial_posts_call_with_answer_url():
     assert base64.b64decode(req.headers["authorization"].split()[1]).decode() == "MAXXX:tok"
     body = json.loads(req.content)
     assert body["from"] == "918047000000" and body["to"] == "919876543210"
-    assert body["answer_url"] == "https://api.dubhash.in/telephony/plivo/answer?call=c_abc&side=b"
+    assert body["answer_url"] == "https://api.convox.in/telephony/plivo/answer?call=c_abc&side=b"
     assert body["answer_method"] == "POST"
-    assert body["hangup_url"] == "https://api.dubhash.in/webhooks/plivo?call=c_abc&side=b"
+    assert body["hangup_url"] == "https://api.convox.in/webhooks/plivo?call=c_abc&side=b"
     assert body["ring_timeout"] == 25
 
 

@@ -10,14 +10,14 @@ import asyncio
 import dataclasses
 from pathlib import Path
 
-from dubhash.clock import FakeClock
-from dubhash.config.pairs import load_pairs
-from dubhash.interp.pipeline import Interpreter
-from dubhash.providers.fakes import EnergyVAD, FakeMT, FakeSTT, FakeTTS
+from convox.clock import FakeClock
+from convox.config.pairs import load_pairs
+from convox.interp.pipeline import Interpreter
+from convox.providers.fakes import EnergyVAD, FakeMT, FakeSTT, FakeTTS
 from tests.audio_fixtures import conversation, frames
 from tests.test_pipeline import RecordingSink
 
-PAIRS = load_pairs(Path(__file__).resolve().parent.parent / "dubhash" / "config" / "pairs.yaml")
+PAIRS = load_pairs(Path(__file__).resolve().parent.parent / "convox" / "config" / "pairs.yaml")
 BASE = dataclasses.replace(PAIRS["hi-kn-direct"], spec_mt=False, early_final_ms=0)
 EARLY = dataclasses.replace(BASE, early_final_ms=200)
 STT_MS, MT_MS, TTS_MS = 290, 700, 250

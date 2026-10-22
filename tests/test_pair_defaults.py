@@ -1,9 +1,9 @@
 """Decisions of 21 Oct: Bulbul speaks Hindi (no ElevenLabs on the default path), and
 hi->kn uses the speech->English pivot (open question L1)."""
 
-from dubhash.config.pairs import find_pair, load_pairs
-from dubhash.config.settings import Settings
-from dubhash.ward.service import ward_pair
+from convox.config.pairs import find_pair, load_pairs
+from convox.config.settings import Settings
+from convox.ward.service import ward_pair
 
 PAIRS = load_pairs(Settings(_env_file=None).pairs_file)
 

@@ -8,7 +8,7 @@ Accepted (October 2026).
 
 ## Context
 
-- dubhash must sit inside a call that already passes through a CPaaS ([telephony-integration.md](../telephony-integration.md)). It needs **two-way** audio per leg, with barge-in (`clear`) and playback marks.
+- Convox must sit inside a call that already passes through a CPaaS ([telephony-integration.md](../telephony-integration.md)). It needs **two-way** audio per leg, with barge-in (`clear`) and playback marks.
 - Exotel is a buildathon sponsor and the vendor behind most masked calls in India. Its voicebot applet is two-way; its stream applet is one-way and unusable.
 - Exotel streaming access may slip; it is requested via the sponsor channel in week one.
 - Plivo is self-serve once the Udyam registration is verified.

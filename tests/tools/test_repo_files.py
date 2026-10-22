@@ -34,7 +34,7 @@ def test_makefile_has_targets():
 
 def test_makefile_dev_runs_one_uvicorn_worker_with_reload():
     text = (ROOT / "Makefile").read_text()
-    assert "uvicorn dubhash.api.app:app" in text
+    assert "uvicorn convox.api.app:app" in text
     assert "--reload" in text
     assert "--workers" not in text or "--workers 1" in text
 

@@ -1,0 +1,201 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Convox AI · live interpreter for phone calls</title>
+  <meta name="description" content="Convox joins an ordinary phone call and interprets both ways in real time across Indian languages: मराठी, हिन्दी, ગુજરાતી, English, ಕನ್ನಡ, தமிழ். No app, any phone.">
+  <meta name="theme-color" content="#ffffff">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
+  <link rel="stylesheet" href="/static/console/landing.css">
+</head>
+<body>
+
+{% macro mark(cls="") -%}
+<svg class="mark {{ cls }}" viewBox="0 0 24 24" aria-hidden="true"><rect width="24" height="24" rx="7" fill="currentColor"/><rect x="5" y="9" width="2.4" height="6" rx="1.2" fill="#fff"/><rect x="9" y="6" width="2.4" height="12" rx="1.2" fill="#fff"/><rect x="13" y="8" width="2.4" height="8" rx="1.2" fill="#ff5b14"/><rect x="17" y="10" width="2.4" height="4" rx="1.2" fill="#ff5b14"/></svg>
+{%- endmacro %}
+
+<header class="nav">
+  <div class="wrap nav-in">
+    <a class="logo" href="/">{{ mark() }}<span>convox</span></a>
+    <nav>
+      <a href="#how">How it works</a>
+      <a href="#dashboard">Dashboard</a>
+      <a href="#usecases">Use cases</a>
+    </nav>
+    <a class="btn btn-dark btn-sm" href="/demo">Live demo</a>
+  </div>
+</header>
+
+<main>
+<section class="hero wrap">
+  <a class="badge" href="#call"><span class="dot"></span>Live in मराठी, हिन्दी, ગુજરાતી, English, ಕನ್ನಡ and தமிழ்</a>
+  <h1>Phone calls,<br>interpreted live.</h1>
+  <p class="sub">Convox joins an ordinary phone call and interprets both ways in real time. Each person speaks their own language and hears the other in theirs, about a second after they pause.</p>
+  <div class="ctas">
+    <a class="btn btn-dark" href="/demo">Try the live demo</a>
+    <button class="btn btn-light" type="button" data-sound-toggle data-scroll>
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>Hear a call
+    </button>
+  </div>
+</section>
+
+<section class="wrap" id="call">
+  <div class="panel" id="stage">
+    <div class="panel-bar">
+      <div class="tabs" role="tablist" aria-label="Example call">
+        <button role="tab" class="tab" data-scene="delivery" aria-selected="true">Delivery</button>
+        <button role="tab" class="tab" data-scene="clinic" aria-selected="false">Clinic</button>
+        <button role="tab" class="tab" data-scene="rent" aria-selected="false">Rent</button>
+      </div>
+      <button class="sound" type="button" data-sound-toggle aria-pressed="false">
+        <svg class="ico-off" viewBox="0 0 24 24" aria-hidden="true"><path d="M11 5 6 9H3v6h3l5 4V5Z"/><path d="m22 9-6 6m0-6 6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        <svg class="ico-on" viewBox="0 0 24 24" aria-hidden="true"><path d="M11 5 6 9H3v6h3l5 4V5Z"/><path d="M15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        <span class="sound-label">Turn sound on to hear the call</span>
+      </button>
+    </div>
+
+    <div class="phones">
+      {% for side in ("a", "b") %}
+      <div class="iphone" data-side="{{ side }}">
+        <span class="hw hw-1"></span><span class="hw hw-2"></span><span class="hw hw-3"></span><span class="hw hw-4"></span>
+        <div class="screen">
+          <div class="island"></div>
+          <div class="statusbar"><span>9:41</span><span class="sb"><i class="sig"></i><i class="bat"></i></span></div>
+          <div class="callhead">
+            <div class="avatar" data-role="avatar"></div>
+            <b data-role="name"></b>
+            <span class="via"><span data-role="lang"></span> · <span data-role="timer">00:00</span></span>
+          </div>
+          <div class="convo" data-role="convo" aria-live="polite"></div>
+          <div class="callfoot">
+            <div class="wave">{% for i in range(28) %}<i style="--i:{{ i }}"></i>{% endfor %}</div>
+            <p class="status" data-role="status">Connecting</p>
+            <div class="keys" aria-hidden="true"><i></i><i></i><i></i><i class="end"></i></div>
+          </div>
+          <div class="homebar"></div>
+        </div>
+      </div>
+      {% if side == "a" %}
+      <div class="link" id="link" aria-hidden="true">
+        <div class="link-line"><span class="pulse"></span></div>
+        <div class="link-card">
+          {{ mark("sm") }}
+          <b data-role="dir">Listening</b>
+          <span data-role="timing">&nbsp;</span>
+        </div>
+        <div class="link-line"><span class="pulse"></span></div>
+      </div>
+      {% endif %}
+      {% endfor %}
+    </div>
+
+    <p class="panel-note"><span id="stage-caption"></span> The speakers are synthetic voices. The translation and the interpreter's voice are Convox's real output (Sarvam Mayura and Bulbul), with times measured when it was generated.</p>
+  </div>
+  <p class="built">Built on <b>Sarvam AI</b> speech models and <b>Exotel</b> telephony, for the <b>Bolna Symphony Buildathon</b>.</p>
+</section>
+
+<section class="wrap section split" id="problem">
+  <div>
+    <p class="eyebrow">The problem</p>
+    <h2>22 languages.<br>One phone call.</h2>
+  </div>
+  <div class="prose">
+    <p>More than 45 crore Indians live away from where they were born (Census 2011). They deliver parcels, drive cabs, repair homes and call clinics, often in a language that isn't theirs.</p>
+    <p>When the two people on a call don't share a language, the call quietly fails. The rider can't find the gate, the dosage is half understood, the OTP is misheard. Today's fix is a relative on speakerphone, or hanging up.</p>
+    <dl class="stats">
+      <div><dt>22</dt><dd>scheduled languages</dd></div>
+      <div><dt>45 cr+</dt><dd>internal migrants, Census 2011</dd></div>
+      <div><dt>0</dt><dd>apps needed to use Convox</dd></div>
+    </dl>
+  </div>
+</section>
+
+<section class="wrap section" id="how">
+  <p class="eyebrow">How it works</p>
+  <h2 class="narrow">An interpreter that joins the call and stays out of the way.</h2>
+  <ol class="steps">
+    <li><span class="n">01</span><h3>Listens</h3><p>Knows when you've finished a thought. A "haan" or "hmm" doesn't interrupt.</p></li>
+    <li><span class="n">02</span><h3>Understands</h3><p>Sarvam speech recognition in six Indian languages, detected from your first two seconds.</p></li>
+    <li><span class="n">03</span><h3>Translates</h3><p>Sarvam Mayura translation. Every number is read back and checked, so 47296 stays 47296.</p></li>
+    <li><span class="n">04</span><h3>Speaks</h3><p>A natural Bulbul voice in the listener's language, matched to the speaker, after a soft chime.</p></li>
+  </ol>
+  <div class="numbers">
+    <div class="num-card">
+      <p class="num-k">Pause to translated voice</p>
+      <p class="num-v">1.4 s</p>
+      <div class="bar"><span style="--w:39%" class="s1"></span><span style="--w:18%" class="s2"></span><span style="--w:25%" class="s3"></span><span style="--w:18%" class="s4"></span></div>
+      <ul class="legend"><li class="s1">end of turn</li><li class="s2">recognise</li><li class="s3">translate</li><li class="s4">voice</li></ul>
+      <p class="num-foot">Median on live calls, Hindi → Kannada.</p>
+    </div>
+    <div class="num-card">
+      <p class="num-k">Long sentences start before you finish</p>
+      <p class="num-v">7.7 s <span>→</span> 4.3 s</p>
+      <div class="race">
+        <div><span>Whole sentence</span><i class="slow" style="--w:100%"></i></div>
+        <div><span>Clause by clause</span><i class="fast" style="--w:56%"></i></div>
+      </div>
+      <p class="num-foot">Speech start to first translated word, live Marathi → English. Never splits a number.</p>
+    </div>
+  </div>
+</section>
+
+<section class="wrap section" id="dashboard">
+  <p class="eyebrow">The dashboard</p>
+  <h2 class="narrow">See every turn, as it happens.</h2>
+  <p class="lead">Both languages side by side, how long each line took, where the time went, who has the line, and every number check. This is the real dashboard playing a sample call.</p>
+  <div class="browser">
+    <div class="browser-bar"><i></i><i></i><i></i><span>convox · demo</span></div>
+    <div class="browser-view" id="dash-view">
+      <iframe title="Convox dashboard playing a sample call" data-src="/demo/preview" tabindex="-1"></iframe>
+    </div>
+  </div>
+</section>
+
+<section class="wrap section" id="features">
+  <p class="eyebrow">Why it feels like a real call</p>
+  <h2 class="narrow">Built for how India talks on the phone.</h2>
+  <div class="grid">
+    <article><h3>One voice at a time</h3><p>A floor controller decides who has the line, so nobody hears two voices at once. Speak up to cut in.</p></article>
+    <article><h3>Numbers come out right</h3><p>OTPs, amounts, flat and phone numbers are checked digit by digit between what was said and what is heard.</p></article>
+    <article><h3>Knows your language</h3><p>Detected automatically. If it can't tell, one keypad press picks it.</p></article>
+    <article><h3>No app, any phone</h3><p>Works on a normal phone call through Exotel. For demos, two phones scan a QR code.</p></article>
+    <article><h3>Keypad control</h3><p><kbd>1</kbd> replays the last line. <kbd>0</kbd> turns interpreting off.</p></article>
+    <article><h3>Private by default</h3><p>No recording in production. Transcripts only with consent, in line with the DPDP Act.</p></article>
+  </div>
+</section>
+
+<section class="wrap section" id="usecases">
+  <p class="eyebrow">Use cases</p>
+  <h2 class="narrow">Every call where language is the blocker.</h2>
+  <ul class="uses">
+    <li><b>Delivery and logistics</b><span>Directions, gates and OTPs between riders and customers.</span><em>मराठी ⇄ हिन्दी</em></li>
+    <li><b>Clinics and teleconsults</b><span>Symptoms in the patient's words, dosage that arrives intact.</span><em>ગુજરાતી ⇄ English</em></li>
+    <li><b>Rentals and home services</b><span>Tenants, landlords and technicians agree on what, when and how much.</span><em>ಕನ್ನಡ ⇄ हिन्दी</em></li>
+    <li><b>Customer support</b><span>One desk serves every state, without routing calls by language.</span><em>தமிழ் ⇄ हिन्दी</em></li>
+    <li><b>Hiring and gig work</b><span>Employers and workers from different states settle shifts and pay.</span><em>हिन्दी ⇄ ಕನ್ನಡ</em></li>
+  </ul>
+</section>
+
+<section class="wrap">
+  <div class="cta">
+    <h2>Try it with two phones.</h2>
+    <p>Open the demo on a laptop, pick two languages, and scan one QR code with each phone. Then just talk.</p>
+    <div class="ctas">
+      <a class="btn btn-white" href="/demo">Open the live demo</a>
+      <a class="btn btn-outline" href="/demo/preview">Watch a sample call</a>
+    </div>
+  </div>
+</section>
+</main>
+
+<footer class="wrap foot">
+  <a class="logo" href="/">{{ mark() }}<span>convox</span></a>
+  <span>© 2026 Convox AI · Speech by Sarvam AI · Telephony by Exotel</span>
+</footer>
+
+<script src="/static/console/landing.js" defer></script>
+</body>
+</html>

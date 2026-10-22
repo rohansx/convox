@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import asyncio
 
-from dubhash.audio.frames import FRAME_BYTES
+from convox.audio.frames import FRAME_BYTES
 from tests.floor_helpers import FeedAudio, Rig, frames_of, settle, tts
 
 PROMPT_MARKER = 0xDD

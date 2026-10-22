@@ -1,6 +1,6 @@
 # Dev setup
 
-This document gets a new engineer from a clean laptop to a running dubhash: the offline tests on fakes, the API with the console, the live vendor smoke test, and the eval tools, without spending any telephony minutes. Every command here exists in the repo today. If you change a command, change this doc in the same PR; `tests/tools/test_repo_files.py` checks that its links resolve and that the main commands are still mentioned.
+This document gets a new engineer from a clean laptop to a running convox: the offline tests on fakes, the API with the console, the live vendor smoke test, and the eval tools, without spending any telephony minutes. Every command here exists in the repo today. If you change a command, change this doc in the same PR; `tests/tools/test_repo_files.py` checks that its links resolve and that the main commands are still mentioned.
 
 ## Prerequisites
 
@@ -16,7 +16,7 @@ This document gets a new engineer from a clean laptop to a running dubhash: the 
 ## 1. Install
 
 ```bash
-git clone <repo-url> dubhash && cd dubhash
+git clone <repo-url> Convox && cd Convox
 uv sync          # or: make install. Creates .venv from pyproject.toml + uv.lock, dev group included
 cp .env.example .env
 ```
@@ -30,7 +30,7 @@ cp .env.example .env
 | `make test-live` | `uv run pytest -m live -s` (each test skips when its key is missing) |
 | `make lint` | `uv run ruff check .` and `uv run ruff format --check .` (what CI runs) |
 | `make fmt` | `ruff check --fix` and `ruff format` |
-| `make dev` | `uv run uvicorn dubhash.api.app:app --host 127.0.0.1 --port 8000 --reload --ws-per-message-deflate false` |
+| `make dev` | `uv run uvicorn convox.api.app:app --host 127.0.0.1 --port 8000 --reload --ws-per-message-deflate false` |
 | `make up` / `make down` | `docker compose up -d postgres redis` / `docker compose down` |
 | `make bench` | `uv run python -m tools.bench $(BENCH_ARGS)` |
 | `make smoke` | `uv run python tools/smoke.py $(SMOKE_ARGS)` |
@@ -41,18 +41,18 @@ Override variables on the command line: `make dev PORT=8080 HOST=0.0.0.0`, `make
 
 ## 2. Environment variables
 
-`dubhash/config/settings.py` reads `.env` (pydantic-settings). The full list with examples is in `.env.example` and in [configuration](../tech-spec/configuration.md#configsettingspy-environment-variables). Missing vendor keys never crash startup: the provider just can't be selected and the fakes keep working.
+`convox/config/settings.py` reads `.env` (pydantic-settings). The full list with examples is in `.env.example` and in [configuration](../tech-spec/configuration.md#configsettingspy-environment-variables). Missing vendor keys never crash startup: the provider just can't be selected and the fakes keep working.
 
 | Variable | Needed for | Notes |
 |---|---|---|
-| `DUBHASH_ENV` | all | `dev` \| `test` \| `prod`. `test` forces fakes and turns console auth off (CI sets it) |
+| `CONVOX_ENV` | all | `dev` \| `test` \| `prod`. `test` forces fakes and turns console auth off (CI sets it) |
 | `STT_IMPL`, `MT_IMPL`, `TTS_IMPL` | provider registry | `fake` (default) \| `real`. Set all three to `real` to use the vendors in the app |
 | `SARVAM_API_KEY` | Sarvam STT, Mayura translate, Bulbul TTS | |
 | `ELEVENLABS_API_KEY` | ElevenLabs Flash v2.5 (hi, en targets) | |
 | `DEEPGRAM_API_KEY` | Deepgram Nova fallback | optional; expected to be empty for now |
 | `CONSOLE_PASSWORD` | `/console`, `/ward` | HTTP Basic, any username |
 | `DATABASE_URL`, `REDIS_URL` | turn writer, registry | the app logs `store.unavailable` and carries on if the DB does not answer within 3 s |
-| `PAIRS_FILE` | interpreters | leave unset to use the packaged `dubhash/config/pairs.yaml` (see troubleshooting) |
+| `PAIRS_FILE` | interpreters | leave unset to use the packaged `convox/config/pairs.yaml` (see troubleshooting) |
 | `EXOTEL_*`, `PLIVO_*` | telephony legs | fill in when access lands |
 
 Rules: `.env` is gitignored, only `.env.example` is committed. Share keys through a password manager, never chat or git.
@@ -138,7 +138,7 @@ STT_IMPL=real MT_IMPL=real TTS_IMPL=real uv run python tools/live_loopback.py --
 uv run python tools/live_loopback.py --fake            # fake providers, synthetic audio, no network
 ```
 
-Set the three `*_IMPL` switches in the environment: the tool does not trust the `.env` values for them. If `.env` has no valid `DUBHASH_ENV`, prefix `DUBHASH_ENV=dev` too. Flags: `--n` (script lines, default 6), `--pause-ms`, `--log INFO`, `--out`.
+Set the three `*_IMPL` switches in the environment: the tool does not trust the `.env` values for them. If `.env` has no valid `CONVOX_ENV`, prefix `CONVOX_ENV=dev` too. Flags: `--n` (script lines, default 6), `--pause-ms`, `--log INFO`, `--out`.
 
 The script is example call 1 from [problem and users](../product/problem-and-users.md): a rider speaking Hindi on leg A and a customer speaking Kannada on leg B, 6 lines. The utterances are synthesised once with Bulbul (`shubh` for the rider, `ishita` for the customer) and cached in `out/live/utt_*.wav`. The Kannada lines are our own and still need a native speaker's review. The tool waits for both opening lines to finish playing, then plays one line at a time, and waits for the translation to finish before the next line.
 
@@ -152,12 +152,12 @@ It also prints p50/p95 for every column and when each caller first heard the ope
 
 ### Diagnosing a test call (recording and timeline)
 
-In `DUBHASH_ENV=dev` every call is recorded (`CALL_RECORDING`, [configuration](../tech-spec/configuration.md#fakes-and-dev-switches)): the QR stage demo (`/join`), loopback tabs, live_loopback runs and real legs alike. Each call leaves `out/calls/<YYYY-MM-DD>/<call_id>/` with `a_in/b_in.wav` (each mic), `a_out/b_out.wav` (what each phone was sent, where it played), `events.jsonl` (every event, with wall-clock and call-relative ms), `client.jsonl` (the phone page's telemetry and ping/pong clock offset) and `summary.json`. The app log is also written as JSON lines to `logs/dubhash.log` (rotating, kept across restarts), each line with its `call_id`.
+In `CONVOX_ENV=dev` every call is recorded (`CALL_RECORDING`, [configuration](../tech-spec/configuration.md#fakes-and-dev-switches)): the QR stage demo (`/join`), loopback tabs, live_loopback runs and real legs alike. Each call leaves `out/calls/<YYYY-MM-DD>/<call_id>/` with `a_in/b_in.wav` (each mic), `a_out/b_out.wav` (what each phone was sent, where it played), `events.jsonl` (every event, with wall-clock and call-relative ms), `client.jsonl` (the phone page's telemetry and ping/pong clock offset) and `summary.json`. The app log is also written as JSON lines to `logs/convox.log` (rotating, kept across restarts), each line with its `call_id`.
 
 ```bash
 uv run python tools/call_report.py c_ab12cd34ef          # per-turn timeline, warnings, where the time went
 uv run python tools/call_report.py c_ab12cd34ef --json
-grep c_ab12cd34ef logs/dubhash.log                         # the server log for that call
+grep c_ab12cd34ef logs/convox.log                         # the server log for that call
 ```
 
 The call id is on the host page (`/join/<call_id>`) and in the log's `recorder.start` line. Import the four wavs into Audacity together: they share one timeline from call start. The report flags the patterns behind the usual complaints: `cross_talk` (one phone's mic made a turn while the other person was talking: the phones are close enough to hear each other, so the listener gets the original voice and a second translation), `echo` (a mic picked up the translation playing on its own speaker), `queue_wait` / `opening_hold` (translation ready but held), `long_utterance` (EOU never fired: > 8 s), `early_final_restart` and `wrong_language`. Recordings hold both callers' voices: dev and test only, with the callers' consent, never committed.
@@ -195,7 +195,7 @@ uv run --with sounddevice python tools/record_fixtures.py prompts/hi.txt --lang 
 | One leg connects, the other never does | more than one uvicorn worker, or the two legs hit different processes |
 | Robotic or chipmunk audio | sample-rate mismatch (8k vs 16k); check `media_format` and the `leg.resample` log |
 | STT stops after a quiet stretch | Sarvam idle timeout (close code 1008); the client pings every 10 s. Measure with `tools/smoke.py --idle` |
-| `pairs.yaml` not found | `.env.example` sets `PAIRS_FILE=config/pairs.yaml`, which is relative to the working directory; the file lives at `dubhash/config/pairs.yaml`. Delete the line from `.env` or point it there |
+| `pairs.yaml` not found | `.env.example` sets `PAIRS_FILE=config/pairs.yaml`, which is relative to the working directory; the file lives at `convox/config/pairs.yaml`. Delete the line from `.env` or point it there |
 | `/console` asks for a password | HTTP Basic: any username, password `CONSOLE_PASSWORD` from `.env` |
 | `make smoke` exits 2 | no `SARVAM_API_KEY` or `ELEVENLABS_API_KEY` in `.env`, so nothing ran |
 

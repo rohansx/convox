@@ -1,6 +1,6 @@
 import httpx
 
-from dubhash.config.settings import Settings
+from convox.config.settings import Settings
 from tools.exotel_check import run_checks
 
 

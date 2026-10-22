@@ -3,8 +3,8 @@ import base64
 import logging
 from urllib.parse import parse_qs, urlparse
 
-from dubhash.interp.contracts import STT, STTStream
-from dubhash.providers.sarvam_stt import SarvamSTT
+from convox.interp.contracts import STT, STTStream
+from convox.providers.sarvam_stt import SarvamSTT
 from tests.providers.wsmock import Conn, ws_server
 
 F1, F2, F3 = b"\x01\x00" * 320, b"\x02\x00" * 320, b"\x03\x00" * 320

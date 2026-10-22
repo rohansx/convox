@@ -54,11 +54,11 @@ async def test_pstn_default_is_delivery():
 
 
 async def test_the_session_factory_builds_the_pack_and_starts_the_prefill():
-    from dubhash.api.deps import get_session_factory
-    from dubhash.config.settings import Settings
-    from dubhash.events import EventBus
+    from convox.api.deps import get_session_factory
+    from convox.config.settings import Settings
+    from convox.events import EventBus
 
-    settings = Settings(_env_file=None, dubhash_env="test", next_turn_prewarm=False)  # type: ignore[call-arg]
+    settings = Settings(_env_file=None, convox_env="test", next_turn_prewarm=False)  # type: ignore[call-arg]
     state = SimpleNamespace(settings=settings, bus=EventBus(), writer=None)
     factory = get_session_factory(SimpleNamespace(app=SimpleNamespace(state=state)))  # type: ignore[arg-type]
     session = factory("c_x", PAIR, vertical="clinic")

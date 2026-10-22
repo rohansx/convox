@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import pytest
 
-from dubhash.session.prompts import opening_text, short_opening_text
+from convox.session.prompts import opening_text, short_opening_text
 
 LANGS = ["hi-IN", "kn-IN", "ta-IN", "mr-IN", "gu-IN", "en-IN"]
 
