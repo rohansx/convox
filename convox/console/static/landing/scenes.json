@@ -1,6 +1,54 @@
 {
  "generated_with": "Sarvam Mayura MT + Bulbul v3 TTS",
  "scenes": {
+  "auto": {
+   "caption": "A Kannada-speaking auto driver and a Hindi-speaking passenger, finding the pickup.",
+   "a": {
+    "name": "Basavaraj",
+    "lang": "kn-IN",
+    "native": "ಕನ್ನಡ"
+   },
+   "b": {
+    "name": "Neha",
+    "lang": "hi-IN",
+    "native": "हिन्दी"
+   },
+   "lines": [
+    {
+     "from": "a",
+     "src": "ಹಲೋ ಮೇಡಂ, ನೀವು ಎಲ್ಲಿದ್ದೀರಾ?",
+     "tgt": "Hello ma'am, कहाँ हैं आप?",
+     "src_audio": "audio/auto-0-src.m4a",
+     "tgt_audio": "audio/auto-0-tgt.m4a",
+     "src_ms": 2819,
+     "tgt_ms": 1632,
+     "mt_ms": 1243,
+     "tts_ttfb_ms": 210
+    },
+    {
+     "from": "b",
+     "src": "मैं मेट्रो स्टेशन के गेट नंबर 2 पर खड़ी हूँ।",
+     "tgt": "ನಾನು metro station-ನ gate number 2 ಹತ್ರ ನಿಂತಿದ್ದೀನಿ.",
+     "src_audio": "audio/auto-1-src.m4a",
+     "tgt_audio": "audio/auto-1-tgt.m4a",
+     "src_ms": 3850,
+     "tgt_ms": 3489,
+     "mt_ms": 1314,
+     "tts_ttfb_ms": 218
+    },
+    {
+     "from": "a",
+     "src": "ಸರಿ, ಎರಡು ನಿಮಿಷದಲ್ಲಿ ಅಲ್ಲಿಗೆ ಬರ್ತೀನಿ. ಆಟೋ ನಂಬರ್ 4417.",
+     "tgt": "Okay, मैं दो minutes में वहाँ पहुँच जाऊँगा। Auto number 4417 है।",
+     "src_audio": "audio/auto-2-src.m4a",
+     "tgt_audio": "audio/auto-2-tgt.m4a",
+     "src_ms": 6050,
+     "tgt_ms": 4726,
+     "mt_ms": 1451,
+     "tts_ttfb_ms": 215
+    }
+   ]
+  },
   "rent": {
    "caption": "A Kannada-speaking landlord and a Hindi-speaking tenant.",
    "a": {

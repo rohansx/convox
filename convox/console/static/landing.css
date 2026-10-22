@@ -70,8 +70,8 @@ button { font: inherit; color: inherit; }
 .hero { padding: 96px var(--gut) 56px; }
 .langs { font-size: 15px; color: var(--muted); margin-bottom: 26px; letter-spacing: 0; }
 .langs i { font-style: normal; color: var(--line-2); margin: 0 4px; }
-.hero-grid { display: grid; grid-template-columns: 1.35fr 1fr; gap: 56px; align-items: end; }
-.hero h1 { font-size: clamp(48px, 7.2vw, 92px); line-height: .98; letter-spacing: -.045em; font-weight: 400; }
+.hero-grid { display: grid; grid-template-columns: 1.6fr 1fr; gap: 56px; align-items: end; }
+.hero h1 { font-size: clamp(44px, 6.4vw, 84px); line-height: .98; letter-spacing: -.045em; font-weight: 400; }
 .hero-side { padding-bottom: 8px; }
 .sub { font-size: 17px; line-height: 1.55; color: var(--ink-2); max-width: 420px; margin-bottom: 26px; letter-spacing: -.005em; }
 
@@ -346,4 +346,52 @@ kbd { font: 500 12px var(--mono); padding: 1px 6px; border-radius: 5px; border: 
   .tl-row { grid-template-columns: 64px 1fr; gap: 10px; }
   .tl-track i { font-size: 11px; padding: 0 8px; }
   .tl-split { margin-left: 0; }
+}
+
+/* problem: the auto story, the press it keeps getting, then the same call elsewhere */
+.press { margin-top: 22px; font-size: 14px; color: var(--muted); }
+.press a { color: var(--ink-2); text-decoration: underline; text-decoration-color: var(--line-2); text-underline-offset: 3px; }
+.also { margin: 64px 0 0; font-size: 20px; font-weight: 400; letter-spacing: -.02em; color: var(--ink-2); }
+.issues { list-style: none; padding: 0; margin: 20px 0 0; display: grid; grid-template-columns: repeat(4, 1fr); border-top: 1px solid var(--line); }
+.issues li { padding: 22px 24px 24px 0; display: flex; flex-direction: column; gap: 8px; }
+.issues li + li { padding-left: 24px; border-left: 1px solid var(--line); }
+.issues b { font-size: 18px; font-weight: 500; letter-spacing: -.02em; }
+.issues span { font-size: 15px; color: var(--muted); line-height: 1.55; }
+.issues sup a { color: var(--ink-2); text-decoration: none; margin-left: 2px; }
+#problem .figures { margin-top: 48px; }
+
+/* who it's for */
+.who { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+.who article { background: var(--paper); border: 1px solid var(--line); border-radius: 18px; padding: 24px; display: flex; flex-direction: column; gap: 8px; box-shadow: var(--shadow-sm); }
+.who article.lead-card { border-color: #ffc9ad; box-shadow: 0 0 0 3px var(--accent-soft), var(--shadow-sm); }
+.who-k { font: 500 12.5px var(--mono); color: var(--muted); text-transform: uppercase; letter-spacing: .06em; display: flex; align-items: center; gap: 8px; }
+.who-k em { font-style: normal; text-transform: none; letter-spacing: 0; font: 500 12px var(--sans); color: #c2410c; background: var(--accent-soft); padding: 1px 8px; border-radius: 999px; }
+.who h3 { font-size: 22px; font-weight: 400; letter-spacing: -.025em; }
+.who article p:not(.who-k) { font-size: 15px; color: var(--ink-2); line-height: 1.55; flex: 1; }
+.who article > span { font-size: 15px; color: var(--ink-2); margin-top: 6px; padding-top: 12px; border-top: 1px solid var(--line); }
+
+/* how platforms use it */
+.platform { display: grid; grid-template-columns: repeat(3, 1fr); border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.platform article { padding: 28px 28px 34px 0; }
+.platform article + article { padding-left: 28px; border-left: 1px solid var(--line); }
+.platform .n { font: 12px var(--mono); color: var(--faint); }
+.platform h3 { margin: 28px 0 8px; font-size: 20px; }
+.platform p { font-size: 15px; color: var(--ink-2); line-height: 1.6; }
+.pilot { margin-top: 28px; padding: 22px 26px; border-radius: 16px; background: var(--ink); color: #fbfaf7; display: flex; gap: 24px; align-items: baseline; flex-wrap: wrap; box-shadow: var(--shadow); }
+.pilot .who-k { color: #aaa398; }
+.pilot-line { font-size: 19px; letter-spacing: -.015em; flex: 1; min-width: 260px; }
+
+@media (max-width: 1000px) {
+  .issues { grid-template-columns: 1fr 1fr; }
+  .issues li:nth-child(3) { border-left: 0; padding-left: 0; }
+  .issues li:nth-child(-n+2) { border-bottom: 1px solid var(--line); }
+  .who { grid-template-columns: 1fr 1fr; }
+  .platform { grid-template-columns: 1fr; }
+  .platform article, .platform article + article { padding: 24px 0; border-left: 0; }
+  .platform article + article { border-top: 1px solid var(--line); }
+}
+@media (max-width: 640px) {
+  .issues, .who { grid-template-columns: 1fr; }
+  .issues li, .issues li + li { padding: 18px 0; border-left: 0; border-bottom: 1px solid var(--line); }
+  .also { margin-top: 44px; }
 }

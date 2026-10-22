@@ -2,7 +2,7 @@
 
 GET /                 landing page (public): the problem, how convox solves it, two
                       animated phones, languages, use cases
-GET /demo/preview     the live stage playing a scripted Rent call (public, labelled
+GET /demo/preview     the live stage playing a scripted Auto call (public, labelled
                       "Sample data"; creates no call, opens no stream); ?embed=1 for the
                       landing page's frame. /demo/preview/details: the dashboard, scripted
 GET /demo             pick a story (demo/stories.py) or a language pair (console auth);
@@ -101,7 +101,7 @@ def _stage_sides(story: dict[str, Any], langs: dict[str, str], urls: dict[str, s
 
 
 def _preview_story() -> dict[str, Any]:
-    return stories.STORIES["rent"]
+    return stories.STORIES["auto"]
 
 
 @public.get("/demo/preview", response_class=HTMLResponse)
@@ -114,7 +114,7 @@ async def stage_preview(request: Request, embed: bool = False) -> HTMLResponse:
         "stage.html",
         {
             "call": {"call_id": "preview", "state": "IDLE", "status": "active", "legs": {}},
-            "story_key": "rent",
+            "story_key": "auto",
             "story": story,
             "sides": _stage_sides(story, langs, {}),
             "turns_json": "[]",

@@ -128,7 +128,7 @@ def test_landing_has_a_sound_toggle_off_by_default():
 
 def test_every_landing_line_has_real_audio_and_timings():
     data = json.loads((STATIC / "static" / "landing" / "scenes.json").read_text())
-    assert set(data["scenes"]) == {"delivery", "clinic", "rent"}
+    assert set(data["scenes"]) == {"auto", "delivery", "clinic", "rent"}
     for scene in data["scenes"].values():
         assert scene["lines"]
         for line in scene["lines"]:
@@ -150,7 +150,7 @@ def test_landing_audio_is_served():
 def test_landing_uses_geist_with_light_headings():
     # the YC W25-W26 sites we modelled this on: Geist/grotesk, headings at regular weight
     page = Env().client.get("/").text
-    assert "family=Geist" in page and "Inter" not in page
+    assert "family=Geist" in page and "family=Inter" not in page
     css = (STATIC / "static" / "landing.css").read_text(encoding="utf-8")
     assert '--sans: "Geist"' in css
     h1 = re.search(r"\.hero h1 \{[^}]*\}", css).group(0)
@@ -176,6 +176,18 @@ def test_landing_puts_kannada_first():
     page = Env().client.get("/").text
     langs = re.search(r'<p class="langs"[^>]*>(.*?)</p>', page).group(1)
     assert langs.startswith("ಕನ್ನಡ")
-    assert page.index('data-scene="rent"') < page.index('data-scene="delivery"')
+    tabs = re.findall(r'data-scene="(\w+)"', page)
+    assert tabs[0] == "auto" and "rent" in tabs  # the auto call leads
+    scenes = json.loads((STATIC / "static" / "landing" / "scenes.json").read_text())["scenes"]
+    assert scenes["auto"]["a"]["lang"] == "kn-IN" and "auto driver" in scenes["auto"]["caption"]
     rent = json.loads((STATIC / "static" / "landing" / "scenes.json").read_text())["scenes"]["rent"]
     assert rent["a"]["lang"] == "kn-IN" and "landlord" in rent["caption"]
+
+
+def test_landing_leads_with_the_auto_problem_and_says_who_it_is_for():
+    page = Env().client.get("/").text
+    assert "Speak Kannada." in page and "auto driver" in page
+    for who in ("Ride hailing", "Parcel delivery", "Home services", "Clinics and telehealth"):
+        assert who in page, who
+    assert 'id="platform"' in page and "not another app" in page
+    assert "theweek.in" in page  # the auto rows are sourced, not asserted
