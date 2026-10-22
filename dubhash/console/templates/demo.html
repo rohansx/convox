@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% if call %}{{ sides[0].native }} ⇄ {{ sides[1].native }} · dubhash demo{% else %}Live demo · dubhash{% endif %}</title>
+  <link rel="stylesheet" href="/static/console/demo.css">
+</head>
+<body class="demo-body{% if call %} has-call{% endif %}{% if preview %} is-preview{% endif %}">
+<header class="top">
+  <a class="logo" href="/"><span class="logo-mark" aria-hidden="true"><i></i><i></i></span>dubhash</a>
+  {% if call %}
+    <span class="top-pair"><b lang="{{ sides[0].lang[:2] }}">{{ sides[0].native }}</b><span class="swap">⇄</span><b lang="{{ sides[1].lang[:2] }}">{{ sides[1].native }}</b></span>
+    <span class="pill" id="state" data-state="{{ call.state }}">Waiting for phones</span>
+    <span class="clock" id="clock">00:00</span>
+  {% else %}
+    <span class="top-pair muted">Live demo</span>
+  {% endif %}
+  <nav>
+    {% if call and not preview %}<a href="/demo">New call</a>{% endif %}
+    {% if preview %}<a href="/demo">Start a live call</a>{% endif %}
+    <a href="/console">Console</a>
+    <a href="/">Home</a>
+  </nav>
+</header>
+{% if preview %}<p class="preview-banner">Sample data: a scripted call that shows what the dashboard does. Nothing here is live.</p>{% endif %}
+
+{% if not call %}
+<!-- picker ---------------------------------------------------------------------- -->
+<main class="picker">
+  <div class="picker-head">
+    <h1>Start a live demo</h1>
+    <p class="muted">Pick two languages. Each person scans a QR code with their own phone, and the call starts. Nothing is dialled.</p>
+  </div>
+  <form method="post" action="/join" class="pair-grid">
+    <input type="hidden" name="view" value="demo">
+    {% for p in pairs %}
+    <label class="pair-card" data-pair="{{ p.value }}">
+      <input type="radio" name="pair" value="{{ p.value }}" {% if loop.first %}checked{% endif %}>
+      <span class="pc-side a"><b lang="{{ p.a.lang[:2] }}">{{ p.a.native }}</b>{% if p.a.english != p.a.native %}<small>{{ p.a.english }}</small>{% endif %}</span>
+      <span class="pc-arrow">⇄</span>
+      <span class="pc-side b"><b lang="{{ p.b.lang[:2] }}">{{ p.b.native }}</b>{% if p.b.english != p.b.native %}<small>{{ p.b.english }}</small>{% endif %}</span>
+    </label>
+    {% endfor %}
+    <div class="picker-actions">
+      <button type="submit" class="btn btn-primary">Start live call →</button>
+      <a class="btn btn-ghost" href="/demo/preview">Watch a sample call</a>
+      <a class="muted small" href="/join">Auto-detect languages instead</a>
+    </div>
+  </form>
+</main>
+{% else %}
+<!-- dashboard ------------------------------------------------------------------- -->
+<main class="dash" id="demo"
+      data-call-id="{{ call.call_id }}"
+      {% if events_url %}data-events="{{ events_url }}"{% endif %}
+      {% if preview %}data-preview="1"{% endif %}
+      data-status="{{ call.status }}"
+      data-p50="{{ targets.p50 }}" data-p95="{{ targets.p95 }}"
+      data-a-native="{{ sides[0].native }}" data-b-native="{{ sides[1].native }}"
+      data-turns="{{ turns_json | forceescape }}">
+
+  {% for s in sides %}
+  <section class="side side-{{ s.side }}" id="side-{{ s.side }}" data-side="{{ s.side }}">
+    <div class="side-head">
+      <span class="side-letter">{{ s.side | upper }}</span>
+      <div class="side-lang"><b lang="{{ s.lang[:2] }}" data-role="native">{{ s.native }}</b><small data-role="english">{{ s.english if s.english != s.native else "" }}</small></div>
+      <span class="leg" id="leg-{{ s.side }}" data-status="{{ call.legs.get(s.side, '') if call.legs else '' }}">waiting</span>
+    </div>
+    {% if s.svg %}
+    <figure class="qr" data-side="{{ s.side }}" data-url="{{ s.url }}">
+      <div class="qr-code">{{ s.svg | safe }}</div>
+      <figcaption>Scan with phone {{ s.side | upper }}<a href="{{ s.url }}" target="_blank" rel="noopener">open link</a></figcaption>
+    </figure>
+    {% endif %}
+    <div class="live">
+      <div class="orb" aria-hidden="true"><i></i><i></i><i></i></div>
+      <p class="live-state" id="live-{{ s.side }}">Waiting for the phone</p>
+      <p class="partial" id="partial-{{ s.side }}" lang="{{ s.lang[:2] }}"></p>
+    </div>
+  </section>
+  {% endfor %}
+
+  <section class="convo card">
+    <div class="card-head"><h2>Conversation</h2><span class="muted small" id="n-turns">0 turns</span></div>
+    <div class="timeline" id="timeline">
+      <div class="empty" id="empty">
+        <p><b>Scan the codes to join.</b></p>
+        <p class="muted">Each phone opens a page in its own language. Tap start, then just talk: every line shows up here in both languages, with how long it took.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="metrics">
+    <div class="metric"><span>First audio · p50</span><b id="m-p50">—</b><small>pause → translated voice</small></div>
+    <div class="metric"><span>Fastest turn</span><b id="m-best">—</b><small>pause → translated voice</small></div>
+    <div class="metric"><span>Speech → heard · p50</span><b id="m-heard">—</b><small>start of speech → voice</small></div>
+    <div class="metric"><span>Turns</span><b id="m-turns">0</b><small id="m-split">A 0 · B 0</small></div>
+    <div class="metric"><span>Numbers checked</span><b id="m-nums">0</b><small>read back against MT</small></div>
+  </section>
+
+  <section class="card pipe" id="pipeline">
+    <div class="card-head"><h2>Pipeline, last turn</h2><span class="muted small" id="pipe-total"></span></div>
+    <div class="pipe-bar" id="pipe-bar"><span class="pipe-empty">waiting for the first turn</span></div>
+    <ul class="pipe-legend">
+      <li class="k-eou">end of turn</li><li class="k-stt">recognise</li><li class="k-mt">translate</li><li class="k-tts">voice</li><li class="k-play">playout</li>
+    </ul>
+    <div class="pipe-hist" id="pipe-hist" aria-label="Recent turns"></div>
+  </section>
+
+  <section class="card floor">
+    <div class="card-head"><h2>Who has the line</h2><span class="muted small">last 60 s</span></div>
+    <div class="lane-wrap" id="floor-lane">
+      <div class="lane"><span class="lane-label">A</span><div class="lane-track" id="lane-a"></div></div>
+      <div class="lane"><span class="lane-label">B</span><div class="lane-track" id="lane-b"></div></div>
+    </div>
+    <ul class="lane-legend"><li class="k-speak">speaking</li><li class="k-hear">hearing the translation</li></ul>
+  </section>
+
+  <section class="card events">
+    <div class="card-head"><h2>Under the hood</h2></div>
+    <ol class="ticker" id="ticker"></ol>
+  </section>
+
+  <section class="ended" id="ended" hidden>
+    <p>Call ended.</p>
+    {% if not preview %}
+    <form method="post" action="/join">
+      <input type="hidden" name="view" value="demo">
+      <input type="hidden" name="pair" value="{{ sides[0].lang }}|{{ sides[1].lang }}">
+      <button type="submit" class="btn btn-primary">Start again</button>
+    </form>
+    {% endif %}
+  </section>
+</main>
+<script src="/static/console/demo.js" defer></script>
+{% endif %}
+</body>
+</html>
