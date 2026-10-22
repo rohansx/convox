@@ -60,7 +60,8 @@ async def landing(request: Request) -> HTMLResponse:
 
 
 @public.get("/demo/preview", response_class=HTMLResponse)
-async def demo_preview(request: Request) -> HTMLResponse:
+async def demo_preview(request: Request, embed: bool = False) -> HTMLResponse:
+    # embed=1: the landing page's framed copy, sized to a fixed frame instead of the window
     return templates.TemplateResponse(
         request,
         "demo.html",
@@ -70,6 +71,7 @@ async def demo_preview(request: Request) -> HTMLResponse:
             "turns_json": "[]",
             "events_url": None,
             "preview": True,
+            "embed": embed,
             "targets": _targets(),
         },
     )

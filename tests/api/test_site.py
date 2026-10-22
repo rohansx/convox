@@ -164,3 +164,20 @@ def test_landing_audio_is_served():
     assert r.status_code == 200
     first = r.json()["scenes"]["delivery"]["lines"][0]["tgt_audio"]
     assert env.client.get(f"/static/console/landing/{first}").status_code == 200
+
+
+def test_landing_uses_geist_with_light_headings():
+    # the YC W25-W26 sites we modelled this on: Geist/grotesk, headings at regular weight
+    page = Env().client.get("/").text
+    assert "family=Geist" in page and "Inter" not in page
+    css = (STATIC / "static" / "landing.css").read_text(encoding="utf-8")
+    assert '--sans: "Geist"' in css
+    h1 = re.search(r"\.hero h1 \{[^}]*\}", css).group(0)
+    assert "font-weight: 400" in h1
+
+
+def test_preview_embed_mode_fits_the_landing_frame():
+    env = Env()
+    assert "is-embed" in env.client.get("/demo/preview?embed=1").text
+    assert "is-embed" not in env.client.get("/demo/preview").text
+    assert 'data-src="/demo/preview?embed=1"' in env.client.get("/").text
