@@ -208,9 +208,7 @@ async def stage(
 @demo.get("/demo/{call_id}/details", response_class=HTMLResponse)
 async def demo_dashboard(request: Request, call_id: str, registry: Registry) -> HTMLResponse:
     call = _call_or_404(registry, call_id)
-    sides = [
-        {"side": s, **join._side_view(call.get(f"{s}_lang") or "")} for s in ("a", "b")
-    ]
+    sides = [{"side": s, **join._side_view(call.get(f"{s}_lang") or "")} for s in ("a", "b")]
     return templates.TemplateResponse(
         request,
         "demo.html",
