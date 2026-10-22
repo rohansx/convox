@@ -169,7 +169,7 @@ def test_brand_is_convox_ai_with_favicon():
     for url in ("/", "/demo/preview"):
         page = env.client.get(url).text
         assert "CONVOX<em>AI</em>" in page and "/static/console/favicon.svg" in page, url
-        assert 'class="mark tile' in page, url
+        assert 'class="mark wave' in page, url
     assert env.client.get("/static/console/favicon.svg").status_code == 200
 
 

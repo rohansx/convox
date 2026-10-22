@@ -33,9 +33,9 @@ h1, h2, h3, p { margin: 0; }
 /* --- top ------------------------------------------------------------------------- */
 .top { display: flex; align-items: center; gap: 20px; height: 64px; padding: 0 28px; border-bottom: 1px solid var(--line); background: rgba(251,250,247,.92); position: sticky; top: 0; z-index: 5; }
 .logo { display: inline-flex; align-items: center; gap: 10px; font-weight: 500; font-size: 19px; letter-spacing: -.035em; text-decoration: none; }
-.logo .word { font-weight: 600; font-size: 15px; letter-spacing: .14em; line-height: 1; }
-.logo .word em { font-style: normal; font-weight: 600; color: var(--brand-ai, #ff5b14); margin-left: .45em; letter-spacing: .14em; }
-.mark.tile { width: 30px; height: 30px; color: #1f1c17; border-radius: 8px; box-shadow: 0 1px 2px rgba(31,28,23,.18), inset 0 0 0 1px rgba(255,255,255,.06); }
+.logo .word { font-weight: 600; font-size: 15px; letter-spacing: .16em; line-height: 1; }
+.logo .word em { font-style: normal; font-weight: 600; color: #ff5b14; margin-left: .5em; letter-spacing: .16em; }
+.logo .mark.wave { width: 26px; height: 26px; }
 .mark { width: 26px; height: 26px; color: var(--ink); }
 .top-story { display: flex; align-items: baseline; gap: 10px; padding-left: 20px; border-left: 1px solid var(--line); min-width: 0; }
 .top-story b { font-weight: 500; }
