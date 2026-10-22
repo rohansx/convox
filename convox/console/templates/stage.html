@@ -1,0 +1,171 @@
+{% from "_brand.html" import logo, favicon %}<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% if call %}{{ story.title }}: {{ sides[0].native }} ⇄ {{ sides[1].native }} · Convox AI{% else %}Live demo · Convox AI{% endif %}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@300..700&family=Geist+Mono:wght@400;500&display=swap">
+  {{ favicon() }}
+  <link rel="stylesheet" href="/static/console/stage.css?v=2">
+</head>
+<body class="stage-body{% if preview %} is-preview{% endif %}{% if embed %} is-embed{% endif %}">
+<header class="top">
+  {{ logo() }}
+  {% if call %}
+    <p class="top-story"><b>{{ story.title }}</b><span>{{ story.headline }}</span></p>
+    <span class="pill" id="state" data-state="WAITING">Waiting for both phones</span>
+    <span class="clock" id="clock">00:00</span>
+  {% else %}
+    <p class="top-story"><b>Live demo</b></p>
+  {% endif %}
+  <nav>
+    {% if call %}<a href="{{ details_url }}" target="_blank" rel="noopener">Under the hood ↗</a>{% endif %}
+    {% if preview %}<a href="/demo">Start a live call</a>{% elif call %}<a href="/demo">New call</a>{% endif %}
+    <a href="/">Home</a>
+  </nav>
+</header>
+{% if preview %}<p class="preview-banner">Sample data: a scripted call made from Convox's real translations. Nothing here is live.</p>{% endif %}
+
+{% if not call %}
+<!-- pick a story ------------------------------------------------------------------- -->
+<main class="picker">
+  <div class="picker-head">
+    <p class="label">Live demo</p>
+    <h1>Pick a story, then hand out two phones.</h1>
+    <p class="lead">Each person scans their own code, speaks their own language, and hears the other in theirs. Nothing is dialled; the room hears both phones.</p>
+  </div>
+  <div class="stories">
+    {% for st in stories %}
+    <form class="story" method="post" action="/join" data-story="{{ st.key }}">
+      <input type="hidden" name="pair" value="{{ st.pair }}">
+      <input type="hidden" name="story" value="{{ st.key }}">
+      <input type="hidden" name="view" value="demo">
+      <p class="story-title">{{ st.title }}</p>
+      <h2>{{ st.headline }}</h2>
+      <p class="stakes">{{ st.stakes }}</p>
+      <div class="story-roles">
+        <span><b>{{ st.a.role }}</b><i lang="{{ st.a.lang[:2] }}">{{ st.a_view.native }}</i></span>
+        <span class="swap" aria-hidden="true">⇄</span>
+        <span><b>{{ st.b.role }}</b><i lang="{{ st.b.lang[:2] }}">{{ st.b_view.native }}</i></span>
+      </div>
+      <button type="submit" class="btn btn-primary">Start this call <span aria-hidden="true">→</span></button>
+    </form>
+    {% endfor %}
+  </div>
+  <details class="custom">
+    <summary>Or any two languages</summary>
+    <form method="post" action="/join" class="pair-grid">
+      <input type="hidden" name="view" value="demo">
+      {% for p in pairs %}
+      <label class="pair-card" data-pair="{{ p.value }}">
+        <input type="radio" name="pair" value="{{ p.value }}" {% if loop.first %}checked{% endif %}>
+        <span lang="{{ p.a.lang[:2] }}">{{ p.a.native }}</span><span class="swap">⇄</span><span lang="{{ p.b.lang[:2] }}">{{ p.b.native }}</span>
+      </label>
+      {% endfor %}
+      <div class="picker-actions">
+        <button type="submit" class="btn btn-ghost">Start with these languages</button>
+        <a class="muted" href="/join">Auto-detect languages instead</a>
+      </div>
+    </form>
+  </details>
+  <p class="picker-foot"><a href="/demo/preview">Watch a sample call</a> · Engineers: every call has an "Under the hood" view with the full latency breakdown.</p>
+</main>
+{% else %}
+<!-- the stage ---------------------------------------------------------------------- -->
+<main class="stage" id="stage"
+      data-call-id="{{ call.call_id }}"
+      {% if events_url %}data-events="{{ events_url }}"{% endif %}
+      {% if outcome_url %}data-outcome="{{ outcome_url }}"{% endif %}
+      {% if preview %}data-preview="1"{% endif %}
+      data-status="{{ call.status }}"
+      data-p50="{{ targets.p50 }}"
+      data-a-native="{{ sides[0].native }}" data-b-native="{{ sides[1].native }}"
+      data-a-role="{{ sides[0].role }}" data-b-role="{{ sides[1].role }}"
+      data-legs="{{ (call.legs or {}) | tojson | forceescape }}"
+      data-turns="{{ turns_json | forceescape }}">
+
+  <section class="setting">
+    <p class="label">{{ story.title }}</p>
+    <h1>{{ story.headline }}</h1>
+    {% if story.stakes %}<p class="stakes">{{ story.stakes }}</p>{% endif %}
+  </section>
+
+  <div class="convo" id="convo">
+    <div class="heads">
+      {% for s in sides %}
+      <div class="person person-{{ s.side }}" id="person-{{ s.side }}">
+        <span class="av">{{ (s.name or s.role)[:1] }}</span>
+        <div class="who"><b>{{ s.role }}{% if s.name %} <span class="name">· {{ s.name }}</span>{% endif %}</b><span lang="{{ s.lang[:2] }}">{{ s.native }}{% if s.english != s.native %} · {{ s.english }}{% endif %}</span></div>
+        <span class="leg" id="leg-{{ s.side }}">waiting</span>
+      </div>
+      {% if loop.first %}
+      <div class="bridge-head"><span>quiet before<br>they hear it</span></div>
+      {% endif %}
+      {% endfor %}
+    </div>
+
+    <div class="join" id="join">
+      {% for s in sides %}
+      <div class="join-side join-{{ s.side }}">
+        {% if s.svg %}
+        <figure class="qr" data-side="{{ s.side }}" data-url="{{ s.url }}">
+          <div class="qr-code">{{ s.svg | safe }}</div>
+          <figcaption><b>Scan to join as the {{ s.role }}</b><span>Speaks <i lang="{{ s.lang[:2] }}">{{ s.native }}</i>. <a href="{{ s.url }}" target="_blank" rel="noopener">Open link</a></span></figcaption>
+        </figure>
+        {% else %}
+        <p class="join-wait">Waiting for the {{ s.role }}</p>
+        {% endif %}
+        <p class="joined-note">✓ {{ s.role }} is on the call</p>
+      </div>
+      {% if loop.first %}
+      <div class="join-mid"><p>Each column is one person's screen: everything in it is in their language.</p></div>
+      {% endif %}
+      {% endfor %}
+    </div>
+
+    <div class="rows" id="rows" aria-live="polite"></div>
+  </div>
+
+  <section class="impact" id="impact">
+    <div><span>Lines interpreted</span><b id="s-turns">0</b></div>
+    <div><span>Typical quiet after a line</span><b id="s-quiet">—</b></div>
+    <div><span>Numbers carried intact</span><b id="s-nums">0</b></div>
+    <div><span>Shared language</span><b>None</b></div>
+    <div class="impact-act"><button type="button" class="btn btn-primary" id="wrap" disabled>Wrap up the call</button></div>
+  </section>
+  <p class="honest">Convox interprets like a person would: it waits until someone stops talking, then the other person hears the translation. The quiet is that wait, measured per line.</p>
+
+  <div class="outcome" id="outcome" hidden>
+    <div class="oc-card" role="dialog" aria-labelledby="oc-title">
+      <p class="label">Outcome</p>
+      <h2 id="oc-title">What they agreed</h2>
+      <div class="oc-cols" id="oc-cols">
+        {% for s in sides %}
+        <div class="oc-side oc-{{ s.side }}" data-side="{{ s.side }}">
+          <p class="oc-who">{{ s.role }} · <span lang="{{ s.lang[:2] }}">{{ s.native }}</span></p>
+          <h3 lang="{{ s.lang[:2] }}"></h3>
+          <ul lang="{{ s.lang[:2] }}"></ul>
+        </div>
+        {% endfor %}
+      </div>
+      <p class="oc-wait" id="oc-wait">Writing up what they agreed…</p>
+      <dl class="oc-stats">
+        <div><dt id="o-turns">0</dt><dd>lines interpreted</dd></div>
+        <div><dt id="o-quiet">—</dt><dd>typical quiet after a line</dd></div>
+        <div><dt id="o-nums">0</dt><dd>numbers carried intact</dd></div>
+        <div><dt id="o-time">00:00</dt><dd>call time</dd></div>
+      </dl>
+      <p class="oc-note" id="oc-note">They share no language. Every line went through Convox. The summary is written by Claude from what each person said, in their own words.</p>
+      <div class="oc-actions">
+        <button type="button" class="btn btn-ghost" id="oc-close">Back to the call</button>
+        <a class="btn btn-primary" href="/demo">Start another story</a>
+      </div>
+    </div>
+  </div>
+</main>
+<script src="/static/console/stage.js?v=2" defer></script>
+{% endif %}
+</body>
+</html>

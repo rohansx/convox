@@ -19,7 +19,13 @@
     <h1 class="phone-lang" id="me-native" lang="{{ short }}">{{ me.native }}</h1>
     <p class="phone-with">⇄ <span id="other-native" lang="{{ other.lang[:2] }}">{{ other.native }}</span>{% if me.english != me.native %} · <span id="me-english" lang="en">{{ me.english }}</span>{% endif %}</p>
   </header>
-
+  {% if role %}
+  <section class="hints" aria-label="Your role">
+    <p class="hint-role"><span lang="en">You are the</span> <b lang="en">{{ role.role }}</b></p>
+    <p class="hint-try" lang="en">Tap start, then try saying:</p>
+    <ul>{% for line in role.lines %}<li>{{ line }}</li>{% endfor %}</ul>
+  </section>
+  {% endif %}
   <section class="phone-stage">
     <button type="button" class="tap" id="tap">
       <span class="tap-native">{{ ui.start }}</span>

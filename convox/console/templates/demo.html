@@ -22,6 +22,7 @@
     <span class="top-pair muted">Live demo</span>
   {% endif %}
   <nav>
+    {% if call %}<a href="/demo/{{ call.call_id }}">← The stage</a>{% endif %}
     {% if call and not preview %}<a href="/demo">New call</a>{% endif %}
     {% if preview %}<a href="/demo">Start a live call</a>{% endif %}
     <a href="/console">Console</a>

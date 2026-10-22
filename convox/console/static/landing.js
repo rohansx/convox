@@ -156,16 +156,24 @@
     }
     await said;
     mine.body.classList.remove("typing");
-    // Convox interprets: the real MT and TTS time, measured when generated
+    // Convox interprets. The quiet is honest: the live median end-of-turn wait and
+    // recognition (300 + 60 ms) plus this line's MT and TTS time, measured when generated.
+    const quiet = 300 + 60 + l.mt_ms + l.tts_ttfb_ms;
     setState(from, "idle", "Interpreting…");
+    setState(to, "idle", "Waiting for Convox…");
+    const t0q = performance.now();
+    const counting = setInterval(() => {
+      q(link, "timing").textContent = `quiet ${((performance.now() - t0q) / 1000).toFixed(1)} s`;
+    }, 100);
+    setLink(from + to, `${me.native} → ${other.native}`, "quiet 0.0 s");
+    try { await sleep(quiet, id); } finally { clearInterval(counting); }
     setLink(from + to, `${me.native} → ${other.native}`,
-      `translate ${(l.mt_ms / 1000).toFixed(2)} s<br>voice ${(l.tts_ttfb_ms / 1000).toFixed(2)} s`);
-    await sleep(Math.min(l.mt_ms + l.tts_ttfb_ms, 1800), id);
+      `quiet ${(quiet / 1000).toFixed(1)} s<br>translate ${(l.mt_ms / 1000).toFixed(1)} · voice ${(l.tts_ttfb_ms / 1000).toFixed(1)}`);
     // the listener hears it in their language
     setState(to, "hearing", `Hearing ${first(me.name)} in ${other.native}`);
     const heard = bubble(P[to], "heard", l.tgt);
     const meta = el("div", "meta");
-    meta.append(el("span", null, `${first(me.name)} · translated`));
+    meta.append(el("span", null, `${first(me.name)} · after ${(quiet / 1000).toFixed(1)} s`));
     const d = digits(l.src);
     if (d && d === digits(l.tgt)) meta.append(el("span", "ok", `✓ ${d}`));
     heard.b.append(meta);
