@@ -48,7 +48,7 @@ def build_prompt(
         '{"a": {"headline": "...", "points": ["...", "..."]}, '
         '"b": {"headline": "...", "points": ["...", "..."]}}\n'
         f'"a" is written in {english(langs["a"])} for the {roles["a"]}, "b" in '
-        f'{english(langs["b"])} for the {roles["b"]}. The headline is one short line; '
+        f"{english(langs['b'])} for the {roles['b']}. The headline is one short line; "
         "at most three points."
     )
 
