@@ -112,7 +112,7 @@ STATIC = Path(__file__).resolve().parents[2] / "convox" / "console"
 
 def test_landing_is_branded_convox():
     page = Env().client.get("/").text
-    assert "<title>Convox AI" in page and ">convox<" in page
+    assert "<title>Convox AI" in page and ">CONVOX<" in page
 
 
 def test_no_page_or_asset_still_says_dubhash():
@@ -168,7 +168,8 @@ def test_brand_is_convox_ai_with_favicon():
     env = Env()
     for url in ("/", "/demo/preview"):
         page = env.client.get(url).text
-        assert "convox<em>AI</em>" in page and "/static/console/favicon.svg" in page, url
+        assert "CONVOX<em>AI</em>" in page and "/static/console/favicon.svg" in page, url
+        assert 'class="mark tile' in page, url
     assert env.client.get("/static/console/favicon.svg").status_code == 200
 
 

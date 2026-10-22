@@ -1,4 +1,4 @@
-{% from "_brand.html" import mark, logo, favicon %}
+{% from "_brand.html" import glyph, logo, favicon %}
 <!doctype html>
 <html lang="en">
 <head>
@@ -11,7 +11,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@300..600&family=Geist+Mono:wght@400;500&display=swap">
   {{ favicon() }}
-  <link rel="stylesheet" href="/static/console/landing.css?v=12">
+  <link rel="stylesheet" href="/static/console/landing.css?v=13">
 </head>
 <body>
 
@@ -76,7 +76,7 @@
       <div class="iphone" data-side="{{ side }}">
         <span class="hw hw-1"></span><span class="hw hw-2"></span><span class="hw hw-3"></span><span class="hw hw-4"></span>
         <div class="screen">
-          <div class="island"><span class="isl-mark">{{ mark("mk-isl") }}</span><span class="isl-wave">{% for i in range(5) %}<i style="--i:{{ i }}"></i>{% endfor %}</span></div>
+          <div class="island"><span class="isl-mark">{{ glyph("mk-isl") }}</span><span class="isl-wave">{% for i in range(5) %}<i style="--i:{{ i }}"></i>{% endfor %}</span></div>
           <div class="statusbar">
             <span class="clock">9:41</span>
             <span class="sb">
@@ -89,7 +89,7 @@
             <div class="avatar" data-role="avatar"></div>
             <b data-role="name"></b>
             <span class="via"><span data-role="lang"></span> · <span data-role="timer">00:00</span></span>
-            <span class="tag">{{ mark("mk-tag") }}Convox interpreting</span>
+            <span class="tag">{{ glyph("mk-tag") }}Convox interpreting</span>
           </div>
           <div class="convo" data-role="convo" aria-live="polite"></div>
           <div class="callfoot">
@@ -109,7 +109,7 @@
       <div class="link" id="link" aria-hidden="true">
         <div class="link-line"><span class="pulse"></span></div>
         <div class="link-card">
-          {{ mark("sm") }}
+          {{ glyph("sm") }}
           <b data-role="dir">Listening</b>
           <span data-role="timing">&nbsp;</span>
         </div>
@@ -298,6 +298,6 @@
 
 </div>
 
-<script src="/static/console/landing.js?v=12" defer></script>
+<script src="/static/console/landing.js?v=13" defer></script>
 </body>
 </html>
