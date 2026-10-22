@@ -103,3 +103,18 @@ async def test_odia_code_is_passed_as_od_in():
 
     await _mt(handler).translate("namaste", "hi-IN", "or-IN")
     assert seen[0]["target_language_code"] == "od-IN"
+
+
+async def test_speaker_gender_is_sent_when_known():
+    # Hindi and Marathi verbs agree with the speaker; the API defaults to female
+    seen: list[dict] = []
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        seen.append(json.loads(req.content))
+        return httpx.Response(200, json={"translated_text": "मैं भेज दूँगा"})
+
+    mt = _mt(handler)
+    await mt.translate("I will send him", "en-IN", "hi-IN", gender="m")
+    await mt.translate("I will send him", "en-IN", "hi-IN")
+    assert seen[0]["speaker_gender"] == "Male"
+    assert "speaker_gender" not in seen[1]

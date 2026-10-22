@@ -65,7 +65,9 @@ class SarvamMT:
             extra={"provider": self.name, "latency_ms": int((time.monotonic() - t0) * 1000)},
         )
 
-    async def translate(self, text: str, src: str, tgt: str) -> str:
+    async def translate(self, text: str, src: str, tgt: str, gender: str | None = None) -> str:
+        """gender "m"/"f" sets speaker_gender, which Hindi and Marathi verbs agree with;
+        left out, the API defaults to female."""
         if not text.strip():
             return ""
         src, tgt = _code(src), _code(tgt)
@@ -73,27 +75,27 @@ class SarvamMT:
             return text
         t0 = time.monotonic()
         if (src, tgt) in self._pivot_pairs:
-            out = await self._pivot(text, src, tgt)
+            out = await self._pivot(text, src, tgt, gender)
         else:
             try:
-                out = await self._call(text, src, tgt)
+                out = await self._call(text, src, tgt, gender)
             except _Rejected:
                 if PIVOT in (src, tgt):
                     raise ProviderError(f"sarvam translate rejected {src}->{tgt}") from None
                 log.warning("mt.pivot", extra={"provider": self.name, "pair": f"{src}->{tgt}"})
                 self._pivot_pairs.add((src, tgt))
-                out = await self._pivot(text, src, tgt)
+                out = await self._pivot(text, src, tgt, gender)
         log.info(
             "mt.done",
             extra={"provider": self.name, "latency_ms": int((time.monotonic() - t0) * 1000)},
         )
         return out
 
-    async def _pivot(self, text: str, src: str, tgt: str) -> str:
-        mid = await self._call(text, src, PIVOT)
-        return await self._call(mid, PIVOT, tgt)
+    async def _pivot(self, text: str, src: str, tgt: str, gender: str | None = None) -> str:
+        mid = await self._call(text, src, PIVOT, gender)
+        return await self._call(mid, PIVOT, tgt, gender)
 
-    async def _call(self, text: str, src: str, tgt: str) -> str:
+    async def _call(self, text: str, src: str, tgt: str, gender: str | None = None) -> str:
         body = {
             "input": text,
             "source_language_code": src,
@@ -102,6 +104,8 @@ class SarvamMT:
             "model": self._model,
             "numerals_format": "international",  # keep digits (ADR 0007)
         }
+        if gender in ("m", "f"):
+            body["speaker_gender"] = "Male" if gender == "m" else "Female"
         try:
             r = await self._client.post(
                 f"{self._base}/translate",

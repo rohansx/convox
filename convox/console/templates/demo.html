@@ -1,3 +1,4 @@
+{% from "_brand.html" import logo, favicon %}
 <!doctype html>
 <html lang="en">
 <head>
@@ -7,11 +8,12 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@300..700&family=Geist+Mono:wght@400;500&display=swap">
-  <link rel="stylesheet" href="/static/console/demo.css?v=5">
+  {{ favicon() }}
+  <link rel="stylesheet" href="/static/console/demo.css?v=7">
 </head>
 <body class="demo-body{% if call %} has-call{% endif %}{% if preview %} is-preview{% endif %}{% if embed %} is-embed{% endif %}">
 <header class="top">
-  <a class="logo" href="/"><svg class="mark" viewBox="0 0 24 24" aria-hidden="true"><rect width="24" height="24" rx="7" fill="currentColor"/><rect x="5" y="9" width="2.4" height="6" rx="1.2" fill="#fff"/><rect x="9" y="6" width="2.4" height="12" rx="1.2" fill="#fff"/><rect x="13" y="8" width="2.4" height="8" rx="1.2" fill="#ff5b14"/><rect x="17" y="10" width="2.4" height="4" rx="1.2" fill="#ff5b14"/></svg><span>convox</span></a>
+  {{ logo() }}
   {% if call %}
     <span class="top-pair"><b lang="{{ sides[0].lang[:2] }}">{{ sides[0].native }}</b><span class="swap">⇄</span><b lang="{{ sides[1].lang[:2] }}">{{ sides[1].native }}</b></span>
     <span class="pill" id="state" data-state="{{ call.state }}">Waiting for phones</span>
@@ -32,7 +34,8 @@
 <!-- picker ---------------------------------------------------------------------- -->
 <main class="picker">
   <div class="picker-head">
-    <h1>Start a live demo</h1>
+    <p class="label">Live demo</p>
+    <h1>Two phones, two languages.</h1>
     <p class="muted">Pick two languages. Each person scans a QR code with their own phone, and the call starts. Nothing is dialled.</p>
   </div>
   <form method="post" action="/join" class="pair-grid">
@@ -136,7 +139,7 @@
     {% endif %}
   </section>
 </main>
-<script src="/static/console/demo.js?v=5" defer></script>
+<script src="/static/console/demo.js?v=6" defer></script>
 {% endif %}
 </body>
 </html>

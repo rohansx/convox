@@ -3,6 +3,7 @@ their own voice, then Convox's interpretation (Sarvam Mayura MT + Bulbul TTS, th
 listener's language, gender-matched, after the earcon), exactly what a caller hears.
 
     uv run python tools/landing_voices.py          # needs SARVAM_API_KEY in .env
+    uv run python tools/landing_voices.py rent     # only these scenes; keeps the others
 
 Writes convox/console/static/landing/scenes.json and audio/<scene>-<n>-{src,tgt}.m4a
 (AAC via macOS afconvert; .wav if afconvert is missing). The speakers are synthetic
@@ -36,6 +37,16 @@ INTERPRETER = {"f": "ishita", "m": "shubh"}  # the call's default voices (sarvam
 # Speakers' own lines. Marathi, Gujarati and Kannada need a native speaker's check (PQ5).
 # ruff: noqa: E501 (one speaker per line reads better than wrapped dicts)
 SCENES = {
+    "rent": {
+        "caption": "A Kannada-speaking landlord and a Hindi-speaking tenant.",
+        "a": {"name": "Manjunath", "lang": "kn-IN", "native": "ಕನ್ನಡ", "g": "m", "voice": "vijay"},
+        "b": {"name": "Pooja", "lang": "hi-IN", "native": "हिन्दी", "g": "f", "voice": "pooja"},
+        "lines": [
+            ("b", "दो दिन से पानी नहीं आ रहा है।"),
+            ("a", "ಇವತ್ತು ಸಂಜೆ 6 ಗಂಟೆಗೆ ಪ್ಲಂಬರ್ ಕಳುಹಿಸುತ್ತೇನೆ."),
+            ("b", "ठीक है, मैं शाम को घर पर रहूँगी।"),
+        ],
+    },
     "delivery": {
         "caption": "A Marathi-speaking customer and a Hindi-speaking delivery rider.",
         "a": {"name": "Sunita", "lang": "mr-IN", "native": "मराठी", "g": "f", "voice": "rupali"},
@@ -54,16 +65,6 @@ SCENES = {
             ("a", "મને ત્રણ દિવસથી તાવ છે."),
             ("b", "Take one tablet twice a day, after food."),
             ("a", "બરાબર, આભાર ડૉક્ટર."),
-        ],
-    },
-    "rent": {
-        "caption": "A Kannada-speaking tenant and a Hindi-speaking landlord.",
-        "a": {"name": "Kiran", "lang": "kn-IN", "native": "ಕನ್ನಡ", "g": "m", "voice": "vijay"},
-        "b": {"name": "Sharma ji", "lang": "hi-IN", "native": "हिन्दी", "g": "m", "voice": "ashutosh"},
-        "lines": [
-            ("a", "ಎರಡು ದಿನದಿಂದ ನೀರು ಬರುತ್ತಿಲ್ಲ."),
-            ("b", "आज शाम 6 बजे प्लंबर भेजता हूँ।"),
-            ("a", "ಸರಿ, ಧನ್ಯವಾದಗಳು."),
         ],
     },
 }  # fmt: skip
@@ -109,14 +110,21 @@ async def main() -> None:
     mt = SarvamMT(settings.sarvam_api_key)
     tts = BulbulTTS(settings.sarvam_api_key)
     (OUT / "audio").mkdir(parents=True, exist_ok=True)
+    only = set(sys.argv[1:])
     out: dict = {"generated_with": "Sarvam Mayura MT + Bulbul v3 TTS", "scenes": {}}
+    kept = {}
+    if only and (OUT / "scenes.json").is_file():
+        kept = json.loads((OUT / "scenes.json").read_text())["scenes"]
     try:
         for key, scene in SCENES.items():
+            if only and key not in only:
+                out["scenes"][key] = kept[key]
+                continue
             lines = []
             for n, (side, src) in enumerate(scene["lines"]):
                 me, other = scene[side], scene["b" if side == "a" else "a"]
                 t0 = time.monotonic()
-                tgt = await mt.translate(src, me["lang"], other["lang"])
+                tgt = await mt.translate(src, me["lang"], other["lang"], gender=me["g"])
                 mt_ms = round((time.monotonic() - t0) * 1000)
                 src_pcm, _ = await synth(tts, src, me["voice"], me["lang"])
                 tgt_pcm, tts_ms = await synth(tts, tgt, INTERPRETER[me["g"]], other["lang"])
