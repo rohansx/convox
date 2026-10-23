@@ -138,13 +138,13 @@ sequenceDiagram
 - Audio is never stored by default. The architecture diagram has an opt-in S3 bucket for recordings. That bucket is not part of the Compose stack, and wiring it up is TBD.
 - Postgres backups for the buildathon: a nightly `pg_dump` to the VM disk is enough (proposed).
 
-## Deploying (proposed)
+## Deploying
+
+Today Convox runs on the shared Hostinger VPS (`deploy/compose.yml`), next to other apps. Dokploy's Traefik owns ports 80/443 and routes `convox.ai` and `www.convox.ai` to the app over `dokploy-network`, with a Let's Encrypt certificate. Postgres and Redis are the stack's own, unexposed. The server keeps its own `/opt/convox/.env` (prod, real engines, `DOMAIN`, `PG_PASSWORD`); deploys never copy one.
 
 ```bash
-ssh convox-vm
-cd /srv/Convox && git pull origin main
-docker compose build app && docker compose up -d
-docker compose logs -f app
+./deploy/push.sh                                  # rsync the tree, rebuild and restart app
+ssh root@<vps> docker logs -f convox-app-1
 ```
 
 A redeploy restarts `app` and **drops live calls**. Never deploy during a demo or a scheduled PSTN test. From CP2 (feature freeze) on, deploy only fixes from the fix list.

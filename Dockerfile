@@ -19,7 +19,8 @@ RUN uv sync --frozen --no-dev --no-install-project
 COPY convox ./convox
 RUN uv sync --frozen --no-dev
 
-RUN useradd --system --uid 10001 --no-create-home convox
+RUN useradd --system --uid 10001 --no-create-home convox \
+    && mkdir -p /app/out /app/logs && chown convox /app/out /app/logs
 USER convox
 
 EXPOSE 8000

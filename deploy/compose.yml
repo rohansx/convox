@@ -1,0 +1,61 @@
+# Convox on the shared VPS (Dokploy's Traefik owns :80/:443). The app joins dokploy-network so
+# Traefik can route DOMAIN to it and get a Let's Encrypt cert; postgres and redis stay private.
+# Run from /opt/convox:  docker compose -f deploy/compose.yml --env-file .env up -d --build
+name: convox
+
+services:
+  app:
+    build: ..
+    env_file: ../.env
+    environment:
+      CONVOX_ENV: prod
+      DATABASE_URL: postgresql+asyncpg://convox:${PG_PASSWORD}@postgres:5432/convox
+      REDIS_URL: redis://redis:6379/0
+    volumes:
+      - out:/app/out
+      - logs:/app/logs
+    networks: [default, dokploy-network]
+    labels:
+      traefik.enable: "true"
+      traefik.docker.network: dokploy-network
+      traefik.http.routers.convox-web.rule: Host(`${DOMAIN}`) || Host(`www.${DOMAIN}`)
+      traefik.http.routers.convox-web.entrypoints: web
+      traefik.http.routers.convox-web.middlewares: redirect-to-https@file
+      traefik.http.routers.convox.rule: Host(`${DOMAIN}`) || Host(`www.${DOMAIN}`)
+      traefik.http.routers.convox.entrypoints: websecure
+      traefik.http.routers.convox.tls.certresolver: letsencrypt
+      traefik.http.services.convox.loadbalancer.server.port: "8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: convox
+      POSTGRES_PASSWORD: ${PG_PASSWORD}
+      POSTGRES_DB: convox
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U convox -d convox"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  redis:
+    image: redis:7
+    restart: unless-stopped
+
+networks:
+  dokploy-network:
+    external: true
+
+volumes:
+  pgdata: {}
+  out: {}
+  logs: {}
