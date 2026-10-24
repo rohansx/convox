@@ -9,7 +9,7 @@
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@300..700&family=Geist+Mono:wght@400;500&display=swap">
   {{ favicon() }}
   {{ analytics(request) }}
-  <link rel="stylesheet" href="/static/console/stage.css?v=4">
+  <link rel="stylesheet" href="/static/console/stage.css?v=5">
 </head>
 <body class="stage-body{% if preview %} is-preview{% endif %}{% if embed %} is-embed{% endif %}">
 <header class="top">
@@ -27,7 +27,7 @@
     <a href="/">Home</a>
   </nav>
 </header>
-{% if preview %}<p class="preview-banner">Sample data: a scripted call made from Convox's real translations. Nothing here is live.</p>{% endif %}
+{% if preview %}<p class="preview-banner"><b>Sample data</b> A scripted call, played with Convox's real translations and measured timings. Nothing here is live.</p>{% endif %}
 
 {% if not call %}
 <!-- pick a story ------------------------------------------------------------------- -->
@@ -97,12 +97,11 @@
     <div class="heads">
       {% for s in sides %}
       <div class="person person-{{ s.side }}" id="person-{{ s.side }}">
-        <span class="av">{{ (s.name or s.role)[:1] }}</span>
-        <div class="who"><b>{{ s.role }}{% if s.name %} <span class="name">· {{ s.name }}</span>{% endif %}</b><span lang="{{ s.lang[:2] }}">{{ s.native }}{% if s.english != s.native %} · {{ s.english }}{% endif %}</span></div>
-        <span class="leg" id="leg-{{ s.side }}">waiting</span>
+        <p class="role"><span class="dot" aria-hidden="true"></span>{{ s.role }}<span class="leg" id="leg-{{ s.side }}">waiting</span></p>
+        <p class="who">{% if s.name %}<b>{{ s.name }}</b>{% endif %}<span lang="{{ s.lang[:2] }}">{{ s.native }}{% if s.english != s.native %} · {{ s.english }}{% endif %}</span></p>
       </div>
       {% if loop.first %}
-      <div class="bridge-head"><span>quiet before<br>they hear it</span></div>
+      <div class="bridge-head"><span>Delay</span></div>
       {% endif %}
       {% endfor %}
     </div>
@@ -127,16 +126,17 @@
     </div>
 
     <div class="rows" id="rows" aria-live="polite"></div>
+
+    <footer class="impact" id="impact">
+      <p><b id="s-turns">0</b> lines</p>
+      <p><b id="s-quiet">—</b> typical delay</p>
+      <p><b id="s-nums">0</b> numbers intact</p>
+      <p class="muted">No shared language</p>
+      <button type="button" class="btn btn-ghost btn-sm" id="wrap" disabled>Wrap up</button>
+    </footer>
   </div>
 
-  <section class="impact" id="impact">
-    <div><span>Lines interpreted</span><b id="s-turns">0</b></div>
-    <div><span>Typical quiet after a line</span><b id="s-quiet">—</b></div>
-    <div><span>Numbers carried intact</span><b id="s-nums">0</b></div>
-    <div><span>Shared language</span><b>None</b></div>
-    <div class="impact-act"><button type="button" class="btn btn-primary" id="wrap" disabled>Wrap up the call</button></div>
-  </section>
-  <p class="honest">Convox interprets like a person would: it waits until someone stops talking, then the other person hears the translation. The quiet is that wait, measured per line.</p>
+  <p class="honest">Delay is the quiet between someone finishing a line and the other person starting to hear it. Convox waits for the end of a sentence, like a human interpreter.</p>
 
   <div class="outcome" id="outcome" hidden>
     <div class="oc-card" role="dialog" aria-labelledby="oc-title">
@@ -166,7 +166,7 @@
     </div>
   </div>
 </main>
-<script src="/static/console/stage.js?v=2" defer></script>
+<script src="/static/console/stage.js?v=3" defer></script>
 {% endif %}
 </body>
 </html>
