@@ -80,6 +80,10 @@ class Settings(BaseSettings):
     call_recording_dir: Path = Path("out/calls")
     log_file: Path | None = Path("logs/convox.log")  # JSON lines, rotating; empty = off
 
+    # Umami page analytics on the public pages (landing, live demo); off unless both are set.
+    umami_website_id: str = ""
+    umami_script_url: str = ""
+
     # Phrase / audio cache (L10). Every call's TTS goes through a byte-bounded LRU shared by
     # the process; phrase-pack audio is also written to tts_cache_dir (empty = memory only).
     tts_cache_mb: int = 64

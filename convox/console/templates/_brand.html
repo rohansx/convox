@@ -11,3 +11,9 @@
 {% macro favicon() -%}
 <link rel="icon" href="/static/console/favicon.svg" type="image/svg+xml">
 {%- endmacro %}
+{% macro analytics(request) -%}
+{%- set s = request.app.state.settings -%}
+{%- if s.umami_website_id and s.umami_script_url -%}
+<script defer src="{{ s.umami_script_url }}" data-website-id="{{ s.umami_website_id }}"></script>
+{%- endif -%}
+{%- endmacro %}
