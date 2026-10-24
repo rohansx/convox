@@ -208,3 +208,9 @@ def test_umami_script_on_public_pages_when_configured():
     for path in ("/", "/demo/preview"):
         page = env.client.get(path).text
         assert 'src="https://stats.example/script.js" data-website-id="site-123"' in page, path
+
+
+def test_landing_books_a_demo_with_the_founder():
+    page = Env().client.get("/").text
+    assert page.count('href="https://cal.com/rohansx/30min"') >= 2
+    assert "Book a demo" in page
