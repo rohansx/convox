@@ -69,7 +69,9 @@
       cells[s].append(el("p"), el("div", "tag"));
     }
     const mid = el("div", "mid");
-    mid.append(el("span", "arrow", side === "a" ? "→" : "←"), el("span", "q"), el("span", "q-l"));
+    const line = el("span", "q-line");
+    line.append(el("span", "q"));
+    mid.append(line, el("span", "q-l"));
     row.append(cells.a, mid, cells.b);
     row._cells = cells;
     row._mid = mid;
@@ -105,7 +107,7 @@
   function speechEnded(side) {
     if (!pending || pending.side !== side || has(pending.tEnd)) return;
     pending.tEnd = performance.now();
-    ql(pending.row).textContent = "quiet · translating";
+    ql(pending.row).textContent = "translating";
     const p = pending;
     p.timer = setInterval(() => { q(p.row).textContent = secs(performance.now() - p.tEnd); }, 100);
   }
@@ -113,7 +115,7 @@
     const side = OTHER[listener];
     if (!pending || pending.side !== side) return;
     clearInterval(pending.timer);
-    ql(pending.row).textContent = `${ROLE[listener]} hears it`;
+    ql(pending.row).textContent = "playing";
   }
 
   function onPartial(side, text) {
@@ -144,15 +146,15 @@
     said.querySelector("p").replaceWith(marked(t.src_text || "…"));
     heard.querySelector("p").replaceWith(marked(t.tgt_text || "…"));
     const tag = heard.querySelector(".tag");
-    tag.replaceChildren(el("span", null, `Convox · in ${NATIVE[OTHER[t.side]]}`));
+    tag.replaceChildren(el("span", null, `Heard in ${NATIVE[OTHER[t.side]]}`));
     const ns = numbers(t.src_text || "");
     const intact = ns.length > 0 && ns.join(" ") === numbers(t.tgt_text || "").join(" ");
-    if (intact) tag.append(el("span", "ok", `✓ ${ns.join(", ")} came through`));
+    if (intact) tag.append(el("span", "ok", `${ns.join(", ")} intact`));
     const fa = firstAudio(t);
     const later = has(t.chunk) && t.chunk > 0;
     q(row).textContent = later ? "+" : has(fa) ? secs(fa) : "";
     q(row).className = "q" + (has(fa) && !later ? (fa < 1500 ? " fast" : fa > 2500 ? " slow" : "") : "");
-    ql(row).textContent = later ? "next part, while still talking" : "quiet before it was heard";
+    ql(row).textContent = later ? "while still talking" : "";
     const prev = turns.get(key);
     if (!(prev && prev._intact) && intact) numsIntact += ns.length;
     t._row = row;
