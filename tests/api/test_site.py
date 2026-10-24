@@ -192,3 +192,19 @@ def test_landing_leads_with_the_auto_problem_and_says_who_it_is_for():
         assert who in page, who
     assert 'id="platform"' in page and "not another app" in page
     assert "theweek.in" in page  # the auto rows are sourced, not asserted
+
+
+# --- analytics --------------------------------------------------------------------------
+
+
+def test_no_analytics_script_unless_configured():
+    env = Env()
+    for path in ("/", "/demo/preview"):
+        assert "data-website-id" not in env.client.get(path).text, path
+
+
+def test_umami_script_on_public_pages_when_configured():
+    env = Env(umami_website_id="site-123", umami_script_url="https://stats.example/script.js")
+    for path in ("/", "/demo/preview"):
+        page = env.client.get(path).text
+        assert 'src="https://stats.example/script.js" data-website-id="site-123"' in page, path

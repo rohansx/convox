@@ -1,4 +1,4 @@
-{% from "_brand.html" import glyph, logo, favicon %}
+{% from "_brand.html" import glyph, logo, favicon, analytics %}
 <!doctype html>
 <html lang="en">
 <head>
@@ -11,6 +11,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@300..600&family=Geist+Mono:wght@400;500&display=swap">
   {{ favicon() }}
+  {{ analytics(request) }}
   <link rel="stylesheet" href="/static/console/landing.css?v=14">
 </head>
 <body>
