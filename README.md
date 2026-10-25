@@ -1,73 +1,115 @@
-# Convox
+# Convox AI
 
-Convox is a live interpreter inside a phone call between two people who speak different Indian languages.
-The server joins two telephony legs itself, so A hears B translated and B hears A translated, about 1.5 s after each one stops speaking.
-The listener hears a gender-matched natural voice with the original speaker ducked underneath; pressing 0 turns interpretation off.
+**A live interpreter for phone calls between two people who don't share a language.**
+Each person speaks their own language and hears the other in theirs, about a second and a half after each line ends. Nobody installs anything and nobody has to switch languages.
 
-## Quickstart
+**[convox.ai](https://convox.ai)** · [Watch a sample call](https://convox.ai/demo/preview) · [Book a demo](https://cal.com/rohansx/30min)
 
-Needs Python 3.12 and [uv](https://docs.astral.sh/uv/). Docker is optional (Postgres and Redis are off the hot path).
+![The Convox landing page](docs/img/landing.jpg)
+
+## The problem
+
+In Bengaluru, an auto driver who speaks Kannada calls a passenger who speaks Hindi: "where are you?" Neither understands the other, the pickup is missed and the ride is cancelled. The same call fails thousands of times a day across India: couriers at the gate, delivery riders, home-service technicians, clinics and support desks.
+
+Ride, delivery and service apps already connect these two strangers through masked calls on cloud telephony such as Exotel. Convox joins that call on the server and interprets both directions. Nothing changes on either phone. It can switch on only when the two people's languages differ.
+
+## How it works
+
+```text
+speaker ── end of utterance ── speech-to-text ── translate ── text-to-speech ──▶ listener
+            ~0.3 s               Saaras            Mayura       Bulbul (streams)
+```
+
+1. **Listen.** Voice activity detection and end-of-utterance detection wait for the speaker to finish a sentence, the way a human interpreter would.
+2. **Interpret.** Sarvam AI transcribes (Saaras), translates (Mayura) and speaks the result in the listener's language (Bulbul), streaming the audio as it's made. Numbers, amounts and codes are checked to make sure they come through intact.
+3. **Hand over the floor.** A floor controller decides who's speaking, queues translations, handles one person talking over the other, and is the only code that plays audio to a phone.
+
+**Measured delay:** a median of **1.34 s** of quiet between someone finishing a line and the other person starting to hear it, measured across 65 lines over 9 two-phone calls. Translation is the largest part (about 0.66 s), then end-of-speech detection (0.3 s) and the first audio from text-to-speech (0.2 s). The 90th percentile is 3.9 s.
+
+## The live demo
+
+![The live demo: each column is one person's screen](docs/img/live-demo.jpg)
+
+`/demo` runs a call for an audience using two phones and a laptop:
+
+1. Pick a story: an **auto** driver and passenger (Kannada ⇄ Hindi), a **parcel** rider and customer (Hindi ⇄ Marathi), a **landlord** and tenant (Kannada ⇄ Hindi) or a **clinic** (Gujarati ⇄ English). You can also pick any two languages.
+2. Each person scans their own QR code, and each phone shows that person's role and some lines to try.
+3. The screen shows each line as it was said and as it was heard, the delay before each line, and the numbers that came through intact.
+4. **Wrap up** writes what the two agreed in both languages, using Claude on the speakers' original words, never on the machine translations.
+
+`/demo/{call}/details` is the engineering view for each call: the time each stage took per line, who held the floor, and the event stream.
+
+Languages: Kannada, Hindi, Marathi, Gujarati, Tamil and English.
+
+## Run it locally
+
+Needs Python 3.12 and [uv](https://docs.astral.sh/uv/). Docker is optional; Postgres and Redis are never on the path that carries a call's audio.
 
 ```bash
 uv sync                     # or: make install
-cp .env.example .env        # vendor keys are optional; without them everything runs on fakes
-make test                   # offline tests, no network, no keys
-make dev                    # API on http://127.0.0.1:8000 with reload (one worker)
+cp .env.example .env        # without vendor keys everything runs on fakes
+make test                   # offline tests: no network, no keys
+make dev                    # http://127.0.0.1:8000 (one worker: both sides of a call share a process)
 ```
-
-Then open:
 
 | URL | What |
 |---|---|
-| `http://127.0.0.1:8000/loopback/new` | creates a loopback call and gives two tab URLs: one browser tab per leg, talk into each mic |
-| `http://127.0.0.1:8000/ward` | ward mode: one phone, two people |
-| `http://127.0.0.1:8000/console` | live console: turns, state badge, per-stage latency over SSE (HTTP Basic, any user, password `CONSOLE_PASSWORD`) |
+| `/` | landing page |
+| `/demo/preview` | the live demo playing a scripted call (no keys needed) |
+| `/demo` | start a live two-phone call (console password) |
+| `/join` | two phones without the stage: the language is detected automatically |
+| `/ward` | one phone shared by two people |
+| `/loopback/new` | one browser tab for each side of a call, for development |
+| `/console` | live console: lines, floor state and the time each stage took, over SSE |
 
-With real keys in `.env`, `make smoke` checks Sarvam (translate, Bulbul, STT) and ElevenLabs end to end and writes wavs to `out/smoke/`. See [dev setup](docs/engineering/dev-setup.md) for everything else.
+To use the real engines, put `SARVAM_API_KEY` in `.env` and set `STT_IMPL`, `MT_IMPL` and `TTS_IMPL` to `real`. Add `ANTHROPIC_API_KEY` for the outcome card. `make smoke` checks the vendors end to end. See [dev setup](docs/engineering/dev-setup.md).
 
 ## Architecture
 
-One `CallSession` per call owns two legs (Exotel, Plivo, WebRTC or Fake, behind one `LegTransport` interface), two interpreter pipelines (one per direction: VAD, end-of-utterance, streaming STT, Sarvam Mayura translate, Bulbul or ElevenLabs streaming TTS) and one `FloorController`, the state machine that decides who is speaking, queues translations, handles barge-in and DTMF, and is the only code that sends audio to a leg through the ducking mixer. Audio is PCM16 mono 16 kHz in 20 ms frames everywhere inside; resampling happens at the leg edge. Every component sits behind a Protocol with a deterministic fake, so the whole pipeline runs offline. Postgres (turn log) and Redis (registry) are never touched on the hot path. Start with the [docs index](docs/README.md), then the [system overview](docs/architecture/system-overview.md), the [floor controller](docs/tech-spec/floor-controller.md), the [interpreter pipeline](docs/tech-spec/interpreter-pipeline.md) and the [leg transports](docs/tech-spec/leg-transports.md).
+One `CallSession` per call owns:
+- **two legs,** one per person, behind one `LegTransport` interface: Exotel, Plivo, a browser over WebRTC, or a fake;
+- **two interpreter pipelines,** one per direction;
+- **one `FloorController`.**
 
-## Status (Day 1, 21 Oct 2026)
+Inside, audio is always 16 kHz mono PCM16 in 20 ms frames, resampled at the edge of each leg. Every component sits behind a Protocol with a deterministic fake, so the whole pipeline runs and is tested offline (about 1,300 tests).
 
-| Area | With fakes | With real vendors | Telephony |
-|---|---|---|---|
-| Audio: frames, resample, mixer, earcon, wav | works, unit-tested | n/a | n/a |
-| Floor controller (states, queue, barge-in, DTMF, bypass) | works, invariant tests | n/a | n/a |
-| Interpreter pipeline | works end to end on fakes | wired to real providers; not yet run live (needs `.env`) | n/a |
-| Sarvam STT, Mayura translate, Bulbul TTS | `FakeSTT` / `FakeMT` / `FakeTTS` | implemented, mock-tested; run `make smoke` to verify live | n/a |
-| ElevenLabs Flash v2.5 TTS (hi, en) | `FakeTTS` | implemented, mock-tested; `make smoke` | n/a |
-| Deepgram Nova STT (fallback) | `FakeSTT` | mock-tested only, no key yet | n/a |
-| FakeLeg, WebRtcLeg + loopback page | works | browser mic, real providers | n/a |
-| ExotelLeg | mock-tested against the documented protocol | n/a | pending: Exotel voicebot access expected in a few days (open question 1, 16 kHz, still unverified) |
-| PlivoLeg | mock-tested (L16 and mu-law) | n/a | pending: Udyam-verified account (open question 6) |
-| CallSession, registry, `/v1/calls`, `/ws/leg`, `/loopback/new` | works end to end on fakes (two-tab loopback integration test) | wired; not yet run live | Exotel/Plivo dialers mock-tested; pending access |
-| Console (`/console`) and ward page (`/ward`) | pages and SSE work | n/a | n/a |
-| Turn writer (Postgres) | works with SQLite in tests; app runs without a DB | n/a | n/a |
-| Tools: `smoke`, `label`, `gen_fixtures`, `record_fixtures` | tested | `smoke` is the live check | n/a |
-| Tools: `bench` | works on fakes | `--stt/--mt/--tts real` once keys are in `.env` | n/a |
-
-Latency numbers we quote come from real PSTN calls only; loopback numbers are for correctness. See [evaluation and metrics](docs/engineering/evaluation-and-metrics.md).
-
-## Repo layout
+Start with the [docs index](docs/README.md), the [system overview](docs/architecture/system-overview.md), the [floor controller](docs/tech-spec/floor-controller.md) and the [interpreter pipeline](docs/tech-spec/interpreter-pipeline.md).
 
 ```text
 convox/
-  api/          FastAPI app factory, console routes, health, dependencies
-  audio/        frames (640-byte 20 ms frames), resample (soxr), mixer + earcon, wav I/O
-  config/       settings.py (env), pairs.py + pairs.yaml (per language pair)
-  console/      server-rendered templates, static JS, SSE
-  interp/       Protocols (contracts.py), VAD, endpointing, gender, MT cache, pipeline
-  legs/         LegTransport base, FakeLeg, ExotelLeg, PlivoLeg, WebRtcLeg (+ loopback page)
-  providers/    Sarvam STT/MT/Bulbul, ElevenLabs, Deepgram, registry, fakes
-  session/      CallSession, FloorController, TurnLog, registry, providers wiring, prompts
-  store/        SQLAlchemy models, background TurnWriter
-  clock.py, events.py, types.py   shared clock, event bus, value types
-tools/          smoke.py, label.py, gen_fixtures.py, record_fixtures.py bench.py
-tests/          unit, contract and pipeline tests; fixtures/ holds small synthetic wavs
-docs/           product, architecture, tech spec, plan, engineering
-Makefile        install, test, test-live, lint, fmt, dev, up, down, bench, smoke, fixtures, label
+  api/        FastAPI app, landing page and demo routes, console, auth
+  audio/      frames, resampling, mixer, wav
+  console/    templates and static files: landing page, live demo, console, phone pages
+  demo/       demo stories and the Claude outcome summary
+  interp/     the pipeline: VAD, end of utterance, MT cache, contracts
+  join/       two-phone join flow and QR codes
+  legs/       Exotel, Plivo, WebRTC and fake legs
+  providers/  Sarvam (Saaras, Mayura, Bulbul), ElevenLabs, Deepgram, fakes
+  session/    CallSession, FloorController, registry
+  store/      SQLAlchemy models, background turn writer
+  telephony/  Exotel and Plivo call APIs
+  ward/       one-phone mode
+deploy/       compose file and push script for the VPS
+tools/        smoke, bench, fixtures, landing and preview generators
+docs/         product, architecture, tech spec, engineering, plan
 ```
 
-Contributing: read [conventions](docs/engineering/conventions.md) first. `make lint` and `make test` must pass before every commit; CI runs both.
+## Status
+
+| Area | State |
+|---|---|
+| Live interpretation between two phones (browser) | Works with the real Sarvam engines; the delay figures above come from these calls |
+| Live demo, outcome summary, engineering view | Live at [convox.ai](https://convox.ai) |
+| Exotel (real phone numbers) | Built and tested against the documented protocol; waiting on number verification before the first real call |
+| Plivo | Built and tested with mocks; waiting on account verification |
+| Kannada, Marathi and Gujarati wording | Still needs a native speaker's review |
+
+## Deploying
+
+Production runs on a single VPS behind Traefik, with Let's Encrypt certificates: `./deploy/push.sh` syncs the code, rebuilds and restarts the app. A redeploy drops calls in progress. See [deployment](docs/engineering/deployment.md).
+
+## Contributing
+
+Read the [conventions](docs/engineering/conventions.md) first. `make lint` and `make test` must pass before every commit, and CI runs both.
+
+Speech by [Sarvam AI](https://www.sarvam.ai) · Telephony by [Exotel](https://exotel.com) · Summaries by [Claude](https://www.anthropic.com/claude)
