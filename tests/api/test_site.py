@@ -214,3 +214,17 @@ def test_landing_books_a_demo_with_the_founder():
     page = Env().client.get("/").text
     assert page.count('href="https://cal.com/rohansx/30min"') >= 2
     assert "Book a demo" in page
+
+
+def test_no_waitlist_unless_configured():
+    page = Env().client.get("/").text
+    assert 'id="waitlist"' not in page
+    assert "early access" not in page
+
+
+def test_landing_waitlist_when_configured():
+    env = Env(lobby_project_key="pk_test", lobby_script_url="https://wait.example/v1/wl.js")
+    page = env.client.get("/").text
+    assert '<div class="waitlist" id="waitlist"></div>' in page
+    assert 'src="https://wait.example/v1/wl.js" data-project="pk_test"' in page
+    assert 'data-target="#waitlist"' in page

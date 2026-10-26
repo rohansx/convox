@@ -1,4 +1,4 @@
-{% from "_brand.html" import glyph, logo, favicon, analytics %}
+{% from "_brand.html" import glyph, logo, favicon, analytics, waitlist %}
 <!doctype html>
 <html lang="en">
 <head>
@@ -12,7 +12,7 @@
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@300..600&family=Geist+Mono:wght@400;500&display=swap">
   {{ favicon() }}
   {{ analytics(request) }}
-  <link rel="stylesheet" href="/static/console/landing.css?v=14">
+  <link rel="stylesheet" href="/static/console/landing.css?v=15">
 </head>
 <body>
 
@@ -288,6 +288,13 @@
       <a class="btn btn-white" href="https://cal.com/rohansx/30min" target="_blank" rel="noopener" data-umami-event="book-demo-closing">Book a demo with the founder <span class="arr" aria-hidden="true">→</span></a>
       <a class="btn btn-glass" href="/demo">Try the live demo</a>
     </div>
+    {%- set w = waitlist(request) %}
+    {%- if w | trim %}
+    <div class="early">
+      <p class="early-k">Not ready for a call? Get early access and we'll write when Convox opens up.</p>
+      {{ w }}
+    </div>
+    {%- endif %}
   </div>
 </section>
 </main>
@@ -299,6 +306,6 @@
 
 </div>
 
-<script src="/static/console/landing.js?v=14" defer></script>
+<script src="/static/console/landing.js?v=15" defer></script>
 </body>
 </html>
