@@ -17,3 +17,10 @@
 <script defer src="{{ s.umami_script_url }}" data-website-id="{{ s.umami_website_id }}"></script>
 {%- endif -%}
 {%- endmacro %}
+{% macro waitlist(request) -%}
+{%- set s = request.app.state.settings -%}
+{%- if s.lobby_project_key and s.lobby_script_url -%}
+<div class="waitlist" id="waitlist"></div>
+<script defer src="{{ s.lobby_script_url }}" data-project="{{ s.lobby_project_key }}" data-target="#waitlist" data-button="Get early access" data-placeholder="you@company.com"></script>
+{%- endif -%}
+{%- endmacro %}

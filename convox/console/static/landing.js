@@ -12,6 +12,9 @@
 
   const nav = document.querySelector(".nav");
   const onScroll = () => nav.classList.toggle("scrolled", window.scrollY > 8);
+
+  // the Lobby waitlist widget fires lobby:signup; count it in Umami when analytics is on
+  document.addEventListener("lobby:signup", () => window.umami && window.umami.track("waitlist-signup"));
   window.addEventListener("scroll", onScroll, { passive: true });
   onScroll();
 

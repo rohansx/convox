@@ -84,6 +84,11 @@ class Settings(BaseSettings):
     umami_website_id: str = ""
     umami_script_url: str = ""
 
+    # Lobby waitlist form on the landing page (github.com/rohansx/lobby); off unless both are
+    # set. The project key is the public pk_ key, safe in a browser.
+    lobby_project_key: str = ""
+    lobby_script_url: str = ""
+
     # Phrase / audio cache (L10). Every call's TTS goes through a byte-bounded LRU shared by
     # the process; phrase-pack audio is also written to tts_cache_dir (empty = memory only).
     tts_cache_mb: int = 64
