@@ -37,7 +37,7 @@ def test_landing_tells_problem_solution_and_links_the_demo():
     assert "<title>" in page and "convox" in page
     for section in ('id="problem"', 'id="how"', 'id="features"', 'id="usecases"'):
         assert section in page, section
-    assert 'href="/demo"' in page and 'href="/demo/preview"' in page
+    assert 'href="/try"' in page and 'href="/demo/preview"' in page
     # two animated phone mockups, one per caller
     assert len(re.findall(r'class="iphone[ "]', page)) == 2
     assert "/static/console/landing.css" in page and "/static/console/landing.js" in page

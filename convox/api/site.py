@@ -243,19 +243,30 @@ def _summariser(request: Request) -> Any:
     return run
 
 
+async def outcome_for(
+    request: Request,
+    call_id: str,
+    call: dict[str, Any],
+    story: dict[str, Any] | None,
+    story_key: str | None,
+) -> dict[str, Any] | None:
+    """The outcome card's summary, cached per call, story and turn count."""
+    run = _summariser(request)
+    if run is None:
+        return None
+    turns = _turns(call)
+    cache: dict = request.app.state.__dict__.setdefault("_outcomes", {})
+    key = (call_id, story_key if story else None, len(turns))
+    if key not in cache:
+        langs = {s: call.get(f"{s}_lang") or "" for s in ("a", "b")}
+        cache[key] = await run(turns, story, langs)
+    return cache[key]
+
+
 @demo.post("/demo/{call_id}/outcome")
 async def outcome(
     request: Request, call_id: str, registry: Registry, story: str | None = None
 ) -> JSONResponse:
     call = _call_or_404(registry, call_id)
-    run = _summariser(request)
-    if run is None:
-        return JSONResponse({"outcome": None})
-    turns = _turns(call)
     found = stories.story(story)
-    cache: dict = request.app.state.__dict__.setdefault("_outcomes", {})
-    key = (call_id, story if found else None, len(turns))
-    if key not in cache:
-        langs = {s: call.get(f"{s}_lang") or "" for s in ("a", "b")}
-        cache[key] = await run(turns, found, langs)
-    return JSONResponse({"outcome": cache[key]})
+    return JSONResponse({"outcome": await outcome_for(request, call_id, call, found, story)})

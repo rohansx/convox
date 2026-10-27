@@ -32,6 +32,7 @@ class FakeSession:
         self.record = record
         self.kw = kw
         self.status = "ringing"
+        self.idle = True  # nothing in flight (the solo demo's agent waits on it)
         self.legs: dict[Side, Any] = {}
         self.hangups: list[str] = []
         self.turn_log: list[Turn] = []

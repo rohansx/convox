@@ -84,6 +84,14 @@ class Settings(BaseSettings):
     umami_website_id: str = ""
     umami_script_url: str = ""
 
+    # Solo demo (/try, api/solo.py): a visitor talks to Claude playing a story's other side.
+    # Public, so it is capped: calls at once, calls per visitor per day, and call length.
+    try_enabled: bool = True
+    try_max_live: int = 3
+    try_per_ip_day: int = 6
+    try_max_s: int = 180
+    try_start_s: int = 120  # time to tap start before the call is dropped
+
     # Lobby waitlist form on the landing page (github.com/rohansx/lobby); off unless both are
     # set. The project key is the public pk_ key, safe in a browser.
     lobby_project_key: str = ""

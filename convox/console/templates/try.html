@@ -1,0 +1,51 @@
+{% from "_brand.html" import logo, favicon, analytics %}<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Try Convox live · Convox AI</title>
+  <meta name="description" content="Talk to an auto driver who speaks only Kannada, in your own language. Convox interprets the call both ways, live.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@300..700&family=Geist+Mono:wght@400;500&display=swap">
+  {{ favicon() }}
+  {{ analytics(request) }}
+  <link rel="stylesheet" href="/static/console/stage.css?v=6">
+</head>
+<body class="stage-body">
+<header class="top">
+  {{ logo() }}
+  <p class="top-story"><b>Try it live</b></p>
+  <nav>
+    <a href="/demo/preview">Watch a sample call</a>
+    <a href="/">Home</a>
+  </nav>
+</header>
+<main class="picker solo-pick">
+  <div class="picker-head">
+    <p class="label">Try it live</p>
+    <h1>Talk to an auto driver who speaks only <span lang="kn">{{ agent.native }}</span>.</h1>
+    <p class="lead">You're the passenger, waiting outside the metro station. {{ agent.name }}, your driver, is on the main road and can't find you. Speak your own language: Convox interprets every line both ways, live.</p>
+  </div>
+  <form class="story solo-form" method="post" action="/try">
+    <input type="hidden" name="story" value="{{ story_key }}">
+    {% if error %}<p class="solo-error" role="alert">{{ error }}</p>{% endif %}
+    <p class="story-title">You speak</p>
+    <div class="pair-grid">
+      {% for l in langs %}
+      <label class="pair-card">
+        <input type="radio" name="lang" value="{{ l.lang }}" {% if loop.first %}checked{% endif %}>
+        <span lang="{{ l.lang[:2] }}">{{ l.native }}</span>{% if l.english != l.native %}<span class="muted">{{ l.english }}</span>{% endif %}
+      </label>
+      {% endfor %}
+    </div>
+    <button type="submit" class="btn btn-primary" data-umami-event="try-start">Call the driver <span aria-hidden="true">→</span></button>
+    <ul class="solo-notes">
+      <li>The driver is played by an AI that speaks only {{ agent.english }}. Everything you hear goes through Convox for real: speech recognition, translation and voice.</li>
+      <li>Your browser will ask for the microphone. Headphones help; calls last up to 3 minutes.</li>
+      <li>Convox keeps no recording and no transcript of this call. Speech is processed by Sarvam AI, and the driver's replies are written by Claude.</li>
+    </ul>
+  </form>
+</main>
+</body>
+</html>
