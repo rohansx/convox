@@ -372,6 +372,8 @@ kbd { font: 500 12px var(--mono); padding: 1px 6px; border-radius: 5px; border: 
 .who { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
 .who article { background: var(--paper); border: 1px solid var(--line); border-radius: 18px; padding: 24px; display: flex; flex-direction: column; gap: 8px; box-shadow: var(--shadow-sm); }
 .who article.lead-card { border-color: #ffc9ad; box-shadow: 0 0 0 3px var(--accent-soft), var(--shadow-sm); }
+.who-also { margin-top: 20px; max-width: 46em; font-size: 15px; color: var(--muted); }
+.figures dd a { color: inherit; }
 .who-k { font: 500 12.5px var(--mono); color: var(--muted); text-transform: uppercase; letter-spacing: .06em; display: flex; align-items: center; gap: 8px; }
 .who-k em { font-style: normal; text-transform: none; letter-spacing: 0; font: 500 12px var(--sans); color: #c2410c; background: var(--accent-soft); padding: 1px 8px; border-radius: 999px; }
 .who h3 { font-size: 22px; font-weight: 400; letter-spacing: -.025em; }

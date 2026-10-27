@@ -185,11 +185,12 @@ def test_landing_puts_kannada_first():
     assert rent["a"]["lang"] == "kn-IN" and "landlord" in rent["caption"]
 
 
-def test_landing_leads_with_the_auto_problem_and_says_who_it_is_for():
+def test_landing_leads_with_rider_and_delivery_calls_and_the_masked_call():
     page = Env().client.get("/").text
-    assert "Speak Kannada." in page and "auto driver" in page
-    for who in ("Ride hailing", "Parcel delivery", "Home services", "Clinics and telehealth"):
+    assert "Speak Kannada." in page and "delivery partner" in page
+    for who in ("Food and quick commerce", "Bike taxis and autos", "Parcel and e-commerce"):
         assert who in page, who
+    assert "masked call" in page and "CPaaS" in page and "niti.gov.in" in page
     assert 'id="platform"' in page and "not another app" in page
     assert "theweek.in" in page  # the auto rows are sourced, not asserted
 
