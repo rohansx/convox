@@ -72,13 +72,34 @@ button { font: inherit; color: inherit; }
 .ctas { display: flex; gap: 10px; flex-wrap: wrap; }
 
 /* --- hero: headline left, the pitch and the buttons right ------------------------- */
-.hero { padding: 96px var(--gut) 56px; }
-.langs { font-size: 15px; color: var(--muted); margin-bottom: 26px; letter-spacing: 0; }
+.hero { padding: 64px var(--gut) 48px; }
+.hero-grid { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); gap: 48px; align-items: center; }
+.hero-main { display: flex; flex-direction: column; align-items: flex-start; }
+.hero-k { display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px 6px 10px; border-radius: 999px; border: 1px solid var(--line-2); background: var(--paper); font-size: 13.5px; color: var(--ink-2); margin-bottom: 24px; }
+.hero-k .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.hero h1 { font-size: clamp(40px, 4.7vw, 68px); line-height: .98; letter-spacing: -.045em; font-weight: 400; }
+.hero h1 span { color: var(--accent); }
+.sub { font-size: 17.5px; line-height: 1.55; color: var(--ink-2); max-width: 500px; margin: 22px 0 28px; letter-spacing: -.005em; }
+.langs { font-size: 14.5px; color: var(--muted); margin-top: 28px; letter-spacing: 0; }
 .langs i { font-style: normal; color: var(--line-2); margin: 0 4px; }
-.hero-grid { display: grid; grid-template-columns: 1.6fr 1fr; gap: 56px; align-items: end; }
-.hero h1 { font-size: clamp(44px, 6.4vw, 84px); line-height: .98; letter-spacing: -.045em; font-weight: 400; }
-.hero-side { padding-bottom: 8px; }
-.sub { font-size: 17px; line-height: 1.55; color: var(--ink-2); max-width: 420px; margin-bottom: 26px; letter-spacing: -.005em; }
+
+/* the hero card: one real line, as said and as heard, cycling through the scenes */
+.hero-card { margin: 0; padding: 22px; border-radius: 22px; background: var(--paper); border: 1px solid var(--line); box-shadow: var(--shadow); display: flex; flex-direction: column; gap: 10px; }
+.hc-line { padding: 16px 18px; border-radius: 16px; transition: opacity .35s, transform .35s; }
+.hc-said { background: #fff0e8; border-bottom-left-radius: 6px; }
+.hc-heard { background: #eef0ff; border-bottom-right-radius: 6px; }
+.hero-card.swap .hc-line { opacity: 0; transform: translateY(6px); }
+.hc-who { font-size: 12.5px; color: var(--muted); margin-bottom: 6px; }
+.hc-who b { font-weight: 500; color: var(--ink); }
+.hc-text { font-size: clamp(18px, 1.7vw, 22px); line-height: 1.35; letter-spacing: -.01em; color: var(--ink); min-height: 2.7em; }
+.hc-mid { display: flex; justify-content: center; }
+.hc-chip { display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px; border-radius: 999px; background: var(--ink); color: #fbfaf7; font-size: 13px; }
+.hc-chip b { font: 500 12.5px var(--mono); color: #ffb48a; }
+.mark.hc-mark { width: 16px; height: 16px; color: #fbfaf7; }
+.hc-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 4px; font-size: 12.5px; color: var(--muted); }
+.hc-dots { display: inline-flex; gap: 5px; }
+.hc-dots i { width: 6px; height: 6px; border-radius: 50%; background: var(--line-2); transition: background .2s, width .2s; }
+.hc-dots i.on { width: 16px; border-radius: 3px; background: var(--ink); }
 
 /* --- the call, inside a painted dusk scene ---------------------------------------- */
 .stage-wrap { padding: 0 16px; }
@@ -309,7 +330,8 @@ kbd { font: 500 12px var(--mono); padding: 1px 6px; border-radius: 5px; border: 
   .page { border: 0; }
   .nav-in { grid-template-columns: 1fr auto; }
   .nav nav, .nav-link { display: none; }
-  .hero { padding-top: 56px; padding-bottom: 36px; }
+  .hero { padding-top: 36px; padding-bottom: 28px; }
+  .hero-card { padding: 16px; }
   .stage-wrap, .closing { padding-left: 10px; padding-right: 10px; }
   .stage { padding: 12px 10px 16px; }
   .stage-bar { justify-content: center; }

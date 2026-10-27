@@ -176,7 +176,7 @@ def test_brand_is_convox_ai_with_favicon():
 def test_landing_puts_kannada_first():
     page = Env().client.get("/").text
     langs = re.search(r'<p class="langs"[^>]*>(.*?)</p>', page).group(1)
-    assert langs.startswith("ಕನ್ನಡ")
+    assert re.sub(r"<[^>]+>", "", langs).startswith("ಕನ್ನಡ")
     tabs = re.findall(r'data-scene="(\w+)"', page)
     assert tabs[0] == "auto" and "rent" in tabs  # the auto call leads
     scenes = json.loads((STATIC / "static" / "landing" / "scenes.json").read_text())["scenes"]
@@ -187,7 +187,9 @@ def test_landing_puts_kannada_first():
 
 def test_landing_leads_with_rider_and_delivery_calls_and_the_masked_call():
     page = Env().client.get("/").text
-    assert "Speak Kannada." in page and "delivery partner" in page
+    # every language, not one: the headline names none, the hero card cycles real lines
+    assert "Speak your language." in page and "Be heard in theirs." in page
+    assert 'id="hero-card"' in page and "delivery partner" in page
     for who in ("Food and quick commerce", "Bike taxis and autos", "Parcel and e-commerce"):
         assert who in page, who
     assert "masked call" in page and "CPaaS" in page and "niti.gov.in" in page
