@@ -170,41 +170,6 @@
 
   const digits = (s) => (s.match(/\d+/g) || []).join(" ");
 
-  // the hero card: one real line at a time, as said and as heard, in a different pair of
-  // languages each time (scene, line index); the quiet is the same honest sum as the call's
-  const HERO = [["auto", 2], ["delivery", 0], ["clinic", 1], ["auto", 1], ["delivery", 2], ["rent", 1]];
-  function heroCard(scenes) {
-    const card = document.getElementById("hero-card");
-    if (!card) return;
-    const f = (k) => card.querySelector(`[data-hc="${k}"]`);
-    const items = HERO.map(([k, n]) => scenes[k] && scenes[k].lines[n] && { s: scenes[k], l: scenes[k].lines[n] }).filter(Boolean);
-    if (!items.length) return;
-    const dots = card.querySelector(".hc-dots");
-    dots.replaceChildren(...items.map(() => el("i")));
-    let i = 0;
-    function show(k) {
-      const { s, l } = items[k];
-      const me = s[l.from], other = s[l.from === "a" ? "b" : "a"];
-      f("who").textContent = first(me.name);
-      f("lang").textContent = me.native;
-      f("src").textContent = l.src;
-      f("src").lang = me.lang.slice(0, 2);
-      f("who2").textContent = first(other.name);
-      f("lang2").textContent = other.native;
-      f("tgt").textContent = l.tgt;
-      f("tgt").lang = other.lang.slice(0, 2);
-      f("quiet").textContent = `${((300 + 60 + l.mt_ms + l.tts_ttfb_ms) / 1000).toFixed(1)} s`;
-      [...dots.children].forEach((d, j) => d.classList.toggle("on", j === k));
-    }
-    show(0);
-    if (reduced) return;
-    setInterval(() => {
-      if (document.hidden) return;
-      card.classList.add("swap");
-      setTimeout(() => { i = (i + 1) % items.length; show(i); card.classList.remove("swap"); }, 350);
-    }, 4200);
-  }
-
   async function line(s, l, id) {
     const from = l.from, to = from === "a" ? "b" : "a";
     const me = s[from], other = s[to];
@@ -320,7 +285,6 @@
     .then((data) => {
       SCENES = data.scenes;
       if (reduced) staticScene(scene); else start(scene);
-      heroCard(SCENES);
     })
     .catch((err) => console.error("convox: scenes", err));
 })();
