@@ -12,7 +12,7 @@
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@300..600&family=Geist+Mono:wght@400;500&display=swap">
   {{ favicon() }}
   {{ analytics(request) }}
-  <link rel="stylesheet" href="/static/console/landing.css?v=20">
+  <link rel="stylesheet" href="/static/console/landing.css?v=21">
 </head>
 <body>
 
@@ -24,7 +24,6 @@
     {{ logo() }}
     <nav>
       <a href="#how">How it works</a>
-      <a href="#latency">Latency</a>
       <a href="/try" data-umami-event="try-nav">Try it live</a>
       <a href="#usecases">Who it's for</a>
     </nav>
@@ -37,31 +36,18 @@
 
 <main>
 <section class="hero">
+  <p class="langs" aria-label="Languages"><span lang="kn">ಕನ್ನಡ</span> <i>·</i> <span lang="hi">हिन्दी</span> <i>·</i> <span lang="mr">मराठी</span> <i>·</i> <span lang="gu">ગુજરાતી</span> <i>·</i> <span lang="ta">தமிழ்</span> <i>·</i> English</p>
   <div class="hero-grid">
-    <div class="hero-main">
-      <p class="hero-k"><span class="dot" aria-hidden="true"></span>Live interpreter for rider and delivery calls</p>
-      <h1>Speak your language.<br><span>Be heard in theirs.</span></h1>
-      <p class="sub">Convox joins the masked call your platform already routes through Exotel or another CPaaS. Each person speaks their own language and hears the other in theirs, about a second after each line. No app, any phone.</p>
+    <h1>Speak your language.<br><span>Be heard in theirs.</span></h1>
+    <div class="hero-side">
+      <p class="sub">A live interpreter for rider and delivery calls. Convox joins the masked call your platform already routes through Exotel or another CPaaS, so each person speaks their own language and hears the other in theirs. No app, any phone.</p>
       <div class="ctas">
         <a class="btn btn-dark" href="/try" data-umami-event="try-hero">Try a live call <span class="arr" aria-hidden="true">→</span></a>
         <button class="btn btn-ghost" type="button" data-sound-toggle data-scroll>
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>Hear a call
         </button>
       </div>
-      <p class="langs" aria-label="Languages"><span lang="kn">ಕನ್ನಡ</span> <i>·</i> <span lang="hi">हिन्दी</span> <i>·</i> <span lang="mr">मराठी</span> <i>·</i> <span lang="gu">ગુજરાતી</span> <i>·</i> <span lang="ta">தமிழ்</span> <i>·</i> English</p>
     </div>
-    <figure class="hero-card" id="hero-card" aria-label="A line on a Convox call">
-      <div class="hc-line hc-said">
-        <p class="hc-who"><b data-hc="who">Basavaraj</b> says, in <span data-hc="lang">ಕನ್ನಡ</span></p>
-        <p class="hc-text" data-hc="src" lang="kn">ಸರಿ, ಎರಡು ನಿಮಿಷದಲ್ಲಿ ಅಲ್ಲಿಗೆ ಬರ್ತೀನಿ. ಆಟೋ ನಂಬರ್ 4417.</p>
-      </div>
-      <div class="hc-mid"><span class="hc-chip">{{ glyph("hc-mark") }}<span>Convox</span><b data-hc="quiet">2.0 s</b></span></div>
-      <div class="hc-line hc-heard">
-        <p class="hc-who"><b data-hc="who2">Neha</b> hears, in <span data-hc="lang2">हिन्दी</span></p>
-        <p class="hc-text" data-hc="tgt" lang="hi">Okay, मैं दो minutes में वहाँ पहुँच जाऊँगा। Auto number 4417 है।</p>
-      </div>
-      <figcaption class="hc-foot"><span data-hc="caption">Real Convox output: translation, number check and timing.</span><span class="hc-dots" aria-hidden="true"></span></figcaption>
-    </figure>
   </div>
 </section>
 
@@ -342,6 +328,6 @@
 
 </div>
 
-<script src="/static/console/landing.js?v=17" defer></script>
+<script src="/static/console/landing.js?v=18" defer></script>
 </body>
 </html>

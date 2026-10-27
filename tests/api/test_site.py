@@ -187,9 +187,9 @@ def test_landing_puts_kannada_first():
 
 def test_landing_leads_with_rider_and_delivery_calls_and_the_masked_call():
     page = Env().client.get("/").text
-    # every language, not one: the headline names none, the hero card cycles real lines
+    # every language, not one: the headline names none
     assert "Speak your language." in page and "Be heard in theirs." in page
-    assert 'id="hero-card"' in page and "delivery partner" in page
+    assert "delivery partner" in page
     for who in ("Food and quick commerce", "Bike taxis and autos", "Parcel and e-commerce"):
         assert who in page, who
     assert "masked call" in page and "CPaaS" in page and "niti.gov.in" in page
