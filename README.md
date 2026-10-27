@@ -3,7 +3,7 @@
 **A live interpreter for phone calls between two people who don't share a language.**
 Each person speaks their own language and hears the other in theirs, about a second and a half after each line ends. Nobody installs anything and nobody has to switch languages.
 
-**[convox.ai](https://convox.ai)** · [Watch a sample call](https://convox.ai/demo/preview) · [Book a demo](https://cal.com/rohansx/30min)
+**[convox.ai](https://convox.ai)** · [Try it live](https://convox.ai/try) · [Watch a sample call](https://convox.ai/demo/preview) · [Book a demo](https://cal.com/rohansx/30min)
 
 ![The Convox landing page](docs/img/landing.jpg)
 
@@ -41,6 +41,10 @@ speaker ── end of utterance ── speech-to-text ── translate ── te
 
 Languages: Kannada, Hindi, Marathi, Gujarati, Tamil and English.
 
+### Try it yourself
+
+`/try` is public: you're the passenger and the driver is played by Claude, speaking only Kannada. His lines are synthesised and fed into the call like a phone's microphone, so everything you hear has gone through the real speech recognition, translation and voice, with the same timings. Calls last up to 3 minutes, with a few per visitor per day; no recording or transcript is kept.
+
 ## Run it locally
 
 Needs Python 3.12 and [uv](https://docs.astral.sh/uv/). Docker is optional; Postgres and Redis are never on the path that carries a call's audio.
@@ -55,6 +59,7 @@ make dev                    # http://127.0.0.1:8000 (one worker: both sides of a
 | URL | What |
 |---|---|
 | `/` | landing page |
+| `/try` | talk to an AI auto driver who speaks only Kannada, through the real pipeline (public, capped) |
 | `/demo/preview` | the live demo playing a scripted call (no keys needed) |
 | `/demo` | start a live two-phone call (console password) |
 | `/join` | two phones without the stage: the language is detected automatically |

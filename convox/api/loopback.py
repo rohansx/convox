@@ -105,6 +105,7 @@ def create_loopback_call(
     sessions: Any,
     factory: Any,
     pairs: dict[str, PairConfig],
+    co_located: bool = True,
 ) -> LoopbackCallResponse:
     settings: Settings = request.app.state.settings
     auto = None
@@ -123,14 +124,15 @@ def create_loopback_call(
             {"a": req.a_lang_hint, "b": req.b_lang_hint},
         )
     call_id = new_call_id()
-    # both phones in one room (/join, loopback): cross-talk gate on, no ducked original
+    # both phones in one room (/join, loopback): cross-talk gate on, no ducked original;
+    # the solo demo (api/solo.py) has one person and an agent, so it is not co-located
     opening = req.opening_line or settings.loopback_opening_line
     session = factory(
         call_id,
         pair,
         mode=req.mode,
         record=req.record,
-        co_located=True,
+        co_located=co_located,
         opening_line=opening,
         **auto_kw(auto),
         vertical=req.vertical or DEFAULT_VERTICAL,

@@ -9,21 +9,22 @@
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@300..700&family=Geist+Mono:wght@400;500&display=swap">
   {{ favicon() }}
   {{ analytics(request) }}
-  <link rel="stylesheet" href="/static/console/stage.css?v=5">
+  <link rel="stylesheet" href="/static/console/stage.css?v=6">
 </head>
-<body class="stage-body{% if preview %} is-preview{% endif %}{% if embed %} is-embed{% endif %}">
+<body class="stage-body{% if preview %} is-preview{% endif %}{% if embed %} is-embed{% endif %}{% if solo %} is-solo{% endif %}">
 <header class="top">
   {{ logo() }}
   {% if call %}
     <p class="top-story"><b>{{ story.title }}</b><span>{{ story.headline }}</span></p>
-    <span class="pill" id="state" data-state="WAITING">Waiting for both phones</span>
+    <span class="pill" id="state" data-state="WAITING">{% if solo %}Waiting for you{% else %}Waiting for both phones{% endif %}</span>
     <span class="clock" id="clock">00:00</span>
   {% else %}
     <p class="top-story"><b>Live demo</b></p>
   {% endif %}
   <nav>
-    {% if call %}<a href="{{ details_url }}" target="_blank" rel="noopener">Under the hood ↗</a>{% endif %}
-    {% if preview %}<a href="/demo">Start a live call</a>{% elif call %}<a href="/demo">New call</a>{% endif %}
+    {% if call and details_url %}<a href="{{ details_url }}" target="_blank" rel="noopener">Under the hood ↗</a>{% endif %}
+    {% if solo %}<a href="https://cal.com/rohansx/30min" target="_blank" rel="noopener" data-umami-event="book-demo-try">Book a demo</a>
+    {% elif preview %}<a href="/demo">Start a live call</a>{% elif call %}<a href="/demo">New call</a>{% endif %}
     <a href="/">Home</a>
   </nav>
 </header>
@@ -97,7 +98,7 @@
     <div class="heads">
       {% for s in sides %}
       <div class="person person-{{ s.side }}" id="person-{{ s.side }}">
-        <p class="role"><span class="dot" aria-hidden="true"></span>{{ s.role }}<span class="leg" id="leg-{{ s.side }}">waiting</span></p>
+        <p class="role"><span class="dot" aria-hidden="true"></span>{{ s.role }}{% if s.agent %}<span class="ai-tag" title="Played by an AI that speaks only {{ s.english }}">AI</span>{% endif %}<span class="leg" id="leg-{{ s.side }}">waiting</span></p>
         <p class="who">{% if s.name %}<b>{{ s.name }}</b>{% endif %}<span lang="{{ s.lang[:2] }}">{{ s.native }}{% if s.english != s.native %} · {{ s.english }}{% endif %}</span></p>
       </div>
       {% if loop.first %}
@@ -106,10 +107,28 @@
       {% endfor %}
     </div>
 
+    {% if solo %}
+    <div class="solo-mic" id="phone"
+         data-call-id="{{ call.call_id }}" data-side="{{ solo.side }}" data-lang="{{ solo.me.lang }}"
+         data-ws="{{ solo.ws_path }}" data-worklet="/static/console/join_worklet.js" data-events="{{ events_url }}"
+         data-ui="{{ solo.ui | tojson | forceescape }}" data-names="{}" data-solo="1">
+      <button type="button" class="btn btn-primary tap" id="tap" data-umami-event="try-mic">
+        <span class="tap-native">{{ solo.ui.start }}</span>{% if solo.ui.start != solo.ui_en.start %}<span class="tap-en" lang="en">{{ solo.ui_en.start }}</span>{% endif %}
+      </button>
+      <div class="orb" id="orb" hidden><span class="orb-level" aria-hidden="true"></span><p class="orb-text" id="orb-text">{{ solo.ui.connecting }}</p></div>
+      <p class="solo-status" id="status" lang="en"></p>
+      <p class="solo-hint">Speak <b lang="{{ solo.me.lang[:2] }}">{{ solo.me.native }}</b> after {{ solo.agent.name }} says hello. Pause at the end of each sentence, like on a call.</p>
+      <button type="button" class="btn btn-ghost btn-sm leave" id="leave" hidden>{{ solo.ui_en.leave }}</button>
+      <div id="lines" hidden></div>
+    </div>
+    {% endif %}
     <div class="join" id="join">
       {% for s in sides %}
       <div class="join-side join-{{ s.side }}">
-        {% if s.svg %}
+        {% if solo %}
+        {% if s.agent %}<p class="join-wait"><b>{{ s.name }}</b> is on the line and speaks only <span lang="{{ s.lang[:2] }}">{{ s.native }}</span>.</p>
+        {% else %}<p class="join-wait">Tap <b>{{ solo.ui_en.start }}</b> above and allow the microphone. You'll hear {{ solo.agent.name }} in <span lang="{{ s.lang[:2] }}">{{ s.native }}</span>.</p>{% endif %}
+        {% elif s.svg %}
         <figure class="qr" data-side="{{ s.side }}" data-url="{{ s.url }}">
           <div class="qr-code">{{ s.svg | safe }}</div>
           <figcaption><b>Scan to join as the {{ s.role }}</b><span>Speaks <i lang="{{ s.lang[:2] }}">{{ s.native }}</i>. <a href="{{ s.url }}" target="_blank" rel="noopener">Open link</a></span></figcaption>
@@ -120,7 +139,7 @@
         <p class="joined-note">✓ {{ s.role }} is on the call</p>
       </div>
       {% if loop.first %}
-      <div class="join-mid"><p>Each column is one person's screen: everything in it is in their language.</p></div>
+      <div class="join-mid"><p>Each column is one person's phone: everything in it is in their language.</p></div>
       {% endif %}
       {% endfor %}
     </div>
@@ -161,12 +180,15 @@
       <p class="oc-note" id="oc-note">They share no language. Every line went through Convox. The summary is written by Claude from what each person said, in their own words.</p>
       <div class="oc-actions">
         <button type="button" class="btn btn-ghost" id="oc-close">Back to the call</button>
-        <a class="btn btn-primary" href="/demo">Start another story</a>
+        {% if solo %}<a class="btn btn-primary" href="https://cal.com/rohansx/30min" target="_blank" rel="noopener" data-umami-event="book-demo-try-outcome">Book a demo</a>
+        <a class="btn btn-ghost" href="/try">Call again</a>
+        {% else %}<a class="btn btn-primary" href="/demo">Start another story</a>{% endif %}
       </div>
     </div>
   </div>
 </main>
 <script src="/static/console/stage.js?v=3" defer></script>
+{% if solo %}<script src="/static/console/join_phone.js?v=2" defer></script>{% endif %}
 {% endif %}
 </body>
 </html>
