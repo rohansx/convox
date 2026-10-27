@@ -5,7 +5,11 @@ name: convox
 
 services:
   app:
-    build: ..
+    build:
+      context: ..
+      # the VPS's docker bridge takes ~5 s per HTTPS request, so uv sync times out on PyPI;
+      # the host network downloads in milliseconds
+      network: host
     env_file: ../.env
     environment:
       CONVOX_ENV: prod
