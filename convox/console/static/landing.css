@@ -362,6 +362,17 @@ kbd { font: 500 12px var(--mono); padding: 1px 6px; border-radius: 5px; border: 
 /* problem: the auto story, the press it keeps getting, then the same call elsewhere */
 .press { margin-top: 22px; font-size: 14px; color: var(--muted); }
 .press a { color: var(--ink-2); text-decoration: underline; text-decoration-color: var(--line-2); text-underline-offset: 3px; }
+.cases { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 40px; }
+.case { background: var(--paper); border: 1px solid var(--line); border-radius: 18px; padding: 28px; display: flex; flex-direction: column; gap: 12px; box-shadow: var(--shadow-sm); }
+.case-k { font: 500 12.5px var(--mono); letter-spacing: .04em; color: var(--muted); }
+.case h3 { font-size: clamp(22px, 2.3vw, 28px); font-weight: 400; letter-spacing: -.03em; line-height: 1.15; }
+.case p:not(.case-k):not(.case-src) { font-size: 16px; color: var(--ink-2); line-height: 1.6; flex: 1; }
+.case-src { font-size: 13px; color: var(--muted); }
+.case-src a { text-decoration: underline; text-decoration-color: var(--line-2); text-underline-offset: 3px; }
+.middle { margin-top: 16px; padding: 28px; border-radius: 18px; background: var(--ink); color: #fbfaf7; display: flex; flex-direction: column; gap: 10px; }
+.middle .case-k { color: #ff8a4c; }
+.middle-line { font-size: clamp(20px, 2.2vw, 27px); line-height: 1.35; letter-spacing: -.02em; max-width: 46em; }
+.middle-line span { color: rgba(251,250,247,.6); }
 .also { margin: 64px 0 0; font-size: 20px; font-weight: 400; letter-spacing: -.02em; color: var(--ink-2); }
 .issues { list-style: none; padding: 0; margin: 20px 0 0; display: grid; grid-template-columns: repeat(4, 1fr); border-top: 1px solid var(--line); }
 .issues li { padding: 22px 24px 24px 0; display: flex; flex-direction: column; gap: 8px; }
@@ -404,7 +415,8 @@ kbd { font: 500 12px var(--mono); padding: 1px 6px; border-radius: 5px; border: 
   .platform article + article { border-top: 1px solid var(--line); }
 }
 @media (max-width: 640px) {
-  .issues, .who { grid-template-columns: 1fr; }
+  .issues, .who, .cases { grid-template-columns: 1fr; }
+  .case, .middle { padding: 22px; }
   .issues li, .issues li + li { padding: 18px 0; border-left: 0; border-bottom: 1px solid var(--line); }
   .also { margin-top: 44px; }
 }
