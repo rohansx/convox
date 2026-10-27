@@ -51,6 +51,9 @@ button { font: inherit; color: inherit; }
 .nav nav a:hover, .nav-link:hover { color: var(--ink); }
 .nav-end { display: flex; align-items: center; justify-content: flex-end; gap: 20px; }
 .nav-link { font-size: 14px; color: var(--ink-2); }
+.nav-gh { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 999px; color: var(--ink-2); transition: color .15s, background .15s; }
+.nav-gh:hover { color: var(--ink); background: rgba(31,28,23,.06); }
+.nav-gh svg { width: 20px; height: 20px; fill: currentColor; }
 
 /* --- buttons -------------------------------------------------------------------- */
 .btn { display: inline-flex; align-items: center; gap: 8px; height: 44px; padding: 0 20px; border-radius: 999px; font-size: 15px; font-weight: 500; letter-spacing: -.01em; border: 1px solid transparent; cursor: pointer; transition: background .15s, border-color .15s, transform .15s; white-space: nowrap; }
