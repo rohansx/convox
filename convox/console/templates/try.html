@@ -10,7 +10,7 @@
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@300..700&family=Geist+Mono:wght@400;500&display=swap">
   {{ favicon() }}
   {{ analytics(request) }}
-  <link rel="stylesheet" href="/static/console/stage.css?v=7">
+  <link rel="stylesheet" href="/static/console/stage.css?v=8">
 </head>
 <body class="stage-body">
 <header class="top">
@@ -19,6 +19,7 @@
   <nav>
     <a href="/demo/preview">Watch a sample call</a>
     <a href="https://cal.com/rohansx/30min" target="_blank" rel="noopener" data-umami-event="book-demo-try-picker">Book a demo</a>
+    <a href="https://github.com/rohansx/convox" target="_blank" rel="noopener">GitHub</a>
     <a href="/">Home</a>
   </nav>
 </header>
@@ -37,15 +38,13 @@
       <h2>{{ c.story.headline }}</h2>
       <p class="stakes">{{ c.stakes }}</p>
       {% if c.error %}<p class="solo-error" role="alert">{{ c.error }}</p>{% endif %}
-      <div class="story-roles">
-        <span><b>{{ c.agent.name }}, {{ c.agent.role | lower }} <i class="ai-tag">AI</i></b><i lang="{{ c.agent.lang[:2] }}">{{ c.agent.native }}</i></span>
-        <span class="swap" aria-hidden="true">⇄</span>
-        <span><b>You, the {{ c.you.role | lower }}</b>
-          <label class="sr-only" for="lang-{{ c.key }}">You speak</label>
+      <div class="solo-who">
+        <p class="solo-them"><b>{{ c.agent.name }}</b><span class="ai-tag">AI</span><span class="muted">{{ c.agent.role }} · speaks only <span lang="{{ c.agent.lang[:2] }}">{{ c.agent.native }}</span></span></p>
+        <label class="solo-you" for="lang-{{ c.key }}"><span>You, the {{ c.you.role | lower }}, speak</span>
           <select class="lang-pick" id="lang-{{ c.key }}" name="lang">
             {% for l in c.langs %}<option value="{{ l.lang }}"{% if loop.first %} selected{% endif %}>{{ l.native }}{% if l.english != l.native %} · {{ l.english }}{% endif %}</option>{% endfor %}
           </select>
-        </span>
+        </label>
       </div>
       <button type="submit" class="btn btn-primary" data-umami-event="try-start-{{ c.key }}">Call {{ c.agent.name }} <span aria-hidden="true">→</span></button>
     </form>
