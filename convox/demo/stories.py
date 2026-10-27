@@ -31,7 +31,10 @@ STORIES: dict[str, dict[str, Any]] = {
                 "standing and how to recognise them, then say you'll be there in about 2 "
                 "minutes. Don't read out your auto's number."
             ),
-            "solo_stakes": "The driver speaks only Kannada. You don't. Find each other.",
+            "solo_stakes": (
+                "The driver speaks only Kannada and doesn't understand Hindi. Tell him where "
+                "you are before he cancels."
+            ),
         },
         "a": {
             "role": "Driver",
@@ -144,7 +147,93 @@ def side_of(key: str | None, side: str) -> dict[str, Any] | None:
     return s[side] if s and side in ("a", "b") else None
 
 
+# Solo-only stories (/try): the agent is the worker, the visitor the customer. Not on the
+# two-phone stage (/demo), which needs a person on each side. TODO(native review, PQ5).
+SOLO_STORIES: dict[str, dict[str, Any]] = {
+    "parcel": {
+        "title": "Parcel",
+        "headline": "Your parcel is at the gate",
+        "stakes": "The delivery agent speaks only Marathi. He doesn't understand Hindi.",
+        "vertical": "delivery",
+        "agent": {
+            "side": "a",
+            "opener": "नमस्कार, मी तुमचं पार्सल घेऊन आलोय. मी सोसायटीच्या गेटवर आहे, कुठे येऊ?",
+            "nudge": "हॅलो? ऐकू येतंय का?",
+            "persona": (
+                "You are at the main gate of the customer's housing society in Pune with "
+                "their parcel. The guard won't let you in without their wing and flat "
+                "number, and the delivery needs the OTP they got by SMS. You have ten more "
+                "deliveries waiting, so you are polite but keen to finish. Ask for the wing "
+                "and flat number, then the OTP; repeat the OTP back digit by digit."
+            ),
+            "solo_stakes": (
+                "The delivery agent speaks only Marathi and doesn't understand Hindi. He "
+                "needs your flat number and the OTP, or the parcel goes back."
+            ),
+        },
+        "a": {
+            "role": "Delivery agent",
+            "name": "Santosh",
+            "lang": "mr-IN",
+            "lines": [
+                "नमस्कार, मी तुमचं पार्सल घेऊन आलोय. मी सोसायटीच्या गेटवर आहे, कुठे येऊ?",
+                "कोणती विंग आणि फ्लॅट नंबर?",
+                "ठीक आहे. ओटीपी सांगा.",
+            ],
+        },
+        "b": {"role": "Customer", "name": "", "lang": "hi-IN", "lines": []},
+    },
+    "food": {
+        "title": "Food",
+        "headline": "Your food is at the wrong tower",
+        "stakes": "The delivery partner speaks only Tamil. The food is getting cold.",
+        "vertical": "delivery",
+        "agent": {
+            "side": "a",
+            "opener": "வணக்கம், உங்க ஆர்டர் கொண்டு வந்திருக்கேன். நான் அபார்ட்மென்ட் கேட்ல இருக்கேன், எந்த டவர்?",
+            "nudge": "ஹலோ? கேக்குதா?",
+            "persona": (
+                "You are a food delivery partner in Chennai, at the main gate of a big "
+                "apartment complex with several towers, holding the customer's order. The "
+                "map pin is wrong. Ask which tower and floor, and a landmark you can see "
+                "from the gate, then say how many minutes you'll take."
+            ),
+            "solo_stakes": (
+                "The delivery partner speaks only Tamil. Tell him which tower before the "
+                "food goes cold."
+            ),
+        },
+        "a": {
+            "role": "Delivery partner",
+            "name": "Murugan",
+            "lang": "ta-IN",
+            "lines": [
+                "வணக்கம், உங்க ஆர்டர் கொண்டு வந்திருக்கேன். நான் அபார்ட்மென்ட் கேட்ல இருக்கேன், எந்த டவர்?",
+                "எந்த மாடி?",
+                "சரி, ரெண்டு நிமிஷத்துல வரேன்.",
+            ],
+        },
+        "b": {"role": "Customer", "name": "", "lang": "hi-IN", "lines": []},
+    },
+}
+SOLO_ORDER = ("auto", "parcel", "food")
+
+# The landing page's sample call (/demo/preview, tools/stage_preview.py). TODO(PQ5): the
+# Gujarati lines need a native speaker's check.
+PREVIEW: dict[str, Any] = {
+    "title": "Parcel",
+    "headline": "The parcel is at the gate",
+    "stakes": (
+        "In Ahmedabad, the delivery agent speaks only Gujarati and the customer only Hindi. "
+        "The parcel needs a flat number and an OTP."
+    ),
+    "vertical": "delivery",
+    "a": {"role": "Delivery agent", "name": "Jignesh", "lang": "gu-IN", "lines": []},
+    "b": {"role": "Customer", "name": "Neha", "lang": "hi-IN", "lines": []},
+}
+
+
 def solo(key: str | None) -> dict[str, Any] | None:
     """A story that can be played against Claude, or None."""
-    s = story(key)
+    s = STORIES.get(key or "") or SOLO_STORIES.get(key or "")
     return s if s is not None and "agent" in s else None

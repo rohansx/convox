@@ -12,7 +12,7 @@
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@300..600&family=Geist+Mono:wght@400;500&display=swap">
   {{ favicon() }}
   {{ analytics(request) }}
-  <link rel="stylesheet" href="/static/console/landing.css?v=16">
+  <link rel="stylesheet" href="/static/console/landing.css?v=17">
 </head>
 <body>
 
@@ -25,7 +25,7 @@
     <nav>
       <a href="#how">How it works</a>
       <a href="#latency">Latency</a>
-      <a href="#dashboard">Live demo</a>
+      <a href="/try" data-umami-event="try-nav-demo">Live demo</a>
       <a href="#usecases">Who it's for</a>
     </nav>
     <div class="nav-end">
@@ -136,9 +136,9 @@
 
 <section class="block" id="problem">
   <p class="label">The problem</p>
-  <p class="statement">A delivery partner or bike-taxi rider takes dozens of calls a day from strangers, in whatever language the customer speaks. <span>A Bengaluru rider speaks Kannada; his customer speaks Hindi. The pickup is missed, the order is late, or the argument becomes the next viral video.</span></p>
+  <p class="statement">India changes language every few hundred kilometres, and people are proud of theirs. <span>A bike-taxi rider in Bengaluru speaks Kannada; in Hyderabad, Telugu. Their customers have often moved from another state and speak Hindi, Bengali or Tamil. Neither should have to give up their language to get a ride or a parcel, and on the phone, neither can point.</span></p>
   <p class="press">It keeps happening: <a href="https://www.theweek.in/wire-updates/national/2025/04/21/mes13-ka-kannada-hindi-fight.html" target="_blank" rel="noopener">The Week, April 2025</a> · <a href="https://www.freepressjournal.in/amp/india/bengaluru-auto-driver-passengers-heated-debate-over-kannada-vs-hindi-sparks-controversy-yet-again" target="_blank" rel="noopener">Free Press Journal</a> · <a href="https://deccanherald.com/india/karnataka/bengaluru/memes-flood-internet-after-auto-row-3198494" target="_blank" rel="noopener">Deccan Herald</a></p>
-  <h3 class="also">The same call fails all day, on every fleet:</h3>
+  <h3 class="also">A delivery partner or rider takes dozens of these calls a day, from strangers. When language breaks one:</h3>
   <ul class="issues">
     <li><b>The parcel</b><span>The delivery agent can't find the address or get the OTP. The delivery fails, and a parcel sent back costs the courier ₹150–250.<sup><a href="https://www.clickpost.ai/blog/rto-in-ecommerce" target="_blank" rel="noopener">1</a></sup></span></li>
     <li><b>The 10-minute order</b><span>The rider is at the wrong gate with the clock running. The order arrives late or gets cancelled.</span></li>
@@ -217,7 +217,15 @@
       <p class="label">The live demo</p>
       <h2>Watch a call get through.</h2>
     </div>
-    <p class="lead">Two phones, two people, no shared language. Each column is one person's screen, entirely in their language; between them, the quiet before each line is heard. When they hang up, Convox writes down what they agreed, in both languages. This is the real demo screen playing a sample call.</p>
+    <p class="lead">In Ahmedabad, a delivery agent who speaks only Gujarati calls a customer who speaks only Hindi. Each column is one person's screen, entirely in their language; between them, the quiet before each line is heard. When they hang up, Convox writes down what they agreed, in both languages. Turn the sound on to hear both voices and Convox's.</p>
+  </div>
+  <div class="showcase-bar">
+    <button class="sound sound-light" type="button" id="dash-sound" aria-pressed="false">
+      <svg class="ico-off" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 9v6h4l5 4V5L7 9H3Zm13.6 3 2.7-2.7-1.4-1.4-2.7 2.7-2.7-2.7-1.4 1.4 2.7 2.7-2.7 2.7 1.4 1.4 2.7-2.7 2.7 2.7 1.4-1.4-2.7-2.7Z"/></svg>
+      <svg class="ico-on" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 9v6h4l5 4V5L7 9H3Zm13.5 3A4.5 4.5 0 0 0 14 8v8a4.5 4.5 0 0 0 2.5-4ZM14 3.2v2.1a7 7 0 0 1 0 13.4v2.1a9 9 0 0 0 0-17.6Z"/></svg>
+      <span class="sound-label">Turn sound on to hear the call</span>
+    </button>
+    <span class="showcase-langs"><span lang="gu">ગુજરાતી</span> ⇄ <span lang="hi">हिन्दी</span></span>
   </div>
   <div class="showcase">
     <div class="browser">
@@ -227,7 +235,7 @@
       </div>
     </div>
   </div>
-  <p class="showcase-foot"><a href="/demo/preview">Open the sample call full screen</a>. For engineers, every call also has an <a href="/demo/preview/details">under-the-hood view</a>: the pipeline split of each line, who has the floor, and every number check.</p>
+  <p class="showcase-foot">This is a sample call with Convox's real translations and voices. <a href="/try">Make a live one yourself</a>, or <a href="/demo/preview">open the sample full screen</a>. For engineers, every call also has an <a href="/demo/preview/details">under-the-hood view</a>: the pipeline split of each line, who has the floor, and every number check.</p>
 </section>
 
 <section class="block" id="features">
@@ -304,6 +312,6 @@
 
 </div>
 
-<script src="/static/console/landing.js?v=15" defer></script>
+<script src="/static/console/landing.js?v=16" defer></script>
 </body>
 </html>

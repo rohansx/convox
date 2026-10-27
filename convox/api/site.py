@@ -2,7 +2,7 @@
 
 GET /                 landing page (public): the problem, how convox solves it, two
                       animated phones, languages, use cases
-GET /demo/preview     the live stage playing a scripted Auto call (public, labelled
+GET /demo/preview     the live stage playing a scripted call (public, labelled
                       "Sample data"; creates no call, opens no stream); ?embed=1 for the
                       landing page's frame. /demo/preview/details: the dashboard, scripted
 GET /demo             pick a story (demo/stories.py) or a language pair (console auth);
@@ -51,10 +51,10 @@ LANDING_LANGS = (
     ("தமிழ்", "Tamil"),
 )
 
-# The sample call /demo/preview plays: a delivery agent (Hindi) and a customer (Marathi).
-# Marathi lines need a native speaker's check (PQ5).
+# The sample call /demo/preview plays (stories.PREVIEW): a delivery agent who speaks
+# Gujarati and a customer who speaks Hindi. Gujarati lines need a native speaker's check.
 PREVIEW_SIDES = (
-    {"side": "a", "lang": "mr-IN", "native": "मराठी", "english": "Marathi"},
+    {"side": "a", "lang": "gu-IN", "native": "ગુજરાતી", "english": "Gujarati"},
     {"side": "b", "lang": "hi-IN", "native": "हिन्दी", "english": "Hindi"},
 )
 
@@ -101,7 +101,7 @@ def _stage_sides(story: dict[str, Any], langs: dict[str, str], urls: dict[str, s
 
 
 def _preview_story() -> dict[str, Any]:
-    return stories.STORIES["auto"]
+    return stories.PREVIEW
 
 
 @public.get("/demo/preview", response_class=HTMLResponse)
@@ -114,7 +114,7 @@ async def stage_preview(request: Request, embed: bool = False) -> HTMLResponse:
         "stage.html",
         {
             "call": {"call_id": "preview", "state": "IDLE", "status": "active", "legs": {}},
-            "story_key": "auto",
+            "story_key": "preview",
             "story": story,
             "sides": _stage_sides(story, langs, {}),
             "turns_json": "[]",

@@ -51,6 +51,7 @@ h1, h2, h3, p { margin: 0; }
 .top nav a:hover { color: var(--ink); }
 .preview-banner { max-width: 1440px; margin: 0 auto; padding: 14px 28px 0; font-size: 13px; color: var(--muted); }
 .preview-banner b { font: 500 11px var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--ink-2); border: 1px solid var(--line-2); border-radius: 4px; padding: 2px 6px; margin-right: 8px; }
+.preview-banner .btn { margin-left: 10px; height: 30px; vertical-align: middle; }
 
 /* --- buttons --------------------------------------------------------------------- */
 .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 44px; padding: 0 20px; border-radius: 999px; font: 500 15px var(--font); letter-spacing: -.01em; text-decoration: none; border: 1px solid transparent; cursor: pointer; white-space: nowrap; }
@@ -135,30 +136,16 @@ h1, h2, h3, p { margin: 0; }
 .join-side.joined .joined-note { display: block; }
 .stage.live .join { display: none; }
 
-/* solo (/try): the visitor's mic lives in the page; the other side is an AI */
-.ai-tag { font: 500 10px var(--mono); letter-spacing: .06em; color: var(--a); border: 1px solid #f3c4ad; border-radius: 4px; padding: 0 5px; line-height: 16px; }
-.is-solo .join { min-height: 160px; }
-.is-solo .join-side { padding: 22px; text-align: center; }
-.is-solo .join-wait { max-width: 30em; }
-.solo-mic { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; padding: 14px 24px; border-bottom: 1px solid var(--line); background: var(--b-soft); }
-.solo-mic .tap { gap: 10px; }
-.solo-mic .tap-en { font-size: 12.5px; opacity: .65; }
-.orb { display: inline-flex; align-items: center; gap: 10px; height: 44px; padding: 0 18px; border-radius: 999px; background: var(--card); border: 1px solid var(--line-2); box-shadow: var(--shadow-sm); }
-.orb-level { width: 10px; height: 10px; border-radius: 50%; background: var(--b); transform: scale(calc(1 + var(--level, 0) * 1.8)); transition: transform .08s linear, background .2s; }
-body[data-state="speaking"] .orb-level { background: var(--a); transform: none; animation: talk 1.1s ease-out infinite; --ring: rgba(226,85,42,.45); }
-body[data-state="waiting"] .orb-level, body[data-state="connecting"] .orb-level { background: var(--faint); }
-.orb-text { font-size: 15px; }
-.solo-status { font: 400 12px var(--mono); color: var(--muted); }
-.solo-status:empty { display: none; }
-.solo-hint { font-size: 14px; color: var(--ink-2); flex: 1 1 260px; }
-.solo-mic .leave { margin-left: auto; }
-.solo-pick .solo-form { max-width: 640px; margin-top: 36px; gap: 14px; }
-.solo-pick .solo-form:hover { transform: none; }
-.solo-pick .pair-grid { margin-top: 0; }
-.solo-pick .pair-card .muted { font-size: 13.5px; }
-.solo-pick .btn { margin-top: 8px; align-self: flex-start; }
-.solo-notes { margin: 6px 0 0; padding-left: 18px; font-size: 13.5px; color: var(--muted); display: flex; flex-direction: column; gap: 4px; }
-.solo-error { padding: 10px 14px; border-radius: 10px; background: #fff1ea; color: #9a3412; font-size: 14px; }
+/* the solo demo's picker (/try, templates/try.html) */
+.ai-tag { font: 500 10px var(--mono); font-style: normal; letter-spacing: .06em; color: var(--a); border: 1px solid #f3c4ad; border-radius: 4px; padding: 0 5px; line-height: 16px; margin-left: 4px; vertical-align: 1px; }
+.solo-stories { margin-top: 36px; }
+.solo-card .story-roles { align-items: flex-end; }
+.solo-card .story-roles b { display: inline; }
+.lang-pick { margin-top: 4px; font: 400 17px var(--font); color: var(--ink); background: var(--card); border: 1px solid var(--line-2); border-radius: 10px; padding: 6px 30px 6px 10px; max-width: 100%; appearance: none; -webkit-appearance: none; background-image: linear-gradient(45deg, transparent 50%, var(--muted) 50%), linear-gradient(135deg, var(--muted) 50%, transparent 50%); background-position: calc(100% - 15px) 55%, calc(100% - 10px) 55%; background-size: 5px 5px; background-repeat: no-repeat; cursor: pointer; }
+.lang-pick:focus { outline: 2px solid var(--ink); outline-offset: 1px; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.solo-notes { margin: 28px 0 0; padding-left: 18px; font-size: 13.5px; color: var(--muted); display: flex; flex-direction: column; gap: 4px; max-width: 60em; }
+.solo-error { margin-top: 18px; padding: 10px 14px; border-radius: 10px; background: #fff1ea; color: #9a3412; font-size: 14px; }
 
 /* rows: one per line, what was said on the speaker's side, what was heard on the other */
 .rows { flex: 1; display: flex; flex-direction: column; min-height: 420px; max-height: calc(100vh - 300px); overflow-y: auto; scroll-behavior: smooth;; background: linear-gradient(var(--line), var(--line)) calc(50% - var(--mid) / 2) 0 / 1px 100% no-repeat, linear-gradient(var(--line), var(--line)) calc(50% + var(--mid) / 2) 0 / 1px 100% no-repeat; background-attachment: local; }
@@ -254,8 +241,6 @@ mark { background: transparent; color: inherit; font-weight: 600; text-decoratio
   .oc-cols, .oc-stats { grid-template-columns: 1fr; }
   .oc-stats div + div { padding-left: 0; border-left: 0; border-top: 1px solid var(--line); }
   .rows { max-height: none; }
-  .solo-mic { padding: 12px; gap: 10px; }
-  .solo-hint { flex-basis: 100%; order: 3; font-size: 13px; }
 }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }

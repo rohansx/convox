@@ -1,0 +1,134 @@
+{% from "_brand.html" import glyph, logo, favicon, analytics %}<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ story.title }}: live call · Convox AI</title>
+  <meta name="robots" content="noindex">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@300..600&family=Geist+Mono:wght@400;500&display=swap">
+  {{ favicon() }}
+  {{ analytics(request) }}
+  <link rel="stylesheet" href="/static/console/landing.css?v=17">
+  <link rel="stylesheet" href="/static/console/try.css?v=1">
+</head>
+<body class="try-body" data-state="idle">
+<div class="page">
+<header class="nav">
+  <div class="nav-in">
+    {{ logo() }}
+    <nav><span class="try-crumb">{{ story.title }} · live call</span></nav>
+    <div class="nav-end">
+      <a class="nav-link" href="/try">Other calls</a>
+      <a class="btn btn-dark btn-sm" href="https://cal.com/rohansx/30min" target="_blank" rel="noopener" data-umami-event="book-demo-call">Book a demo <span class="arr" aria-hidden="true">→</span></a>
+    </div>
+  </div>
+</header>
+
+<main>
+<section class="try-head">
+  <p class="label">Live call · {{ agent.name }} is an AI</p>
+  <h1>{{ story.headline }}</h1>
+  <p class="try-stakes">{{ story.stakes }}</p>
+</section>
+
+<section class="stage-wrap">
+  <div class="stage try-stage" id="call"
+       data-side="{{ side }}" data-agent-side="{{ agent_side }}"
+       data-lang="{{ me.lang }}" data-ws="{{ ws_path }}" data-monitor="{{ monitor_path }}"
+       data-events="{{ events_url }}" data-outcome="{{ outcome_url }}"
+       data-worklet="/static/console/join_worklet.js" data-max-s="{{ max_s }}"
+       data-people="{{ people | tojson | forceescape }}">
+    <div class="stage-art" aria-hidden="true"></div>
+    <div class="stage-bar">
+      <div class="try-controls">
+        <button type="button" class="btn btn-white try-start" id="start" data-umami-event="try-mic">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15a3 3 0 0 0 3-3V6a3 3 0 1 0-6 0v6a3 3 0 0 0 3 3Zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.9V21h2v-2.1A7 7 0 0 0 19 12h-2Z"/></svg>
+          Start the call
+        </button>
+        <span class="try-pill" id="pill">Tap start, then allow the microphone</span>
+        <span class="try-clock" id="clock">00:00</span>
+      </div>
+      <div class="try-controls">
+        <button type="button" class="sound" id="both" aria-pressed="true" title="Also hear what {{ agent.name }}'s phone hears and says">
+          <svg class="ico-off" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 9v6h4l5 4V5L7 9H3Zm13.6 3 2.7-2.7-1.4-1.4-2.7 2.7-2.7-2.7-1.4 1.4 2.7 2.7-2.7 2.7 1.4 1.4 2.7-2.7 2.7 2.7 1.4-1.4-2.7-2.7Z"/></svg>
+          <svg class="ico-on" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 9v6h4l5 4V5L7 9H3Zm13.5 3A4.5 4.5 0 0 0 14 8v8a4.5 4.5 0 0 0 2.5-4ZM14 3.2v2.1a7 7 0 0 1 0 13.4v2.1a9 9 0 0 0 0-17.6Z"/></svg>
+          <span class="sound-label">Hearing both phones</span>
+        </button>
+        <button type="button" class="btn btn-white btn-sm" id="leave" hidden>End call</button>
+      </div>
+    </div>
+
+    <div class="phones">
+      {% for s in ("a", "b") %}{% set p = people[s] %}
+      <div class="iphone" data-side="{{ s }}">
+        <span class="hw hw-1"></span><span class="hw hw-2"></span><span class="hw hw-3"></span><span class="hw hw-4"></span>
+        <div class="screen">
+          <div class="island"><span class="isl-mark">{{ glyph("mk-isl") }}</span><span class="isl-wave">{% for i in range(5) %}<i style="--i:{{ i }}"></i>{% endfor %}</span></div>
+          <div class="statusbar"><span class="clock">9:41</span><span class="sb"><span class="bat"><i></i></span></span></div>
+          <div class="callhead">
+            <div class="avatar">{{ p.name[0] }}</div>
+            <b>{{ p.name }}{% if p.agent %} <small class="ai-tag">AI</small>{% endif %}</b>
+            <span class="via"><span lang="{{ p.lang[:2] }}">{{ p.native }}</span> · <span data-role="timer">00:00</span></span>
+            <span class="tag">{{ glyph("mk-tag") }}{% if p.agent %}{{ p.role }}'s phone{% else %}Your phone{% endif %}</span>
+          </div>
+          <div class="convo" data-role="convo" aria-live="polite" lang="{{ p.lang[:2] }}"></div>
+          <div class="callfoot">
+            <div class="wave">{% for i in range(28) %}<i style="--i:{{ i }}"></i>{% endfor %}</div>
+            <p class="status" data-role="status">{% if p.agent %}Waiting for you{% else %}Not connected{% endif %}</p>
+          </div>
+          <div class="homebar"></div>
+        </div>
+      </div>
+      {% if s == "a" %}
+      <div class="link" id="link" aria-hidden="true">
+        <div class="link-line"><span class="pulse"></span></div>
+        <div class="link-card">{{ glyph("sm") }}<b data-role="dir">Convox</b><span data-role="timing">&nbsp;</span></div>
+        <div class="link-line"><span class="pulse"></span></div>
+      </div>
+      {% endif %}
+      {% endfor %}
+    </div>
+
+    <p class="stage-note">Left: {{ agent.name }}'s phone, in <span lang="{{ agent.lang[:2] }}">{{ agent.native }}</span>. Right: yours, in <span lang="{{ me.lang[:2] }}">{{ me.native }}</span>. Speak after {{ agent.name }} says hello and pause at the end of each sentence. With <b>hearing both phones</b> on, you also hear his side: your words spoken to him in <span lang="{{ agent.lang[:2] }}">{{ agent.native }}</span>, then his reply.</p>
+  </div>
+</section>
+
+<section class="try-stats">
+  <dl>
+    <div><dt id="s-turns">0</dt><dd>lines interpreted</dd></div>
+    <div><dt id="s-quiet">—</dt><dd>typical delay after a line</dd></div>
+    <div><dt id="s-nums">0</dt><dd>numbers carried intact</dd></div>
+  </dl>
+  <button type="button" class="btn btn-ghost" id="wrap" disabled>Wrap up: what did we agree?</button>
+</section>
+
+<section class="try-transcript">
+  <h2>Transcript</h2>
+  <p class="try-muted">Every line as it was said, and as the other person heard it. Kept only in this page.</p>
+  <ol id="transcript"></ol>
+</section>
+
+<div class="try-outcome" id="outcome" hidden>
+  <div class="try-oc" role="dialog" aria-labelledby="oc-title">
+    <p class="label">Outcome</p>
+    <h2 id="oc-title">What you agreed</h2>
+    <div class="try-oc-cols">
+      {% for s in ("a", "b") %}{% set p = people[s] %}
+      <div class="try-oc-side" data-side="{{ s }}"><p class="try-muted">{{ p.name }} · <span lang="{{ p.lang[:2] }}">{{ p.native }}</span></p><h3 lang="{{ p.lang[:2] }}"></h3><ul lang="{{ p.lang[:2] }}"></ul></div>
+      {% endfor %}
+    </div>
+    <p class="try-muted" id="oc-wait">Writing up what you agreed…</p>
+    <div class="try-oc-actions">
+      <button type="button" class="btn btn-ghost" id="oc-close">Back to the call</button>
+      <a class="btn btn-ghost" href="/try">Try another call</a>
+      <a class="btn btn-dark" href="https://cal.com/rohansx/30min" target="_blank" rel="noopener" data-umami-event="book-demo-outcome">Book a demo <span class="arr" aria-hidden="true">→</span></a>
+    </div>
+  </div>
+</div>
+</main>
+</div>
+<script src="/static/console/try.js?v=1" defer></script>
+</body>
+</html>

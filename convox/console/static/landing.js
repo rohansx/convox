@@ -37,6 +37,34 @@
     }, { threshold: 0.4 }).observe(n)
   );
 
+  // --- the sample call's sound: the frame tells us each clip (it never gets a tap, so it
+  // can't play them); this page plays them while its button is on. The hero call's sound
+  // and this one are never on together.
+  const dashBtn = document.getElementById("dash-sound");
+  const dashFrame = view ? view.querySelector("iframe") : null;
+  let dashOn = false, dashClip = null, muteHero = () => {};
+  function setDash(on) {
+    dashOn = on;
+    if (!dashBtn) return;
+    dashBtn.setAttribute("aria-pressed", String(on));
+    dashBtn.querySelector(".sound-label").textContent = on ? "Sound on" : "Turn sound on to hear the call";
+    if (!on && dashClip) dashClip.pause();
+    if (on) {
+      muteHero();
+      // start the sample over, so the sound starts with a line
+      if (dashFrame && dashFrame.contentWindow && dashFrame.src) {
+        dashFrame.contentWindow.postMessage({ type: "convox-preview-restart" }, location.origin);
+      }
+    }
+  }
+  if (dashBtn) dashBtn.addEventListener("click", () => setDash(!dashOn));
+  window.addEventListener("message", (e) => {
+    if (e.origin !== location.origin || !e.data || e.data.type !== "convox-preview-audio" || !dashOn) return;
+    if (dashClip) dashClip.pause();
+    dashClip = new Audio(e.data.url);
+    dashClip.play().catch(() => {});
+  });
+
   // --- the call ------------------------------------------------------------------------
   const stage = document.getElementById("stage");
   if (!stage) return;
@@ -59,6 +87,7 @@
   let run = 0;
   let t0 = performance.now();
   let current = null; // the playing Audio
+  muteHero = () => { if (soundOn) setSound(false); };
   const clips = new Map();
 
   const first = (name) => name.split(" ")[0];
@@ -218,6 +247,7 @@
       t.querySelector(".sound-label").textContent = on ? "Sound on" : "Turn sound on to hear the call";
     }
     if (!on) stopAudio();
+    if (on && dashOn) setDash(false);
     if (SCENES && !reduced) start(scene); // restart the call so the audio starts with a line
   }
 

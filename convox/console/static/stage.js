@@ -318,6 +318,29 @@
   }
 
   // --- preview: the scripted call, on the measured timings ----------------------------
+  // With audio (tools/stage_preview.py): each line in the speaker's voice, then Convox's
+  // interpretation. Framed in the landing page, the page plays them (the frame never gets
+  // a tap, so it can't): it is told each clip; it asks for a restart when sound goes on.
+  // Opened on its own, the "Sound" button in the banner plays them here.
+  const AUDIO = "/static/console/stage/";
+  const framed = window.parent !== window;
+  let soundOn = false, clip = null;
+  function sound(url) {
+    if (!url) return;
+    if (framed) window.parent.postMessage({ type: "convox-preview-audio", url: AUDIO + url }, location.origin);
+    else if (soundOn) { if (clip) clip.pause(); clip = new Audio(AUDIO + url); clip.play().catch(() => {}); }
+  }
+  window.addEventListener("message", (e) => {
+    if (e.origin === location.origin && e.data && e.data.type === "convox-preview-restart") location.reload();
+  });
+  const soundBtn = $("preview-sound");
+  if (soundBtn) soundBtn.addEventListener("click", () => {
+    soundOn = !soundOn;
+    soundBtn.setAttribute("aria-pressed", String(soundOn));
+    soundBtn.textContent = soundOn ? "Sound on" : "Turn sound on";
+    if (!soundOn && clip) clip.pause();
+  });
+
   function play(data) {
     const wait = (ms) => new Promise((r) => setTimeout(r, ms));
     const emit = (kind, p) => dispatch(kind, p);
@@ -333,9 +356,11 @@
         emit("state", { to: side === "a" ? "A_SPEAKING" : "B_SPEAKING" });
         const tSpeech = performance.now();
         const words = t.src_text.split(" ");
+        sound(t.src_audio);
+        const per = t.src_ms ? Math.max(150, (t.src_ms - 150) / words.length) : 300;
         for (let i = 0; i < words.length; i++) {
           emit("partial", { side, text: words.slice(0, i + 1).join(" ") });
-          await wait(300);
+          await wait(per);
         }
         const tEnd = performance.now();
         emit("state", { to: "IDLE" });
@@ -345,7 +370,8 @@
         seq += 1;
         emit("turn", { turn: { side, seq, src_text: t.src_text, tgt_text: t.tgt_text,
           t_speech_start: tSpeech, t_speech_end: tEnd, t_play_start: tEnd + quiet } });
-        await wait(Math.max(1800, t.tgt_text.length * 60));
+        sound(t.tgt_audio);
+        await wait(t.tgt_ms ? t.tgt_ms + 200 : Math.max(1800, t.tgt_text.length * 60));
         emit("state", { to: "IDLE" });
         await wait(700);
       }

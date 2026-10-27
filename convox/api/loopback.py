@@ -106,10 +106,14 @@ def create_loopback_call(
     factory: Any,
     pairs: dict[str, PairConfig],
     co_located: bool = True,
+    pair_config: PairConfig | None = None,
 ) -> LoopbackCallResponse:
+    """`pair_config`, when given, is the call's pair as is (the solo demo builds its own)."""
     settings: Settings = request.app.state.settings
     auto = None
-    if req.pair is not None:
+    if pair_config is not None:
+        pair = pair_config
+    elif req.pair is not None:
         named = pairs.get(req.pair)
         pair = orient(named, req.a_lang, req.b_lang) if named is not None else None
         if pair is None:

@@ -109,7 +109,10 @@ def test_preview_stage_is_public_scripted_and_links_its_details():
     env = Env(convox_env="dev", console_password="pw")
     page = env.client.get("/demo/preview").text
     assert 'id="stage"' in page and 'data-preview="1"' in page and "Sample data" in page
-    assert "data-events" not in page and "Driver" in page and "Passenger" in page
+    assert "data-events" not in page and "Delivery agent" in page and "Customer" in page
+    assert "ગુજરાતી" in page and 'id="preview-sound"' in page
+    framed = env.client.get("/demo/preview?embed=1").text
+    assert 'id="preview-sound"' not in framed  # the landing page plays the sound
     assert 'href="/demo/preview/details"' in page
     details = env.client.get("/demo/preview/details")
     assert details.status_code == 200 and 'id="demo"' in details.text
@@ -200,3 +203,16 @@ def test_outcome_needs_auth_and_a_known_call():
     env, _ = outcome_env(convox_env="dev", console_password="pw")
     assert env.client.post("/demo/c_x/outcome").status_code == 401
     assert env.client.post("/demo/c_nope/outcome", headers=basic("pw")).status_code == 404
+
+
+def test_preview_lines_have_their_audio():
+    import json
+    from pathlib import Path
+
+    stage = Path(__file__).resolve().parents[2] / "convox" / "console" / "static" / "stage"
+    data = json.loads((stage / "preview.json").read_text())
+    assert data["story"] == "preview" and len(data["turns"]) >= 4
+    for t in data["turns"]:
+        for k in ("src_audio", "tgt_audio"):
+            assert (stage / t[k]).is_file(), t[k]
+        assert t["src_ms"] > 0 and t["tgt_ms"] > 0
