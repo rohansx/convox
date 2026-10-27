@@ -7,7 +7,9 @@ audio would have finished playing. Agent listens to the call's turn events. Once
 visitor's line has played to it (the floor logs a turn when playout ends), it answers in
 its own language, and the answer is synthesised with that side's TTS and fed in as its
 mic. So the visitor hears it only through the real pipeline: STT on the agent's voice, MT,
-TTS and the floor, with the same timings as a phone.
+TTS and the floor, with the same timings as a phone. `tap(kind, pcm)` sees everything the
+leg says ("said") and is played ("heard", "clear" on barge-in), for the page's "hear both
+phones" (api/solo.py).
 
 The agent hears what Convox delivered (the turn's tgt_text, in its language), never the
 visitor's own words. Replies come from `reply(history)`: Claude in the story's role, or
@@ -41,8 +43,15 @@ Reply = Callable[[History], Awaitable[str | None]]
 
 
 class AgentLeg:
-    def __init__(self, leg_id: Side, *, clock: Clock | None = None) -> None:
+    def __init__(
+        self,
+        leg_id: Side,
+        *,
+        clock: Clock | None = None,
+        tap: Callable[[str, bytes], None] | None = None,
+    ) -> None:
         self.leg_id = leg_id
+        self.tap = tap
         self.clock: Clock = clock if clock is not None else MonotonicClock()
         self.closed = False
         self._speech = bytearray()
@@ -62,6 +71,7 @@ class AgentLeg:
         pad = -len(pcm16_16k) % FRAME_BYTES
         self._speech += pcm16_16k + bytes(pad)
         self._quiet.clear()
+        self._tap("said", pcm16_16k)
 
     async def wait_quiet(self) -> None:
         await self._quiet.wait()
@@ -87,9 +97,18 @@ class AgentLeg:
 
     async def send(self, pcm16_16k: bytes) -> None:
         self._tracker.played(len(pcm16_16k))
+        self._tap("heard", pcm16_16k)
 
     async def clear(self) -> None:
         self._tracker.clear()
+        self._tap("clear", b"")
+
+    def _tap(self, kind: str, pcm: bytes) -> None:
+        if self.tap is not None:
+            try:
+                self.tap(kind, pcm)
+            except Exception:  # a listener must never break the call
+                log.exception("agent.tap_failed")
 
     async def mark(self, tag: str) -> None:
         self._tracker.mark(tag)

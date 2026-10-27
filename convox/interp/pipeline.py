@@ -219,6 +219,7 @@ class Interpreter:
         self.clock = clock
         self.sink = sink
         self.gender: Gender | None = gender
+        self._mt_gender = "gender" in inspect.signature(mt.translate).parameters
         self.phrases = phrases
         self.ack_ok = ack_ok
         self.readback = readback
@@ -742,6 +743,8 @@ class Interpreter:
             extra["phrase_hit"], extra["ack"] = int(match is not None), int(ack)
         text = match.text if match is not None else final  # the line's canonical form
 
+        if self.gender is None:  # before MT: the translation agrees with the speaker
+            self.gender = detect_gender(audio)
         if self.mt_skip:
             spec, tgt_text, t_mt = SpecOutcome(None, False), text, t_stt_final
         else:
@@ -808,7 +811,10 @@ class Interpreter:
         early.add_done_callback(close)
 
     async def _translate(self, text: str) -> str:
-        return await self.mt.translate(text, self.pair.side(self.side).mt_lang, self.tgt.lang)
+        src = self.pair.side(self.side).mt_lang
+        if self._mt_gender:
+            return await self.mt.translate(text, src, self.tgt.lang, gender=self.gender)  # type: ignore[call-arg]
+        return await self.mt.translate(text, src, self.tgt.lang)
 
     async def _pump_partials(self, stream: STTStream, job: _Job) -> None:
         try:

@@ -361,6 +361,26 @@ async def test_given_gender_overrides_detection():
     assert sink.translations[0].voice == PAIR.b.voice_f
 
 
+async def test_the_speakers_gender_reaches_mt():
+    """Hindi and Marathi verbs agree with the speaker: a man's line must not come out
+    "aa rahi hoon". Gender is detected from the voice before MT, not only for the voice."""
+
+    class GenderedMT(FakeMT):
+        def __init__(self) -> None:
+            super().__init__()
+            self.genders: list[str | None] = []
+
+        async def translate(self, text, src, tgt, gender=None):
+            self.genders.append(gender)
+            return await super().translate(text, src, tgt)
+
+    clock = FakeClock()
+    mt = GenderedMT()
+    interp, sink = make(clock, mt=mt, stt=FakeSTT(script=["main aa raha hoon"]), side="b")
+    await interp.run(feed(silence(200) + harmonic(1000, f0=110) + silence(800), clock))
+    assert mt.genders == ["m"] and sink.translations[0].voice == PAIR.a.voice_m
+
+
 async def test_trailing_utterance_flushed_when_frames_end():
     clock = FakeClock()
     interp, sink = make(clock)

@@ -223,7 +223,7 @@
     ws.binaryType = "arraybuffer";
     ws.onopen = () => {
       ws.send(JSON.stringify({ type: "hello", side, lang }));
-      if (!root.dataset.solo) setStatus(`${ctx.sampleRate / 1000} kHz → 16 kHz`);
+      setStatus(`${ctx.sampleRate / 1000} kHz → 16 kHz`);
       render();
     };
     ws.onmessage = (e) => {

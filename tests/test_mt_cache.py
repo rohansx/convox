@@ -97,3 +97,39 @@ async def test_ordinary_turns_never_reach_the_shared_store():
     mt = CachedMT(FakeMT(), shared=shared)
     await mt.translate("my flat is 302", "en-IN", "hi-IN")
     assert shared == {}
+
+
+class GenderedMT:
+    """An MT that, like Sarvam's, takes the speaker's gender."""
+
+    name = "gendered"
+
+    def __init__(self) -> None:
+        self.calls: list[str | None] = []
+
+    async def translate(self, text: str, src: str, tgt: str, gender: str | None = None) -> str:
+        self.calls.append(gender)
+        return f"{text}/{gender}"
+
+
+async def test_gender_reaches_an_mt_that_takes_it_and_keys_the_cache():
+    inner = GenderedMT()
+    mt = CachedMT(inner)
+    assert await mt.translate("aa raha hoon", "hi-IN", "mr-IN", gender="m") == "aa raha hoon/m"
+    assert await mt.translate("aa raha hoon", "hi-IN", "mr-IN", gender="f") == "aa raha hoon/f"
+    assert await mt.translate("aa raha hoon", "hi-IN", "mr-IN", gender="m") == "aa raha hoon/m"
+    assert inner.calls == ["m", "f"]
+
+
+async def test_gender_is_dropped_for_an_mt_without_it_and_phrase_lines_still_hit():
+    inner = FakeMT()
+    shared: dict = {}
+    mt = CachedMT(inner, shared=shared)
+    await mt.prefill("OTP bataiye", "hi-IN", "mr-IN")
+    assert await mt.translate("OTP bataiye", "hi-IN", "mr-IN", gender="m") == "[mr-IN] OTP bataiye"
+    assert inner.calls == 1
+    gendered = CachedMT(GenderedMT(), shared=shared)
+    assert (
+        await gendered.translate("OTP bataiye", "hi-IN", "mr-IN", gender="f")
+        == "[mr-IN] OTP bataiye"
+    )

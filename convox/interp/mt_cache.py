@@ -13,9 +13,11 @@ second call of a process prefills without any MT request.
 
 from __future__ import annotations
 
+import inspect
 import re
 import unicodedata
 from collections import OrderedDict
+from typing import Any
 
 from convox.interp.contracts import MT
 
@@ -38,6 +40,7 @@ class CachedMT:
         assert maxsize > 0
         self.inner = inner
         self.name = inner.name
+        self._takes_gender = "gender" in inspect.signature(inner.translate).parameters
         self.maxsize = maxsize
         self.shared = shared if shared is not None else {}
         self.hits = 0
@@ -56,16 +59,26 @@ class CachedMT:
         key = mt_key(text, src, tgt)
         return key in self._cache or key in self.shared
 
-    async def translate(self, text: str, src: str, tgt: str) -> str:
-        key = mt_key(text, src, tgt)
+    async def translate(self, text: str, src: str, tgt: str, gender: str | None = None) -> str:
+        """gender ("m"/"f", the speaker's) reaches an inner MT that takes it (Sarvam's
+        speaker_gender: Hindi and Marathi verbs agree with the speaker) and keys the cache;
+        a phrase-pack line already in the shared store is used as it is."""
+        base = mt_key(text, src, tgt)
+        gendered = gender is not None and self._takes_gender
+        key: Any = (*base, gender) if gendered else base
         cached = self._get(key)
+        if cached is None and gendered:
+            cached = self.shared.get(base)  # a phrase-pack line
         if cached is not None:
             self.hits += 1
             self.last_hit = True
             return cached
         self.misses += 1
         self.last_hit = False
-        out = await self.inner.translate(text, src, tgt)
+        if gendered:
+            out = await self.inner.translate(text, src, tgt, gender=gender)  # type: ignore[call-arg]
+        else:
+            out = await self.inner.translate(text, src, tgt)
         self._put(key, out)
         return out
 

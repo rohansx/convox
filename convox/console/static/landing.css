@@ -242,6 +242,9 @@ h3 { font-size: 17px; font-weight: 500; letter-spacing: -.02em; }
 .browser-bar { display: flex; align-items: center; gap: 6px; height: 38px; padding: 0 14px; border-bottom: 1px solid #eee; background: #fafafa; }
 .browser-bar i { width: 10px; height: 10px; border-radius: 50%; background: #e5e5e5; }
 .browser-bar span { margin: 0 auto; font: 12px var(--mono); color: #a3a3a3; padding-right: 46px; }
+.showcase-bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 0 0 12px; }
+.sound-light { border-color: var(--line-2); box-shadow: var(--shadow-sm); }
+.showcase-langs { font-size: 15px; color: var(--ink-2); }
 .browser-view { position: relative; aspect-ratio: 1440 / 960; overflow: hidden; }
 .browser-view iframe { position: absolute; top: 0; left: 0; width: 1440px; height: 960px; border: 0; transform-origin: 0 0; pointer-events: none; }
 
