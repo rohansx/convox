@@ -1,0 +1,76 @@
+{
+ "generated_with": "Sarvam Mayura + Bulbul v3",
+ "without": [
+  {
+   "side": "a",
+   "text": "ಹಲೋ ಮೇಡಂ, ನೀವು ಎಲ್ಲಿದ್ದೀರಾ?",
+   "en": "Hello madam, where are you?",
+   "audio": "audio/raw-0.wav",
+   "ms": 2612
+  },
+  {
+   "side": "b",
+   "text": "हैलो? सॉरी, मुझे कन्नड़ नहीं आती।",
+   "en": "Hello? Sorry, I don't speak Kannada.",
+   "audio": "audio/raw-1.wav",
+   "ms": 3369
+  },
+  {
+   "side": "a",
+   "text": "ಅಯ್ಯೋ, ನನಗೆ ಹಿಂದಿ ಬರಲ್ಲ ಮೇಡಂ.",
+   "en": "Oh no, I don't know Hindi, madam.",
+   "audio": "audio/raw-2.wav",
+   "ms": 2819
+  }
+ ],
+ "with": [
+  {
+   "side": "a",
+   "src_text": "ಹಲೋ ಮೇಡಂ, ನೀವು ಎಲ್ಲಿದ್ದೀರಾ?",
+   "tgt_text": "Hello ma'am, कहाँ हैं आप?",
+   "en": "Hello madam, where are you?",
+   "src_audio": "audio/0-src.wav",
+   "tgt_audio": "audio/0-tgt.wav",
+   "src_ms": 2750,
+   "tgt_ms": 1495,
+   "mt_ms": 1205,
+   "tts_ms": 224
+  },
+  {
+   "side": "b",
+   "src_text": "मैं मेट्रो स्टेशन के गेट नंबर 2 पर हूँ, नीली ड्रेस में।",
+   "tgt_text": "ನಾನು metro station-ನಲ್ಲಿ ಇದ್ದೀನಿ, gate number 2-ನಲ್ಲಿ, blue dress ಹಾಕೊಂಡು.",
+   "en": "I'm at gate number 2 of the metro station, in a blue dress.",
+   "src_audio": "audio/1-src.wav",
+   "tgt_audio": "audio/1-tgt.wav",
+   "src_ms": 4950,
+   "tgt_ms": 5620,
+   "mt_ms": 1448,
+   "tts_ms": 205
+  },
+  {
+   "side": "a",
+   "src_text": "ಸರಿ, ಎರಡು ನಿಮಿಷದಲ್ಲಿ ಅಲ್ಲಿಗೆ ಬರ್ತೀನಿ.",
+   "tgt_text": "Okay, मैं दो minutes में वहाँ पहुँच जाऊँगा।",
+   "en": "Okay, I'll be there in two minutes.",
+   "src_audio": "audio/2-src.wav",
+   "tgt_audio": "audio/2-tgt.wav",
+   "src_ms": 3094,
+   "tgt_ms": 2595,
+   "mt_ms": 1262,
+   "tts_ms": 193
+  },
+  {
+   "side": "b",
+   "src_text": "ठीक है, मैं गेट पर ही इंतज़ार करती हूँ।",
+   "tgt_text": "Okay, ನಾನು gate-ನಲ್ಲಿ wait ಮಾಡ್ತೀನಿ.",
+   "en": "Okay, I'll wait at the gate.",
+   "src_audio": "audio/3-src.wav",
+   "tgt_audio": "audio/3-tgt.wav",
+   "src_ms": 3300,
+   "tgt_ms": 3076,
+   "mt_ms": 1194,
+   "tts_ms": 199
+  }
+ ]
+}
